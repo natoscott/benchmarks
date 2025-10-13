@@ -8,7 +8,7 @@ This report analyzes the performance of vLLM 0.11.0's new KV cache CPU offload f
 - **Baseline**: Traditional GPU-only approach
 
 **Key Findings:**
-- For **Qwen3-0.6B**: Both CPU offload approaches show competitive performance with baseline, with OffloadingConnector achieving 98.3% of baseline throughput
+- For **Qwen3-0.6B**: Both CPU offload approaches show similar performance to the baseline, with OffloadingConnector achieving 98.3% of baseline throughput
 - For **Qwen3-8B**: OffloadingConnector actually outperforms baseline by 0.7% while reducing TTFT by 7.4%
 - LMCache shows slightly higher latency overhead compared to OffloadingConnector
 
