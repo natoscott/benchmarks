@@ -11,7 +11,6 @@ This report analyzes the performance of vLLM 0.11.0's new KV cache CPU offload f
 - For **Qwen3-0.6B**: Both CPU offload approaches show competitive performance with baseline, with OffloadingConnector achieving 98.3% of baseline throughput
 - For **Qwen3-8B**: OffloadingConnector actually outperforms baseline by 0.7% while reducing TTFT by 7.4%
 - LMCache shows slightly higher latency overhead compared to OffloadingConnector
-- All configurations demonstrate excellent reliability with zero errors
 
 ---
 
@@ -198,17 +197,14 @@ Limited GPU metrics were captured for 3 of the 6 benchmark runs. Available data 
 ## Key Insights
 
 1. **Model Size Impact**: The CPU offload features show different characteristics depending on model size:
-   - Smaller model (0.6B): Minor overhead with OffloadingConnector
+   - Smaller model (0.6B): Minor differences with OffloadingConnector
    - Larger model (8B): Performance improvements with both offload approaches
 
 2. **OffloadingConnector vs LMCache**:
    - OffloadingConnector shows lower latency overhead overall
-   - LMCache performs better on larger models
-   - Both are production-ready with zero error rates
+   - LMCache performed noticably better on the larger model
 
-3. **Production Readiness**: All configurations demonstrated 100% reliability across thousands of requests
-
-4. **TTFT Improvements**: For the 8B model, both offload approaches actually reduce TTFT compared to baseline, suggesting better memory management leads to faster prompt processing
+3. **TTFT Improvements**: For the 8B model, both offload approaches actually reduce TTFT compared to baseline, suggesting better memory management leads to faster prompt processing
 
 ---
 
@@ -220,7 +216,6 @@ Limited GPU metrics were captured for 3 of the 6 benchmark runs. Available data 
 - Running larger models (8B+) where it can provide performance benefits
 - Memory constraints limit batch sizes or concurrent requests
 - Willing to accept <2% throughput reduction for smaller models
-- Need proven stability (zero errors observed)
 
 **Use LMCache when**:
 - Working with larger models where overhead is minimal
@@ -234,7 +229,7 @@ Limited GPU metrics were captured for 3 of the 6 benchmark runs. Available data 
 
 ### Future Testing Recommendations
 
-1. **Continuous PCP Logging**: Ensure PCP records throughout entire benchmark session (discovered cache metrics exist but were not captured during benchmarks)
+1. **Continuous PCP Logging**: Ensure PCP records throughout entire benchmark session (discovered cache metrics exist but were not captured during benchmarks) at very high sampling intervals (1 second by default)
 2. **Larger Batch Sizes**: Test with higher concurrency to stress memory limits
 3. **Longer Sequences**: Use longer input/output sequences to amplify KV cache effects
 4. **Memory-Constrained Scenarios**: Explicitly limit GPU memory to force offload utilization
@@ -242,35 +237,6 @@ Limited GPU metrics were captured for 3 of the 6 benchmark runs. Available data 
 6. **Production Traffic Patterns**: Simulate realistic request patterns with variable lengths
 7. **Cache Hit Rate Analysis**: With continuous logging, analyze prefix cache effectiveness (queries vs hits) for each connector type
 8. **Repeated Prompts**: Test with common prompt prefixes to maximize cache hit opportunities
-
-### Metrics to Add
-
-1. **CPU Memory Usage**: Track actual CPU memory consumption during offload
-2. **Transfer Bandwidth**: Measure PCIe bandwidth utilization for cache transfers
-3. **Cache Hit Rates**: Monitor LMCache effectiveness
-4. **Request Queue Depth**: Understand batching efficiency
-5. **Per-GPU Breakdown**: Analyze individual GPU metrics in tensor parallel setup
-
----
-
-## Methodology
-
-### Data Collection
-- **Performance Metrics**: Captured via GuideLLM JSON output (primary source)
-- **System Metrics**: Recorded via Performance Co-Pilot (PCP) archives
-- **Sampling Interval**: 1 second for PCP metrics
-- **Benchmark Tool**: GuideLLM with rate sweep strategy
-
-### Analysis Tools
-- **PCP**: pcp2arrow for Parquet conversion, pminfo/pmval for metric queries
-- **Python**: pandas, matplotlib, seaborn for analysis and visualization
-- **Data Format**: Parquet for efficient time-series analysis
-
-### Files Generated
-- `summary.csv`: Aggregate metrics per configuration
-- `detailed.csv`: All 10 strategy results per configuration
-- `benchmark_results.png`: Comparative visualizations
-- `REPORT.md`: This comprehensive analysis document
 
 ---
 
