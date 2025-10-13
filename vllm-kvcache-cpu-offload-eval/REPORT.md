@@ -82,6 +82,8 @@ This report analyzes the performance of vLLM 0.11.0's new KV cache CPU offload f
 
 ## Benchmark Results
 
+![Benchmark Results Visualization](benchmark_results.png)
+
 ### Performance Summary
 
 | Model | Configuration | Max Throughput (tok/s) | Avg TTFT (ms) | Avg TPOT (ms) |
@@ -147,6 +149,30 @@ This report analyzes the performance of vLLM 0.11.0's new KV cache CPU offload f
 
 ---
 
+## Cache Hit Rates and Prefix Caching
+
+All benchmark configurations had prefix caching enabled (`enable_prefix_caching:True`). The PCP archive contains comprehensive cache metrics:
+
+**Available Cache Metrics**:
+- `openmetrics.vllm.vllm.prefix_cache_queries_total` - Total prefix cache lookups
+- `openmetrics.vllm.vllm.prefix_cache_hits_total` - Successful prefix cache hits
+- `openmetrics.vllm.vllm.connector_prefix_cache_queries_total` - Connector cache lookups
+- `openmetrics.vllm.vllm.connector_prefix_cache_hits_total` - Connector cache hits
+- `openmetrics.vllm.vllm.kv_cache_usage_perc` - KV cache utilization percentage
+
+**Data Limitation**: Cache metrics exist in the archive but fall outside the PCP recording windows during which the benchmarks executed. Future testing should ensure continuous PCP logging to capture cache hit rates, which would reveal:
+- Effectiveness of prefix caching across different connector types
+- Cache efficiency differences between OffloadingConnector and LMCacheConnectorV1
+- Impact of cache hits on latency improvements
+
+**Cache Configuration Observed**:
+- Block size: 16
+- Prefix caching hash algorithm: SHA256
+- All configurations using automatic cache dtype selection
+- GPU memory utilization varies by model (0.2 for 0.6B, 0.6 for 8B)
+
+---
+
 ## GPU Memory and Resource Utilization
 
 Limited GPU metrics were captured for 3 of the 6 benchmark runs. Available data shows:
@@ -208,12 +234,14 @@ Limited GPU metrics were captured for 3 of the 6 benchmark runs. Available data 
 
 ### Future Testing Recommendations
 
-1. **Larger Batch Sizes**: Test with higher concurrency to stress memory limits
-2. **Longer Sequences**: Use longer input/output sequences to amplify KV cache effects
-3. **Memory-Constrained Scenarios**: Explicitly limit GPU memory to force offload utilization
-4. **Multi-Model Comparison**: Test across more model sizes (1B, 3B, 7B, 13B, 70B)
-5. **Production Traffic Patterns**: Simulate realistic request patterns with variable lengths
-6. **Cache Hit Rates**: Analyze LMCache effectiveness with repeated prompt prefixes
+1. **Continuous PCP Logging**: Ensure PCP records throughout entire benchmark session (discovered cache metrics exist but were not captured during benchmarks)
+2. **Larger Batch Sizes**: Test with higher concurrency to stress memory limits
+3. **Longer Sequences**: Use longer input/output sequences to amplify KV cache effects
+4. **Memory-Constrained Scenarios**: Explicitly limit GPU memory to force offload utilization
+5. **Multi-Model Comparison**: Test across more model sizes (1B, 3B, 7B, 13B, 70B)
+6. **Production Traffic Patterns**: Simulate realistic request patterns with variable lengths
+7. **Cache Hit Rate Analysis**: With continuous logging, analyze prefix cache effectiveness (queries vs hits) for each connector type
+8. **Repeated Prompts**: Test with common prompt prefixes to maximize cache hit opportunities
 
 ### Metrics to Add
 
