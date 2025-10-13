@@ -1,4 +1,4 @@
-# TODO: Process Improvements
+# Process Improvements
 
 **Session Duration**: ~2.5 hours (2025-10-13, 14:15-16:45 UTC)
 
@@ -6,19 +6,15 @@
 
 ---
 
-## Data Collection Issues
+## Data Collection
 
 1. **Timezone confusion**: Always use UTC for cloud testing (data gaps from local/UTC mismatch)
 
-2. **PCP recording gaps**: Ensure continuous logging throughout benchmark session
+2. Verify vLLM (openmetrics), GPU (nvidia/amd) metrics are enabled and logged
 
-3. **Missing metrics**: Verify vLLM (openmetrics), GPU (nvidia/amd) metrics are enabled and logged
+3. **Sampling interval**: Configure pmlogger for 1-second sampling for benchmarking (default is relatively coarse 10s or 60s, intended for 24x7 production systems)
 
-4. **Sampling interval**: Configure pmlogger for 1-second sampling (default may be too slow)
-
-5. **Late validation**: Data gaps discovered during analysis; need pre-flight checks
-
-## Claude Code Tool Improvements
+## Claude Code Tooling
 
 **Missing Tools**:
 1. Native PCP query tool (vs Bash wrapper commands)
@@ -29,13 +25,3 @@
 **Workflow Issues**:
 1. Reload Parquet data across multiple scripts (need session persistence)
 2. Complete script rewrites (need incremental execution)
-3. Late structure discovery (need early validation)
-
-**What Worked**:
-- Iterative refinement
-- Breaking into manageable steps
-- Proactive error handling
-
----
-
-*Session date: 2025-10-13*
