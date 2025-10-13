@@ -2,9 +2,7 @@
 
 **Session Duration**: ~2.5 hours (2025-10-13, 14:15-16:45 UTC)
 
-**Deliverables**: REPORT.md, 5 analysis scripts, 3 CSV files, 1 visualization
-
-**Key bottlenecks**: Understanding nested GuideLLM JSON format, discovering data gaps late
+**Key bottlenecks**: Understanding nested GuideLLM JSON format, discovering data gaps, matching up system metrics with benchmark results (timezone confusion), generate Parquet file(s) beforehard as its very resource intensive (Claude times it out).
 
 ---
 
