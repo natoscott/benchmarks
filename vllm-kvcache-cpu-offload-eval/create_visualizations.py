@@ -140,26 +140,32 @@ for idx, model in enumerate(models):
     # Calculate improvements (positive = better)
     merged['throughput_improvement'] = ((merged['tokens_per_second_offload'] - merged['tokens_per_second_baseline']) /
                                         merged['tokens_per_second_baseline'] * 100)
+    # For latency metrics, reduction is improvement, so flip the sign
     merged['ttft_improvement'] = -((merged['ttft_ms_offload'] - merged['ttft_ms_baseline']) /
-                                   merged['ttft_ms_baseline'] * 100)  # negative = improvement
+                                   merged['ttft_ms_baseline'] * 100)
     merged['tpot_improvement'] = -((merged['tpot_ms_offload'] - merged['tpot_ms_baseline']) /
-                                   merged['tpot_ms_baseline'] * 100)  # negative = improvement
+                                   merged['tpot_ms_baseline'] * 100)
 
     x = np.arange(len(merged))
     width = 0.25
 
-    ax.bar(x - width, merged['throughput_improvement'], width, label='Throughput', color='#2E86AB', alpha=0.8)
-    ax.bar(x, merged['ttft_improvement'], width, label='TTFT (lower is better)', color='#A23B72', alpha=0.8)
-    ax.bar(x + width, merged['tpot_improvement'], width, label='TPOT (lower is better)', color='#F18F01', alpha=0.8)
+    ax.bar(x - width, merged['throughput_improvement'], width, label='Throughput (+higher)', color='#2E86AB', alpha=0.8)
+    ax.bar(x, merged['ttft_improvement'], width, label='TTFT (+lower)', color='#A23B72', alpha=0.8)
+    ax.bar(x + width, merged['tpot_improvement'], width, label='TPOT (+lower)', color='#F18F01', alpha=0.8)
 
     ax.axhline(y=0, color='black', linestyle='--', linewidth=0.8)
     ax.set_xlabel('Concurrency', fontsize=11)
     ax.set_ylabel('Improvement (%)', fontsize=11)
     ax.set_title(f'{model}: Offload vs Default', fontsize=12, fontweight='bold')
-    ax.set_xticks(x)
-    ax.set_xticklabels([str(int(c)) if pd.notna(c) else '' for c in merged['concurrency']])
-    ax.legend(fontsize=9)
+    # Show fewer x-tick labels for readability
+    tick_positions = [i for i in range(len(merged)) if i % 2 == 0 or i == len(merged)-1]
+    ax.set_xticks([x[i] for i in tick_positions])
+    ax.set_xticklabels([str(int(merged['concurrency'].iloc[i])) if pd.notna(merged['concurrency'].iloc[i]) else ''
+                        for i in tick_positions], rotation=0)
+    ax.legend(fontsize=9, loc='best')
     ax.grid(True, alpha=0.3, axis='y')
+    # Set reasonable y-axis limits for readability
+    ax.set_ylim(-100, 150)
 
 plt.tight_layout()
 plt.savefig('performance_improvements.png', dpi=300, bbox_inches='tight')
