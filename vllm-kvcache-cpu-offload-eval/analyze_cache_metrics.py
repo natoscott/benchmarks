@@ -88,7 +88,7 @@ for idx, bench in df_benchmarks.iterrows():
         'uuid': bench['uuid'],
         'model': bench['model'],
         'config_label': bench['config_label'],
-        'concurrency': bench['concurrency'],
+        'concurrency': bench['concurrency.1'],
         'is_warmup': bench['is_warmup'],
         'throughput': bench['tokens_per_second'],
         'duration_sec': (bench['end_time'] - bench['start_time']).total_seconds(),
