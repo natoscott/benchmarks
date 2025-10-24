@@ -55,7 +55,7 @@ For Qwen3-0.6B:
 1. **OffloadingConnector**:
    ```bash
    vllm serve Qwen/Qwen3-0.6B --tensor-parallel-size 2 \
-     --kv-transfer-config '{"kv_connector":"OffloadingConnector","kv_role":"kv_both"}' \
+     --kv-transfer-config '{"kv_connector":"OffloadingConnector","kv_role":"kv_both","kv_connector_extra_config":{"num_cpu_blocks":64000}}' \
      --gpu-memory-utilization=0.2
    ```
 
@@ -69,7 +69,7 @@ For Qwen3-0.6B:
 1. **OffloadingConnector**:
    ```bash
    vllm serve Qwen/Qwen3-8B --tensor-parallel-size 2 \
-     --kv-transfer-config '{"kv_connector":"OffloadingConnector","kv_role":"kv_both"}' \
+     --kv-transfer-config '{"kv_connector":"OffloadingConnector","kv_role":"kv_both","kv_connector_extra_config":{"num_cpu_blocks":64000}}' \
      --gpu-memory-utilization=0.6
    ```
 
