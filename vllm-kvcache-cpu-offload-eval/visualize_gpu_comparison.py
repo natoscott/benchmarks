@@ -159,12 +159,6 @@ ax8.set_title('Qwen3-8B: Throughput vs GPU Utilization ⭐', fontsize=12, fontwe
 ax8.legend()
 ax8.grid(True, alpha=0.3)
 
-# Add annotation highlighting the key insight for 8B
-ax8.annotate('Offload: LOWER GPU usage,\nHIGHER throughput!',
-            xy=(80, 70), xytext=(60, 120),
-            arrowprops=dict(arrowstyle='->', color='#A23B72', lw=2),
-            fontsize=10, color='#A23B72', fontweight='bold',
-            bbox=dict(boxstyle='round,pad=0.5', facecolor='white', edgecolor='#A23B72', linewidth=2))
 
 # Plot 9: Efficiency Comparison (Throughput per GPU%)
 ax9 = fig.add_subplot(gs[2, 2])
@@ -258,33 +252,29 @@ improvement = ((efficiency_vals[1] - efficiency_vals[0]) / efficiency_vals[0] * 
 ax.text(0.5, 0.75, f'+{improvement:.1f}%', ha='center', fontsize=14, fontweight='bold',
         color='green', bbox=dict(boxstyle='round', facecolor='lightgreen', alpha=0.7))
 
-# Chart 4: Summary text box
+# Chart 4: Cache hit ratio comparison
 ax = axes[1, 1]
-ax.axis('off')
-summary_text = """
-KEY FINDINGS FOR QWEN3-8B:
-
-CPU Offload delivers:
-
-✓  32.7% HIGHER Throughput
-   (69.9 vs 52.7 tok/s)
-
-✓  9.1% LOWER GPU Compute Usage
-   (80.3% vs 88.3%)
-
-✓  46.2% BETTER GPU Efficiency
-   (0.87 vs 0.60 tok/s per %)
-
-CONCLUSION:
-By offloading KV cache to CPU,
-we FREE UP GPU compute for
-inference, resulting in BOTH
-higher performance AND lower
-GPU utilization.
-"""
-ax.text(0.1, 0.5, summary_text, fontsize=11, verticalalignment='center',
-        fontfamily='monospace',
-        bbox=dict(boxstyle='round', facecolor='#f0f0f0', edgecolor='#333', linewidth=2, pad=15))
+# Add cache hit ratio data from cache analysis
+cache_hit_06b = [0.0, 24.8]
+cache_hit_8b = [3.6, 46.2]
+x_pos = np.arange(2)
+bar_width = 0.35
+bars1 = ax.bar(x_pos - bar_width/2, cache_hit_06b, bar_width, label='0.6B', alpha=0.8)
+bars2 = ax.bar(x_pos + bar_width/2, cache_hit_8b, bar_width, label='8B', alpha=0.8)
+ax.set_ylabel('Cache Hit Ratio (%)', fontsize=12)
+ax.set_title('Cache Hit Ratio by Configuration', fontsize=12, fontweight='bold')
+ax.set_xticks(x_pos)
+ax.set_xticklabels(['Baseline', 'Offload'])
+ax.legend()
+ax.grid(True, alpha=0.3, axis='y')
+ax.set_ylim(0, 60)
+for bars in [bars1, bars2]:
+    for bar in bars:
+        height = bar.get_height()
+        if height > 0:
+            ax.text(bar.get_x() + bar.get_width()/2., height,
+                    f'{height:.1f}%',
+                    ha='center', va='bottom', fontsize=10, fontweight='bold')
 
 plt.tight_layout()
 plt.savefig('gpu_key_findings.png', dpi=300, bbox_inches='tight')
