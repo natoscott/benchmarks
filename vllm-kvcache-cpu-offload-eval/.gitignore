@@ -1,0 +1,31 @@
+# Internal documentation
+FINDINGS_SUMMARY.md
+GIT_ANALYSIS.md
+
+# Intermediate analysis scripts
+analyze_connector_usage.py
+analyze_gpu_metrics.py
+analyze_gpu_utilization.py
+finalize_config_labels.py
+identify_configs.py
+map_configurations.py
+
+# Intermediate data files
+annotated_results.csv
+cache_config.csv
+connector_analyzed.csv
+connector_cache.csv
+extracted_results.csv
+identified_configs.csv
+results_with_gpu.csv
+gpu_utilization_analysis.csv
+
+# Large temporary data exports
+cache_metrics_timeseries.csv
+gpu_active_metrics.csv
+gpu_metrics.csv
+guidellm_data.csv
+
+# Old results from previous benchmarks
+detailed_results.csv
+summary_results.csv
