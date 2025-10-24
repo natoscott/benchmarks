@@ -131,7 +131,7 @@ GPU utilization impact:
   - 121ms slower
 - TPOT: +0.8% (87.40 ms)
 
-Analysis: For the smaller model, the CPU offload overhead slightly exceeds the benefits. The performance differences are minimal across all metrics.
+Analysis: For Qwen3-0.6B, the CPU offload overhead slightly exceeds the benefits. The performance differences are minimal across all metrics.
 
 ---
 
@@ -223,7 +223,7 @@ GPU memory used:
 Performance impact:
 - Throughput: -1.9% (minimal difference)
 
-For the smaller model, GPU resources are less constrained, so the benefits of CPU offload are less pronounced. GPU utilization decreases slightly with minimal performance cost.
+For Qwen3-0.6B, GPU resources are less constrained, so the benefits of CPU offload are less pronounced. GPU utilization decreases slightly with minimal performance cost.
 
 ### GPU Utilization Across Concurrency Levels
 
@@ -290,7 +290,7 @@ Cache hit ratio:
 - Baseline: 0.0%
 - Offload: 24.8%
 
-For the smaller model, the baseline configuration shows minimal cache hit activity while the offload configuration achieves a 24.8% hit ratio. The offload configuration's higher cache query rate indicates more active cache management.
+For Qwen3-0.6B, the baseline configuration shows minimal cache hit activity while the offload configuration achieves a 24.8% hit ratio. The offload configuration's higher cache query rate indicates more active cache management.
 
 ### Cache metrics across concurrency levels
 
@@ -313,9 +313,9 @@ Low cache memory usage indicates the workload did not generate significant prefi
 
 ## Observations
 
-1. Model size affects offload benefits:
-   - Larger models (8B): CPU offload provides performance improvements (+32.7% throughput)
-   - Smaller models (0.6B): CPU offload shows minimal overhead (-1.9% throughput)
+1. CPU offload benefits vary by model:
+   - Qwen3-8B: CPU offload provides performance improvements (+32.7% throughput)
+   - Qwen3-0.6B: CPU offload shows minimal overhead (-1.9% throughput)
 
 2. GPU efficiency with CPU offload:
    - CPU offload reduces GPU compute usage by 9.1% (Qwen3-8B)
@@ -365,14 +365,14 @@ Qwen3-0.6B with offload:
 ### Configuration characteristics
 
 OffloadingConnector:
-- Performance gains for models 8B+
+- Performance gains for Qwen3-8B
 - Reduced GPU compute utilization while improving throughput
 - Better GPU efficiency (more output per GPU cycle)
-- Minimal overhead for smaller models
-- Consistent behavior across model sizes
+- Minimal overhead for Qwen3-0.6B
+- Behavior varies by model size
 
 Baseline configuration:
-- Highest throughput for very small models (0.6B)
+- Highest throughput for Qwen3-0.6B
 - Simpler deployment without connector configuration
 - No dependency on CPU offload infrastructure
 
@@ -413,9 +413,9 @@ Where `<LEVEL>` was each of: 5, 10, 20, 50, 100, 200, 500, 1000, 2000
 
 ## Conclusion
 
-This evaluation shows that vLLM's OffloadingConnector provides performance improvements for larger models, with Qwen3-8B showing a 32.7% throughput increase alongside reduced latency and lower GPU compute utilization. For smaller models (0.6B), configurations performed similarly with minimal differences.
+This evaluation shows that vLLM's OffloadingConnector provides performance improvements for Qwen3-8B, with a 32.7% throughput increase alongside reduced latency and lower GPU compute utilization. For Qwen3-0.6B, configurations performed similarly with minimal differences.
 
-The concurrency-based testing methodology shows that these performance characteristics are sustained across various load levels. CPU offload reduces GPU compute usage while simultaneously improving throughput for larger models, resulting in better overall GPU efficiency.
+The concurrency-based testing methodology shows that these performance characteristics are sustained across various load levels. CPU offload reduces GPU compute usage while simultaneously improving throughput for Qwen3-8B, resulting in better overall GPU efficiency.
 
 ---
 
