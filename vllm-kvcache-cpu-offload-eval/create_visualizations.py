@@ -8,24 +8,27 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
 
-# Set style
+# Set consistent style per visualization-palette skill
 sns.set_style("whitegrid")
-plt.rcParams['figure.figsize'] = (16, 10)
+sns.set_palette("muted")
+plt.rcParams['figure.figsize'] = (14, 8)
+plt.rcParams['font.size'] = 11
 
 # Load results
 df = pd.read_csv('final_config_mapping.csv', parse_dates=['start_time', 'end_time'])
 
-# Filter out warmup runs
-df_plot = df[~df['is_warmup']].copy()
+# Filter out warmup runs and lmcache (excluded from analysis)
+df_plot = df[(~df['is_warmup']) & (df['config_label'] != 'lmcache')].copy()
 
 # Create figure with subplots
 fig, axes = plt.subplots(2, 3, figsize=(18, 12))
 fig.suptitle('vLLM KV Cache CPU Offload Benchmark Results - Concurrency-Based Testing',
              fontsize=16, fontweight='bold')
 
-# Color scheme
-colors = {'default': '#2E86AB', 'offload': '#A23B72', 'lmcache': '#F18F01'}
-config_order = ['default', 'offload', 'lmcache']
+# Get colors from muted palette
+palette_colors = sns.color_palette("muted")
+colors = {'default': palette_colors[0], 'offload': palette_colors[1]}
+config_order = ['default', 'offload']
 
 # Plot 1: Throughput vs Concurrency - Qwen3-0.6B
 ax = axes[0, 0]
