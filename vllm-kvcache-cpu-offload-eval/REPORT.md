@@ -250,6 +250,67 @@ This demonstrates that raw GPU utilization percentage is not the optimization ta
 
 ---
 
+## KV Cache Metrics
+
+![Cache Metrics Comparison](cache_metrics_comparison.png)
+
+![Cache Summary](cache_summary.png)
+
+### Cache activity analysis
+
+Analysis of KV cache connector metrics shows the offload configuration generates significantly higher cache activity and better hit ratios compared to baseline.
+
+#### Qwen3-8B cache performance
+
+Cache query rate:
+- Baseline: 758 queries/sec average
+- Offload: 11,256 queries/sec average (14.8x increase)
+
+Cache hit rate:
+- Baseline: 244 hits/sec average
+- Offload: 5,135 hits/sec average (21.0x increase)
+
+Cache hit ratio:
+- Baseline: 3.6%
+- Offload: 46.2% (12.8x improvement)
+
+The offload configuration shows substantially higher cache query activity and achieves a 46.2% hit ratio, meaning nearly half of cache lookups successfully retrieve cached KV data from CPU memory. This reduces redundant GPU computation for cached key-value pairs.
+
+#### Qwen3-0.6B cache performance
+
+Cache query rate:
+- Baseline: 749 queries/sec average
+- Offload: 18,366 queries/sec average (24.5x increase)
+
+Cache hit rate:
+- Baseline: 0 hits/sec average
+- Offload: 5,339 hits/sec average
+
+Cache hit ratio:
+- Baseline: 0.0%
+- Offload: 24.8%
+
+For the smaller model, the baseline configuration shows minimal cache hit activity while the offload configuration achieves a 24.8% hit ratio. The offload configuration's higher cache query rate indicates more active cache management.
+
+### Cache metrics across concurrency levels
+
+Cache activity scales with concurrency for both models. At higher concurrency levels:
+
+- Cache query rates increase proportionally with load
+- Hit ratios remain relatively stable across concurrency levels
+- Offload configuration maintains its cache hit ratio advantage throughout
+- Peak cache query rates exceed 50,000 queries/sec at highest concurrency
+
+### Cache usage percentage
+
+KV cache memory usage remained low throughout testing:
+- Qwen3-0.6B: 0.4% average usage for both configurations
+- Qwen3-8B: 0.4-0.5% average usage
+
+Low cache memory usage indicates the workload did not generate significant prefix sharing opportunities, yet the offload configuration still achieved notable hit ratios through active cache management.
+
+---
+
 ## Observations
 
 1. Model size affects offload benefits:
@@ -270,10 +331,17 @@ This demonstrates that raw GPU utilization percentage is not the optimization ta
    - Better resource utilization (-9.1% GPU compute)
    - Lower GPU load enables better scalability
 
-4. Concurrency scaling:
+4. Cache performance with CPU offload:
+   - Offload achieves 46.2% cache hit ratio for Qwen3-8B vs 3.6% baseline
+   - Offload achieves 24.8% cache hit ratio for Qwen3-0.6B vs 0.0% baseline
+   - Cache query rates 15-25x higher with offload
+   - Higher cache activity reduces redundant GPU computation
+
+5. Concurrency scaling:
    - Offload maintains advantages across all concurrency levels
    - Benefits most pronounced at medium concurrency (50-200)
    - GPU efficiency advantage persists even at high load
+   - Cache hit ratios remain stable across concurrency levels
 
 ---
 
