@@ -197,7 +197,7 @@ print("Saved GPU utilization comparison to gpu_utilization_comparison.png")
 # ============================================================================
 
 fig2, axes = plt.subplots(2, 2, figsize=(14, 10))
-fig2.suptitle('Key GPU Utilization Findings: Qwen3-8B Offload Performance',
+fig2.suptitle('Qwen3-8B Offload Performance',
               fontsize=14, fontweight='bold')
 
 # Chart 1: GPU Compute reduction
