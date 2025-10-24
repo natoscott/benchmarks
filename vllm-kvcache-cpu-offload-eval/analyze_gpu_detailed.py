@@ -49,7 +49,7 @@ for idx, row in df_results[~df_results['is_warmup']].iterrows():
     gpu_data.append({
         'model': row['model'],
         'config_label': row['config_label'],
-        'concurrency': row['concurrency'],
+        'concurrency': row['concurrency.1'],
         'throughput': row['tokens_per_second'],
         'ttft_ms': row['ttft_ms'],
         'tpot_ms': row['tpot_ms'],
