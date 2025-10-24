@@ -20,6 +20,9 @@ df = pd.read_csv('final_config_mapping.csv', parse_dates=['start_time', 'end_tim
 # Filter out warmup runs and lmcache (excluded from analysis)
 df_plot = df[(~df['is_warmup']) & (df['config_label'] != 'lmcache')].copy()
 
+# Use the correct concurrency column
+df_plot['concurrency'] = df_plot['concurrency.1']
+
 # Create figure with subplots
 fig, axes = plt.subplots(2, 3, figsize=(18, 12))
 fig.suptitle('vLLM KV Cache CPU Offload Benchmark Results - Concurrency-Based Testing',
