@@ -533,9 +533,9 @@ Where `<LEVEL>` was each of: 5, 10, 20, 50, 100, 200, 500, 1000, 2000
 
 ## Conclusion
 
-This evaluation shows that vLLM's OffloadingConnector provides performance improvements for larger models (Qwen3-8B and Qwen3-14B), with throughput increases of 32.7% and 23.7% respectively, alongside reduced latency and lower GPU compute utilization. For Qwen3-0.6B, configurations performed similarly with minimal differences.
+This evaluation shows that vLLM's OffloadingConnector provides performance improvements for the larger models tested (Qwen3-8B and Qwen3-14B), with throughput increases of 32.7% and 23.7% respectively, alongside reduced latency and lower GPU compute utilization. For Qwen3-0.6B, configurations performed similarly with minimal differences.
 
-The concurrency-based testing methodology shows that these performance characteristics are sustained across various load levels. CPU offload reduces GPU compute usage while simultaneously improving throughput for larger models, resulting in better overall GPU efficiency. The benefits scale with model size, with Qwen3-8B showing the most pronounced improvements, followed by Qwen3-14B.
+The concurrency-based testing methodology shows that these performance characteristics are sustained across various load levels. CPU offload reduces GPU compute usage while simultaneously improving throughput for the larger models tested, resulting in better overall GPU efficiency. The 8B model shows the most pronounced benefits (+32.7% throughput, -9.1% GPU usage), while the 14B model shows moderate improvements (+23.7% throughput, -3.8% GPU usage). These differences may be influenced by the test configuration - all models were tested on the same hardware with different GPU memory utilization settings (0.2 for 0.6B, 0.6 for 8B, full allocation for 14B) and different CPU cache block allocations (64000 for 0.6B/8B, 16000 for 14B), which affects the available KV cache capacity in both GPU and CPU memory.
 
 ---
 

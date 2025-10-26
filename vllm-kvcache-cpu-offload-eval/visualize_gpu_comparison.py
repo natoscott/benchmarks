@@ -32,6 +32,8 @@ gs = fig.add_gridspec(3, 3, hspace=0.3, wspace=0.3)
 palette_colors = sns.color_palette("muted")
 colors = {'default': palette_colors[0], 'offload': palette_colors[1]}
 models = ['Qwen3-0.6B', 'Qwen3-8B', 'Qwen3-14B']
+# Display labels for legends (map 'default' -> 'Baseline')
+display_labels = {'default': 'Baseline', 'offload': 'Offload'}
 
 # ============================================================================
 # Row 1: GPU Compute Utilization
@@ -41,7 +43,7 @@ models = ['Qwen3-0.6B', 'Qwen3-8B', 'Qwen3-14B']
 ax1 = fig.add_subplot(gs[0, 0])
 for config in ['default', 'offload']:
     data = df[(df['model'] == 'Qwen3-0.6B') & (df['config_label'] == config)]
-    ax1.plot(data['concurrency'], data['gpu_active_mean'], marker='o', label=config,
+    ax1.plot(data['concurrency'], data['gpu_active_mean'], marker='o', label=display_labels[config],
             color=colors[config], linewidth=2, markersize=8)
 ax1.set_xlabel('Concurrency', fontsize=11)
 ax1.set_ylabel('GPU Compute Active (%)', fontsize=11)
@@ -55,7 +57,7 @@ ax1.set_ylim(0, 100)
 ax2 = fig.add_subplot(gs[0, 1])
 for config in ['default', 'offload']:
     data = df[(df['model'] == 'Qwen3-8B') & (df['config_label'] == config)]
-    ax2.plot(data['concurrency'], data['gpu_active_mean'], marker='o', label=config,
+    ax2.plot(data['concurrency'], data['gpu_active_mean'], marker='o', label=display_labels[config],
             color=colors[config], linewidth=2, markersize=8)
 ax2.set_xlabel('Concurrency', fontsize=11)
 ax2.set_ylabel('GPU Compute Active (%)', fontsize=11)
@@ -73,7 +75,7 @@ for i, config in enumerate(['default', 'offload']):
     values = [df_comparison[(df_comparison['model'] == m) &
                            (df_comparison['config'] == config)]['gpu_compute_avg'].values[0]
              for m in models]
-    ax3.bar(x + i*width, values, width, label=config, color=colors[config], alpha=0.8)
+    ax3.bar(x + i*width, values, width, label=display_labels[config], color=colors[config], alpha=0.8)
 ax3.set_xlabel('Model', fontsize=11)
 ax3.set_ylabel('Avg GPU Compute Active (%)', fontsize=11)
 ax3.set_title('Average GPU Compute Utilization', fontsize=12, fontweight='bold')
@@ -91,7 +93,7 @@ ax3.set_ylim(0, 100)
 ax4 = fig.add_subplot(gs[1, 0])
 for config in ['default', 'offload']:
     data = df[(df['model'] == 'Qwen3-0.6B') & (df['config_label'] == config)]
-    ax4.plot(data['concurrency'], data['mem_active_mean'], marker='o', label=config,
+    ax4.plot(data['concurrency'], data['mem_active_mean'], marker='o', label=display_labels[config],
             color=colors[config], linewidth=2, markersize=8)
 ax4.set_xlabel('Concurrency', fontsize=11)
 ax4.set_ylabel('GPU Memory Active (%)', fontsize=11)
@@ -105,7 +107,7 @@ ax4.set_ylim(0, 100)
 ax5 = fig.add_subplot(gs[1, 1])
 for config in ['default', 'offload']:
     data = df[(df['model'] == 'Qwen3-8B') & (df['config_label'] == config)]
-    ax5.plot(data['concurrency'], data['mem_active_mean'], marker='o', label=config,
+    ax5.plot(data['concurrency'], data['mem_active_mean'], marker='o', label=display_labels[config],
             color=colors[config], linewidth=2, markersize=8)
 ax5.set_xlabel('Concurrency', fontsize=11)
 ax5.set_ylabel('GPU Memory Active (%)', fontsize=11)
@@ -122,7 +124,7 @@ for i, config in enumerate(['default', 'offload']):
     values = [df_comparison[(df_comparison['model'] == m) &
                            (df_comparison['config'] == config)]['memory_used_gb'].values[0]
              for m in models]
-    ax6.bar(x + i*width, values, width, label=config, color=colors[config], alpha=0.8)
+    ax6.bar(x + i*width, values, width, label=display_labels[config], color=colors[config], alpha=0.8)
 ax6.set_xlabel('Model', fontsize=11)
 ax6.set_ylabel('Avg GPU Memory Used (GB)', fontsize=11)
 ax6.set_title('Average GPU Memory Usage', fontsize=12, fontweight='bold')
@@ -140,7 +142,7 @@ ax7 = fig.add_subplot(gs[2, 0])
 for config in ['default', 'offload']:
     data = df[(df['model'] == 'Qwen3-0.6B') & (df['config_label'] == config)]
     ax7.scatter(data['gpu_active_mean'], data['throughput'],
-               label=config, color=colors[config], s=100, alpha=0.7)
+               label=display_labels[config], color=colors[config], s=100, alpha=0.7)
 ax7.set_xlabel('GPU Compute Active (%)', fontsize=11)
 ax7.set_ylabel('Throughput (tok/s)', fontsize=11)
 ax7.set_title('Qwen3-0.6B: Throughput vs GPU Utilization', fontsize=12, fontweight='bold')
@@ -152,7 +154,7 @@ ax8 = fig.add_subplot(gs[2, 1])
 for config in ['default', 'offload']:
     data = df[(df['model'] == 'Qwen3-8B') & (df['config_label'] == config)]
     ax8.scatter(data['gpu_active_mean'], data['throughput'],
-               label=config, color=colors[config], s=100, alpha=0.7)
+               label=display_labels[config], color=colors[config], s=100, alpha=0.7)
 ax8.set_xlabel('GPU Compute Active (%)', fontsize=11)
 ax8.set_ylabel('Throughput (tok/s)', fontsize=11)
 ax8.set_title('Qwen3-8B: Throughput vs GPU Utilization ⭐', fontsize=12, fontweight='bold')
