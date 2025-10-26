@@ -523,11 +523,11 @@ Where `<LEVEL>` was each of: 5, 10, 20, 50, 100, 200, 500, 1000, 2000
 - System metrics (CPU, memory, network)
 
 ### Data Processing
+- GuideLLM benchmark results imported using `guidellm2pcp`
 - PCP metrics exported to CSV using `pmrep`
 - PCP metrics exported to Parquet using `pcp2arrow`
 - Python analysis with pandas for data aggregation
 - Matplotlib/Seaborn for visualizations
-- Configuration mapping via connector cache activity detection
 
 ---
 
