@@ -8,6 +8,11 @@ This report analyzes the performance of vLLM's KV cache CPU offload feature usin
 
 Observations:
 
+For Qwen3-0.6B:
+- Configurations show similar performance
+- OffloadingConnector achieves 98.1% of baseline throughput
+- Minimal latency differences between configurations
+
 For Qwen3-8B:
 - OffloadingConnector shows +32.7% higher throughput (69.92 vs 52.69 tok/s)
 - -4.8% lower TTFT (6,517 vs 6,847 ms) - 330ms faster first token
@@ -19,11 +24,6 @@ For Qwen3-14B:
 - -14.5% lower TTFT (5,216 vs 6,097 ms) - 881ms faster first token
 - -15.5% lower TPOT (87.29 vs 103.29 ms)
 - -3.8% lower GPU compute utilization (85.0% vs 88.4%)
-
-For Qwen3-0.6B:
-- Configurations show similar performance
-- OffloadingConnector achieves 98.1% of baseline throughput
-- Minimal latency differences between configurations
 
 ---
 
