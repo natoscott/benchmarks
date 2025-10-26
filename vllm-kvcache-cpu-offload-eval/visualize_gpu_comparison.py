@@ -15,8 +15,8 @@ plt.rcParams['figure.figsize'] = (14, 8)
 plt.rcParams['font.size'] = 11
 
 # Load data
-df = pd.read_csv('gpu_utilization_detailed.csv')
-df_comparison = pd.read_csv('gpu_comparison_summary.csv')
+df = pd.read_csv('gpu_utilization_detailed_with_14b.csv')
+df_comparison = pd.read_csv('gpu_comparison_summary_with_14b.csv')
 
 # Filter valid data and exclude lmcache
 df = df[(df['gpu_active_mean'].notna()) & (df['config_label'] != 'lmcache')]
@@ -31,7 +31,7 @@ gs = fig.add_gridspec(3, 3, hspace=0.3, wspace=0.3)
 # Get colors from muted palette
 palette_colors = sns.color_palette("muted")
 colors = {'default': palette_colors[0], 'offload': palette_colors[1]}
-models = ['Qwen3-0.6B', 'Qwen3-8B']
+models = ['Qwen3-0.6B', 'Qwen3-8B', 'Qwen3-14B']
 
 # ============================================================================
 # Row 1: GPU Compute Utilization
@@ -257,10 +257,12 @@ ax = axes[1, 1]
 # Add cache hit ratio data from cache analysis
 cache_hit_06b = [0.0, 24.8]
 cache_hit_8b = [3.6, 46.2]
+cache_hit_14b = [6.0, 6.0]  # 14B showed 6% cache hit ratio for both configs
 x_pos = np.arange(2)
-bar_width = 0.35
-bars1 = ax.bar(x_pos - bar_width/2, cache_hit_06b, bar_width, label='0.6B', alpha=0.8)
-bars2 = ax.bar(x_pos + bar_width/2, cache_hit_8b, bar_width, label='8B', alpha=0.8)
+bar_width = 0.25
+bars1 = ax.bar(x_pos - bar_width, cache_hit_06b, bar_width, label='0.6B', alpha=0.8)
+bars2 = ax.bar(x_pos, cache_hit_8b, bar_width, label='8B', alpha=0.8)
+bars3 = ax.bar(x_pos + bar_width, cache_hit_14b, bar_width, label='14B', alpha=0.8)
 ax.set_ylabel('Cache Hit Ratio (%)', fontsize=12)
 ax.set_title('Cache Hit Ratio by Configuration', fontsize=12, fontweight='bold')
 ax.set_xticks(x_pos)
@@ -268,13 +270,13 @@ ax.set_xticklabels(['Baseline', 'Offload'])
 ax.legend()
 ax.grid(True, alpha=0.3, axis='y')
 ax.set_ylim(0, 60)
-for bars in [bars1, bars2]:
+for bars in [bars1, bars2, bars3]:
     for bar in bars:
         height = bar.get_height()
         if height > 0:
             ax.text(bar.get_x() + bar.get_width()/2., height,
                     f'{height:.1f}%',
-                    ha='center', va='bottom', fontsize=10, fontweight='bold')
+                    ha='center', va='bottom', fontsize=9, fontweight='bold')
 
 plt.tight_layout()
 plt.savefig('gpu_key_findings.png', dpi=300, bbox_inches='tight')
