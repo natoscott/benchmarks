@@ -208,13 +208,13 @@ Available cache metrics:
 - `openmetrics.vllm.vllm.connector_prefix_cache_queries_total` - Connector cache lookups
 - `openmetrics.vllm.vllm.connector_prefix_cache_hits_total` - Connector cache hits
 
-Observed cache activity:
-- Qwen3-0.6B OffloadingConnector: 11,189 connector cache queries
-- Qwen3-0.6B LMCache: 5,522 connector cache queries
-- Qwen3-8B OffloadingConnector: 3,195 connector cache queries
-- Qwen3-8B LMCache: 3,205 connector cache queries
+Observed cache activity (total queries across all non-warmup runs):
+- Qwen3-0.6B OffloadingConnector: ~11,000 connector cache queries (250 prompt tokens, 50 output tokens)
+- Qwen3-8B OffloadingConnector: ~3,200 connector cache queries (500 prompt tokens, 100 output tokens)
+- Qwen3-14B Baseline: ~1,990,000 connector cache queries (750 prompt tokens, 150 output tokens)
+- Qwen3-14B OffloadingConnector: ~2,127,000 connector cache queries (750 prompt tokens, 150 output tokens)
 
-The connector-based configurations show active cache usage, demonstrating that the CPU offload mechanism is actively managing cached key-value pairs.
+The configurations show active cache usage, demonstrating that the KV cache mechanism is actively managing cached key-value pairs. The 14B model shows significantly higher query volumes due to longer prompts (750 tokens vs 250-500) and longer output sequences (150 tokens vs 50-100), which generate more KV cache entries to manage.
 
 ---
 
