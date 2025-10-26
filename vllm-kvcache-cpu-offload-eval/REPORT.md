@@ -381,12 +381,23 @@ Baseline configuration:
 ## Appendix: Technical Details
 
 ### GuideLLM Benchmark Command
-All benchmarks used:
+
+Qwen3-8B benchmarks:
 ```bash
 guidellm benchmark \
   --target "http://localhost:8000" \
+  --data "prompt_tokens=500,output_tokens=100" \
   --concurrency <LEVEL> \
-  --max-seconds 60
+  --max-seconds 120
+```
+
+Qwen3-0.6B benchmarks:
+```bash
+guidellm benchmark \
+  --target "http://localhost:8000" \
+  --data "prompt_tokens=250,output_tokens=50" \
+  --concurrency <LEVEL> \
+  --max-seconds 120
 ```
 
 Where `<LEVEL>` was each of: 5, 10, 20, 50, 100, 200, 500, 1000, 2000
