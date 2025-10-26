@@ -9,6 +9,14 @@ analyze_gpu_utilization.py
 finalize_config_labels.py
 identify_configs.py
 map_configurations.py
+analyze_14b_benchmarks.py
+analyze_cache_14b.py
+analyze_cache_14b_final.py
+analyze_cache_14b_fixed.py
+analyze_gpu_14b.py
+merge_14b_data.py
+merge_cache_data.py
+merge_gpu_data.py
 
 # Intermediate data files
 annotated_results.csv
@@ -19,12 +27,24 @@ extracted_results.csv
 identified_configs.csv
 results_with_gpu.csv
 gpu_utilization_analysis.csv
+cache_14b_export.csv
+cache_14b_export_final.csv
+cache_14b_export_fixed.csv
+cache_14b_results.csv
+gpu_14b_export.csv
+gpu_14b_results.csv
+qwen3_14b_results.csv
+final_config_mapping_with_14b.csv
+gpu_comparison_summary_with_14b.csv
+gpu_utilization_detailed_with_14b.csv
 
 # Large temporary data exports
 cache_metrics_timeseries.csv
 gpu_active_metrics.csv
 gpu_metrics.csv
 guidellm_data.csv
+guidellm_14b_data.csv
+guidellm_14b_export.csv
 
 # Old results from previous benchmarks
 detailed_results.csv
