@@ -24,6 +24,8 @@ df = df[(~df['is_warmup']) & (df['config_label'] != 'lmcache')].copy()
 palette_colors = sns.color_palette("muted")
 colors = {'default': palette_colors[0], 'offload': palette_colors[1]}
 models = ['Qwen3-0.6B', 'Qwen3-8B', 'Qwen3-14B']
+# Display labels for legends (map 'default' -> 'Baseline')
+display_labels = {'default': 'Baseline', 'offload': 'Offload'}
 
 print("Creating KV cache visualizations...")
 
@@ -38,7 +40,7 @@ gs = fig.add_gridspec(3, 4, hspace=0.3, wspace=0.3)
 ax1 = fig.add_subplot(gs[0, 0])
 for config in ['default', 'offload']:
     data = df[(df['model'] == 'Qwen3-0.6B') & (df['config_label'] == config)]
-    ax1.plot(data['concurrency'], data['connector_query_rate_mean'], marker='o', label=config,
+    ax1.plot(data['concurrency'], data['connector_query_rate_mean'], marker='o', label=display_labels[config],
             color=colors[config], linewidth=2, markersize=8)
 ax1.set_xlabel('Concurrency', fontsize=11)
 ax1.set_ylabel('Cache Queries/sec', fontsize=11)
@@ -51,7 +53,7 @@ ax1.set_xscale('log')
 ax2 = fig.add_subplot(gs[0, 1])
 for config in ['default', 'offload']:
     data = df[(df['model'] == 'Qwen3-8B') & (df['config_label'] == config)]
-    ax2.plot(data['concurrency'], data['connector_query_rate_mean'], marker='o', label=config,
+    ax2.plot(data['concurrency'], data['connector_query_rate_mean'], marker='o', label=display_labels[config],
             color=colors[config], linewidth=2, markersize=8)
 ax2.set_xlabel('Concurrency', fontsize=11)
 ax2.set_ylabel('Cache Queries/sec', fontsize=11)
@@ -64,7 +66,7 @@ ax2.set_xscale('log')
 ax3 = fig.add_subplot(gs[0, 2])
 for config in ['default', 'offload']:
     data = df[(df['model'] == 'Qwen3-14B') & (df['config_label'] == config)]
-    ax3.plot(data['concurrency'], data['connector_query_rate_mean'], marker='o', label=config,
+    ax3.plot(data['concurrency'], data['connector_query_rate_mean'], marker='o', label=display_labels[config],
             color=colors[config], linewidth=2, markersize=8)
 ax3.set_xlabel('Concurrency', fontsize=11)
 ax3.set_ylabel('Cache Queries/sec', fontsize=11)
@@ -82,7 +84,7 @@ for i, config in enumerate(['default', 'offload']):
     for model in models:
         avg = df[(df['model'] == model) & (df['config_label'] == config)]['connector_query_rate_mean'].mean()
         values.append(avg)
-    bars = ax4.bar(x + i*width, values, width, label=config, color=colors[config], alpha=0.8)
+    bars = ax4.bar(x + i*width, values, width, label=display_labels[config], color=colors[config], alpha=0.8)
     # Add value labels on bars
     for bar, val in zip(bars, values):
         height = bar.get_height()
@@ -102,7 +104,7 @@ ax4.grid(True, alpha=0.3, axis='y')
 ax5 = fig.add_subplot(gs[1, 0])
 for config in ['default', 'offload']:
     data = df[(df['model'] == 'Qwen3-0.6B') & (df['config_label'] == config)]
-    ax5.plot(data['concurrency'], data['connector_hit_rate_mean'], marker='o', label=config,
+    ax5.plot(data['concurrency'], data['connector_hit_rate_mean'], marker='o', label=display_labels[config],
             color=colors[config], linewidth=2, markersize=8)
 ax5.set_xlabel('Concurrency', fontsize=11)
 ax5.set_ylabel('Cache Hits/sec', fontsize=11)
@@ -115,7 +117,7 @@ ax5.set_xscale('log')
 ax6 = fig.add_subplot(gs[1, 1])
 for config in ['default', 'offload']:
     data = df[(df['model'] == 'Qwen3-8B') & (df['config_label'] == config)]
-    ax6.plot(data['concurrency'], data['connector_hit_rate_mean'], marker='o', label=config,
+    ax6.plot(data['concurrency'], data['connector_hit_rate_mean'], marker='o', label=display_labels[config],
             color=colors[config], linewidth=2, markersize=8)
 ax6.set_xlabel('Concurrency', fontsize=11)
 ax6.set_ylabel('Cache Hits/sec', fontsize=11)
@@ -128,7 +130,7 @@ ax6.set_xscale('log')
 ax7 = fig.add_subplot(gs[1, 2])
 for config in ['default', 'offload']:
     data = df[(df['model'] == 'Qwen3-14B') & (df['config_label'] == config)]
-    ax7.plot(data['concurrency'], data['connector_hit_rate_mean'], marker='o', label=config,
+    ax7.plot(data['concurrency'], data['connector_hit_rate_mean'], marker='o', label=display_labels[config],
             color=colors[config], linewidth=2, markersize=8)
 ax7.set_xlabel('Concurrency', fontsize=11)
 ax7.set_ylabel('Cache Hits/sec', fontsize=11)
@@ -146,7 +148,7 @@ for i, config in enumerate(['default', 'offload']):
     for model in models:
         avg = df[(df['model'] == model) & (df['config_label'] == config)]['connector_hit_rate_mean'].mean()
         values.append(avg)
-    bars = ax8.bar(x + i*width, values, width, label=config, color=colors[config], alpha=0.8)
+    bars = ax8.bar(x + i*width, values, width, label=display_labels[config], color=colors[config], alpha=0.8)
     # Add value labels on bars
     for bar, val in zip(bars, values):
         height = bar.get_height()
@@ -166,7 +168,7 @@ ax8.grid(True, alpha=0.3, axis='y')
 ax9 = fig.add_subplot(gs[2, 0])
 for config in ['default', 'offload']:
     data = df[(df['model'] == 'Qwen3-0.6B') & (df['config_label'] == config)]
-    ax9.plot(data['concurrency'], data['connector_hit_ratio'], marker='o', label=config,
+    ax9.plot(data['concurrency'], data['connector_hit_ratio'], marker='o', label=display_labels[config],
             color=colors[config], linewidth=2, markersize=8)
 ax9.set_xlabel('Concurrency', fontsize=11)
 ax9.set_ylabel('Cache Hit Ratio (%)', fontsize=11)
@@ -180,7 +182,7 @@ ax9.set_ylim(0, 100)
 ax10 = fig.add_subplot(gs[2, 1])
 for config in ['default', 'offload']:
     data = df[(df['model'] == 'Qwen3-8B') & (df['config_label'] == config)]
-    ax10.plot(data['concurrency'], data['connector_hit_ratio'], marker='o', label=config,
+    ax10.plot(data['concurrency'], data['connector_hit_ratio'], marker='o', label=display_labels[config],
             color=colors[config], linewidth=2, markersize=8)
 ax10.set_xlabel('Concurrency', fontsize=11)
 ax10.set_ylabel('Cache Hit Ratio (%)', fontsize=11)
@@ -194,7 +196,7 @@ ax10.set_ylim(0, 100)
 ax11 = fig.add_subplot(gs[2, 2])
 for config in ['default', 'offload']:
     data = df[(df['model'] == 'Qwen3-14B') & (df['config_label'] == config)]
-    ax11.plot(data['concurrency'], data['connector_hit_ratio'], marker='o', label=config,
+    ax11.plot(data['concurrency'], data['connector_hit_ratio'], marker='o', label=display_labels[config],
             color=colors[config], linewidth=2, markersize=8)
 ax11.set_xlabel('Concurrency', fontsize=11)
 ax11.set_ylabel('Cache Hit Ratio (%)', fontsize=11)
@@ -213,7 +215,7 @@ for i, config in enumerate(['default', 'offload']):
     for model in models:
         avg = df[(df['model'] == model) & (df['config_label'] == config)]['connector_hit_ratio'].mean()
         values.append(avg)
-    bars = ax12.bar(x + i*width, values, width, label=config, color=colors[config], alpha=0.8)
+    bars = ax12.bar(x + i*width, values, width, label=display_labels[config], color=colors[config], alpha=0.8)
     # Add value labels on bars
     for bar, val in zip(bars, values):
         height = bar.get_height()
@@ -308,7 +310,7 @@ for i, config in enumerate(['default', 'offload']):
         val = cache_usage_data[(cache_usage_data['model'] == model) &
                                (cache_usage_data['config_label'] == config)]['cache_usage_mean'].values
         values.append(val[0] if len(val) > 0 else 0)
-    ax.bar(x + i*width, values, width, label=config, color=colors[config], alpha=0.8)
+    ax.bar(x + i*width, values, width, label=display_labels[config], color=colors[config], alpha=0.8)
 ax.set_xlabel('Model', fontsize=12)
 ax.set_ylabel('Avg Cache Usage (%)', fontsize=12)
 ax.set_title('KV Cache Memory Usage', fontsize=12, fontweight='bold')
