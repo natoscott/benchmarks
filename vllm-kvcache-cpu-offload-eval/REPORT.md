@@ -403,7 +403,7 @@ guidellm benchmark \
 Where `<LEVEL>` was each of: 5, 10, 20, 50, 100, 200, 500, 1000, 2000
 
 ### PCP Archive Details
-- **Archive**: `benchmark-pcp-recording`
+- **Archive**: `pcp-archive-20251023`
 - **Time Range**: October 23, 2025
 - **Duration**: ~9.3 hours (00:10:24 to 09:29:56 UTC)
 - **Total Benchmark Runs**: 40 configurations
