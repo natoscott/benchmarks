@@ -82,7 +82,14 @@ for i, config in enumerate(['default', 'offload']):
     for model in models:
         avg = df[(df['model'] == model) & (df['config_label'] == config)]['connector_query_rate_mean'].mean()
         values.append(avg)
-    ax4.bar(x + i*width, values, width, label=config, color=colors[config], alpha=0.8)
+    bars = ax4.bar(x + i*width, values, width, label=config, color=colors[config], alpha=0.8)
+    # Add value labels on bars
+    for bar, val in zip(bars, values):
+        height = bar.get_height()
+        if height > 0:
+            ax4.text(bar.get_x() + bar.get_width()/2., height,
+                    f'{val:.0f}',
+                    ha='center', va='bottom', fontsize=9, fontweight='bold')
 ax4.set_xlabel('Model', fontsize=11)
 ax4.set_ylabel('Avg Cache Queries/sec', fontsize=11)
 ax4.set_title('Average Cache Query Rate', fontsize=12, fontweight='bold')
@@ -139,7 +146,14 @@ for i, config in enumerate(['default', 'offload']):
     for model in models:
         avg = df[(df['model'] == model) & (df['config_label'] == config)]['connector_hit_rate_mean'].mean()
         values.append(avg)
-    ax8.bar(x + i*width, values, width, label=config, color=colors[config], alpha=0.8)
+    bars = ax8.bar(x + i*width, values, width, label=config, color=colors[config], alpha=0.8)
+    # Add value labels on bars
+    for bar, val in zip(bars, values):
+        height = bar.get_height()
+        if height > 0:
+            ax8.text(bar.get_x() + bar.get_width()/2., height,
+                    f'{val:.0f}',
+                    ha='center', va='bottom', fontsize=9, fontweight='bold')
 ax8.set_xlabel('Model', fontsize=11)
 ax8.set_ylabel('Avg Cache Hits/sec', fontsize=11)
 ax8.set_title('Average Cache Hit Rate', fontsize=12, fontweight='bold')
