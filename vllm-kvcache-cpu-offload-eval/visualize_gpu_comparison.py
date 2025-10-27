@@ -25,8 +25,8 @@ df_comparison = df_comparison[df_comparison['config'] != 'lmcache']
 print("Creating GPU utilization visualizations...")
 
 # Create comprehensive figure
-fig = plt.figure(figsize=(20, 12))
-gs = fig.add_gridspec(3, 3, hspace=0.3, wspace=0.3)
+fig = plt.figure(figsize=(24, 12))
+gs = fig.add_gridspec(3, 4, hspace=0.3, wspace=0.3)
 
 # Get colors from muted palette
 palette_colors = sns.color_palette("muted")
@@ -67,103 +67,142 @@ ax2.grid(True, alpha=0.3)
 ax2.set_xscale('log')
 ax2.set_ylim(0, 100)
 
-# Plot 3: Average GPU Compute Comparison
+# Plot 3: GPU Compute Active vs Concurrency - Qwen3-14B
 ax3 = fig.add_subplot(gs[0, 2])
+for config in ['default', 'offload']:
+    data = df[(df['model'] == 'Qwen3-14B') & (df['config_label'] == config)]
+    ax3.plot(data['concurrency'], data['gpu_active_mean'], marker='o', label=display_labels[config],
+            color=colors[config], linewidth=2, markersize=8)
+ax3.set_xlabel('Concurrency', fontsize=11)
+ax3.set_ylabel('GPU Compute Active (%)', fontsize=11)
+ax3.set_title('Qwen3-14B: GPU Compute Utilization', fontsize=12, fontweight='bold')
+ax3.legend()
+ax3.grid(True, alpha=0.3)
+ax3.set_xscale('log')
+ax3.set_ylim(0, 100)
+
+# Plot 4: Average GPU Compute Comparison
+ax4 = fig.add_subplot(gs[0, 3])
 x = np.arange(len(models))
 width = 0.35
 for i, config in enumerate(['default', 'offload']):
     values = [df_comparison[(df_comparison['model'] == m) &
                            (df_comparison['config'] == config)]['gpu_compute_avg'].values[0]
              for m in models]
-    ax3.bar(x + i*width, values, width, label=display_labels[config], color=colors[config], alpha=0.8)
-ax3.set_xlabel('Model', fontsize=11)
-ax3.set_ylabel('Avg GPU Compute Active (%)', fontsize=11)
-ax3.set_title('Average GPU Compute Utilization', fontsize=12, fontweight='bold')
-ax3.set_xticks(x + width)
-ax3.set_xticklabels([m.split('-')[1] for m in models])
-ax3.legend()
-ax3.grid(True, alpha=0.3, axis='y')
-ax3.set_ylim(0, 100)
+    ax4.bar(x + i*width, values, width, label=display_labels[config], color=colors[config], alpha=0.8)
+ax4.set_xlabel('Model', fontsize=11)
+ax4.set_ylabel('Avg GPU Compute Active (%)', fontsize=11)
+ax4.set_title('Average GPU Compute Utilization', fontsize=12, fontweight='bold')
+ax4.set_xticks(x + width)
+ax4.set_xticklabels([m.split('-')[1] for m in models])
+ax4.legend()
+ax4.grid(True, alpha=0.3, axis='y')
+ax4.set_ylim(0, 100)
 
 # ============================================================================
 # Row 2: GPU Memory Utilization
 # ============================================================================
 
-# Plot 4: GPU Memory Active vs Concurrency - Qwen3-0.6B
-ax4 = fig.add_subplot(gs[1, 0])
+# Plot 5: GPU Memory Active vs Concurrency - Qwen3-0.6B
+ax5 = fig.add_subplot(gs[1, 0])
 for config in ['default', 'offload']:
     data = df[(df['model'] == 'Qwen3-0.6B') & (df['config_label'] == config)]
-    ax4.plot(data['concurrency'], data['mem_active_mean'], marker='o', label=display_labels[config],
-            color=colors[config], linewidth=2, markersize=8)
-ax4.set_xlabel('Concurrency', fontsize=11)
-ax4.set_ylabel('GPU Memory Active (%)', fontsize=11)
-ax4.set_title('Qwen3-0.6B: GPU Memory Bandwidth', fontsize=12, fontweight='bold')
-ax4.legend()
-ax4.grid(True, alpha=0.3)
-ax4.set_xscale('log')
-ax4.set_ylim(0, 100)
-
-# Plot 5: GPU Memory Active vs Concurrency - Qwen3-8B
-ax5 = fig.add_subplot(gs[1, 1])
-for config in ['default', 'offload']:
-    data = df[(df['model'] == 'Qwen3-8B') & (df['config_label'] == config)]
     ax5.plot(data['concurrency'], data['mem_active_mean'], marker='o', label=display_labels[config],
             color=colors[config], linewidth=2, markersize=8)
 ax5.set_xlabel('Concurrency', fontsize=11)
 ax5.set_ylabel('GPU Memory Active (%)', fontsize=11)
-ax5.set_title('Qwen3-8B: GPU Memory Bandwidth', fontsize=12, fontweight='bold')
+ax5.set_title('Qwen3-0.6B: GPU Memory Bandwidth', fontsize=12, fontweight='bold')
 ax5.legend()
 ax5.grid(True, alpha=0.3)
 ax5.set_xscale('log')
 ax5.set_ylim(0, 100)
 
-# Plot 6: Memory Used Comparison
-ax6 = fig.add_subplot(gs[1, 2])
+# Plot 6: GPU Memory Active vs Concurrency - Qwen3-8B
+ax6 = fig.add_subplot(gs[1, 1])
+for config in ['default', 'offload']:
+    data = df[(df['model'] == 'Qwen3-8B') & (df['config_label'] == config)]
+    ax6.plot(data['concurrency'], data['mem_active_mean'], marker='o', label=display_labels[config],
+            color=colors[config], linewidth=2, markersize=8)
+ax6.set_xlabel('Concurrency', fontsize=11)
+ax6.set_ylabel('GPU Memory Active (%)', fontsize=11)
+ax6.set_title('Qwen3-8B: GPU Memory Bandwidth', fontsize=12, fontweight='bold')
+ax6.legend()
+ax6.grid(True, alpha=0.3)
+ax6.set_xscale('log')
+ax6.set_ylim(0, 100)
+
+# Plot 7: GPU Memory Active vs Concurrency - Qwen3-14B
+ax7 = fig.add_subplot(gs[1, 2])
+for config in ['default', 'offload']:
+    data = df[(df['model'] == 'Qwen3-14B') & (df['config_label'] == config)]
+    ax7.plot(data['concurrency'], data['mem_active_mean'], marker='o', label=display_labels[config],
+            color=colors[config], linewidth=2, markersize=8)
+ax7.set_xlabel('Concurrency', fontsize=11)
+ax7.set_ylabel('GPU Memory Active (%)', fontsize=11)
+ax7.set_title('Qwen3-14B: GPU Memory Bandwidth', fontsize=12, fontweight='bold')
+ax7.legend()
+ax7.grid(True, alpha=0.3)
+ax7.set_xscale('log')
+ax7.set_ylim(0, 100)
+
+# Plot 8: Memory Used Comparison
+ax8 = fig.add_subplot(gs[1, 3])
 width = 0.35
 for i, config in enumerate(['default', 'offload']):
     values = [df_comparison[(df_comparison['model'] == m) &
                            (df_comparison['config'] == config)]['memory_used_gb'].values[0]
              for m in models]
-    ax6.bar(x + i*width, values, width, label=display_labels[config], color=colors[config], alpha=0.8)
-ax6.set_xlabel('Model', fontsize=11)
-ax6.set_ylabel('Avg GPU Memory Used (GB)', fontsize=11)
-ax6.set_title('Average GPU Memory Usage', fontsize=12, fontweight='bold')
-ax6.set_xticks(x + width)
-ax6.set_xticklabels([m.split('-')[1] for m in models])
-ax6.legend()
-ax6.grid(True, alpha=0.3, axis='y')
+    ax8.bar(x + i*width, values, width, label=display_labels[config], color=colors[config], alpha=0.8)
+ax8.set_xlabel('Model', fontsize=11)
+ax8.set_ylabel('Avg GPU Memory Used (GB)', fontsize=11)
+ax8.set_title('Average GPU Memory Usage', fontsize=12, fontweight='bold')
+ax8.set_xticks(x + width)
+ax8.set_xticklabels([m.split('-')[1] for m in models])
+ax8.legend()
+ax8.grid(True, alpha=0.3, axis='y')
 
 # ============================================================================
 # Row 3: Performance vs GPU Utilization Trade-off
 # ============================================================================
 
-# Plot 7: Throughput vs GPU Compute - Qwen3-0.6B
-ax7 = fig.add_subplot(gs[2, 0])
+# Plot 9: Throughput vs GPU Compute - Qwen3-0.6B
+ax9 = fig.add_subplot(gs[2, 0])
 for config in ['default', 'offload']:
     data = df[(df['model'] == 'Qwen3-0.6B') & (df['config_label'] == config)]
-    ax7.scatter(data['gpu_active_mean'], data['throughput'],
+    ax9.scatter(data['gpu_active_mean'], data['throughput'],
                label=display_labels[config], color=colors[config], s=100, alpha=0.7)
-ax7.set_xlabel('GPU Compute Active (%)', fontsize=11)
-ax7.set_ylabel('Throughput (tok/s)', fontsize=11)
-ax7.set_title('Qwen3-0.6B: Throughput vs GPU Utilization', fontsize=12, fontweight='bold')
-ax7.legend()
-ax7.grid(True, alpha=0.3)
+ax9.set_xlabel('GPU Compute Active (%)', fontsize=11)
+ax9.set_ylabel('Throughput (tok/s)', fontsize=11)
+ax9.set_title('Qwen3-0.6B: Throughput vs GPU Utilization', fontsize=12, fontweight='bold')
+ax9.legend()
+ax9.grid(True, alpha=0.3)
 
-# Plot 8: Throughput vs GPU Compute - Qwen3-8B
-ax8 = fig.add_subplot(gs[2, 1])
+# Plot 10: Throughput vs GPU Compute - Qwen3-8B
+ax10 = fig.add_subplot(gs[2, 1])
 for config in ['default', 'offload']:
     data = df[(df['model'] == 'Qwen3-8B') & (df['config_label'] == config)]
-    ax8.scatter(data['gpu_active_mean'], data['throughput'],
+    ax10.scatter(data['gpu_active_mean'], data['throughput'],
                label=display_labels[config], color=colors[config], s=100, alpha=0.7)
-ax8.set_xlabel('GPU Compute Active (%)', fontsize=11)
-ax8.set_ylabel('Throughput (tok/s)', fontsize=11)
-ax8.set_title('Qwen3-8B: Throughput vs GPU Utilization ⭐', fontsize=12, fontweight='bold')
-ax8.legend()
-ax8.grid(True, alpha=0.3)
+ax10.set_xlabel('GPU Compute Active (%)', fontsize=11)
+ax10.set_ylabel('Throughput (tok/s)', fontsize=11)
+ax10.set_title('Qwen3-8B: Throughput vs GPU Utilization ⭐', fontsize=12, fontweight='bold')
+ax10.legend()
+ax10.grid(True, alpha=0.3)
 
+# Plot 11: Throughput vs GPU Compute - Qwen3-14B
+ax11 = fig.add_subplot(gs[2, 2])
+for config in ['default', 'offload']:
+    data = df[(df['model'] == 'Qwen3-14B') & (df['config_label'] == config)]
+    ax11.scatter(data['gpu_active_mean'], data['throughput'],
+               label=display_labels[config], color=colors[config], s=100, alpha=0.7)
+ax11.set_xlabel('GPU Compute Active (%)', fontsize=11)
+ax11.set_ylabel('Throughput (tok/s)', fontsize=11)
+ax11.set_title('Qwen3-14B: Throughput vs GPU Utilization', fontsize=12, fontweight='bold')
+ax11.legend()
+ax11.grid(True, alpha=0.3)
 
-# Plot 9: Efficiency Comparison (Throughput per GPU%)
-ax9 = fig.add_subplot(gs[2, 2])
+# Plot 12: Efficiency Comparison (Throughput per GPU%)
+ax12 = fig.add_subplot(gs[2, 3])
 efficiency_data = []
 for model in models:
     for config in ['default', 'offload']:
@@ -178,15 +217,15 @@ for model in models:
 
 df_efficiency = pd.DataFrame(efficiency_data)
 pivot_efficiency = df_efficiency.pivot(index='model', columns='config', values='efficiency')
-pivot_efficiency[['default', 'offload']].plot(kind='bar', ax=ax9,
+pivot_efficiency[['default', 'offload']].plot(kind='bar', ax=ax12,
                                                 color=[colors['default'], colors['offload']],
                                                 alpha=0.8, width=0.7)
-ax9.set_xlabel('Model', fontsize=11)
-ax9.set_ylabel('Throughput per GPU% (tok/s per %)', fontsize=11)
-ax9.set_title('GPU Efficiency (Higher is Better)', fontsize=12, fontweight='bold')
-ax9.legend(title='Config')
-ax9.grid(True, alpha=0.3, axis='y')
-ax9.set_xticklabels(ax9.get_xticklabels(), rotation=0)
+ax12.set_xlabel('Model', fontsize=11)
+ax12.set_ylabel('Throughput per GPU% (tok/s per %)', fontsize=11)
+ax12.set_title('GPU Efficiency (Higher is Better)', fontsize=12, fontweight='bold')
+ax12.legend(title='Config')
+ax12.grid(True, alpha=0.3, axis='y')
+ax12.set_xticklabels(ax12.get_xticklabels(), rotation=0)
 
 fig.suptitle('GPU Utilization Analysis: CPU Offload vs Baseline',
              fontsize=16, fontweight='bold', y=0.995)
