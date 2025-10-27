@@ -206,13 +206,13 @@ GPU utilization impact:
 
 All benchmark configurations had prefix caching enabled. The PCP archive contains cache metrics:
 
-Available cache metrics (latter two were patched in, not part of vLLM v0.3.0):
+Available cache metrics (latter two are patched in and not part of vLLM v0.11.0):
 - `openmetrics.vllm.vllm.prefix_cache_queries_total` - Total prefix cache lookups
 - `openmetrics.vllm.vllm.prefix_cache_hits_total` - Successful prefix cache hits
 - `openmetrics.vllm.vllm.connector_prefix_cache_queries_total` - Connector cache lookups
 - `openmetrics.vllm.vllm.connector_prefix_cache_hits_total` - Connector cache hits
 
-The PCP archives accompanying this report contain all vllm metrics recorded on a 1-second interval.
+The PCP archives accompanying this report contain all vLLM metrics recorded on a 1-second interval.
 
 ---
 
@@ -476,7 +476,7 @@ Qwen3-14B benchmarks:
 guidellm benchmark \
   --target "http://localhost:8000" \
   --data "prompt_tokens=750,output_tokens=150" \
-  --concurrency <LEVEL> \
+  --rate "99,5,10,20,50,100,200,500,1000,2000" \
   --max-seconds 120
 ```
 
@@ -485,7 +485,7 @@ Qwen3-8B benchmarks:
 guidellm benchmark \
   --target "http://localhost:8000" \
   --data "prompt_tokens=500,output_tokens=100" \
-  --concurrency <LEVEL> \
+  --rate "99,5,10,20,50,100,200,500,1000,2000" \
   --max-seconds 120
 ```
 
@@ -494,11 +494,11 @@ Qwen3-0.6B benchmarks:
 guidellm benchmark \
   --target "http://localhost:8000" \
   --data "prompt_tokens=250,output_tokens=50" \
-  --concurrency <LEVEL> \
+  --rate "99,5,10,20,50,100,200,500,1000,2000" \
   --max-seconds 120
 ```
 
-Where `<LEVEL>` was each of: 5, 10, 20, 50, 100, 200, 500, 1000, 2000
+Note: The `--rate` parameter accepts comma-separated concurrency levels. The first value (99) was used as a warmup run and excluded from analysis.
 
 ### PCP Archive Details
 
