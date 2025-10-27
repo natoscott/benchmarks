@@ -27,9 +27,17 @@
 ### Available but Unused
 - **network.***: 378 metrics (interface statistics)
 - **mem.***: 340 metrics (memory details)
+- **xfs.***: 210 metrics (XFS filesystem statistics)
 - **disk.***: 132 metrics (I/O and storage)
 - **kernel.***: 80 metrics (Linux kernel)
 - **proc.***: 56 metrics (process-level)
+- **ipc.***: 49 metrics (inter-process communication)
+- **hinv.***: 38 metrics (hardware inventory)
+- **kvm.***: 34 metrics (kernel virtual machine)
+- **rpc.***: 21 metrics (remote procedure calls)
+- **filesys.***: 12 metrics (filesystem metrics)
+- **vfs.***: 7 metrics (virtual filesystem layer)
+- **swap.***: 7 metrics (swap space usage)
 
 The archives contain extensive system-level performance data beyond what was analyzed in the report, providing opportunities for deeper analysis of resource consumption patterns, network activity, and process-level behaviors during benchmarking.
 
