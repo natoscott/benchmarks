@@ -1,10 +1,11 @@
 # vLLM KV Cache CPU Offload Evaluation
 
-## Executive Summary
+## Summary
 
 This report analyzes the performance of vLLM's KV cache CPU offload feature using concurrency-based load testing, comparing two configurations:
 - **OffloadingConnector**: CPU offload feature for KV cache
-- **Baseline**: Traditional GPU-only approach
+- **Baseline**: GPU-only approach for KV cache
+GPU memory is limited in all cases (explicitly for smaller models, and implicitly by the hardware for the larger model) in order to encourage KV cache offload.
 
 Observations:
 
@@ -29,17 +30,17 @@ For Qwen3-14B:
 
 ## Test Configuration
 
-### Workload Parameters (Updated)
+### Workload Parameters
 - **Testing Approach**: Concurrency-based load testing
 - **Concurrency Levels**: 5, 10, 20, 50, 100, 200, 500, 1000, 2000
-- **Warmup**: Each configuration includes a warmup run (concurrency=99, excluded from analysis)
-- **Duration**: ~60 seconds per concurrency level
-- **Total Benchmark Runs**: 54 (3 models × 2 configs × 10 concurrency levels, excluding warmup)
+- **Warmup**: Each configuration includes a warmup run (concurrency=99 excluded from analysis)
+- **Duration**: ~120 seconds per concurrency level
+- **Total Benchmark Runs**: 45 (3 models × 2 configs × 9 concurrency levels, excluding warmup)
 
 ### Hardware Setup
 
 **System Configuration:**
-- **CPU**: Intel Xeon Processor (Sapphire Rapids)
+- **CPU**: Intel Xeon Processors (Sapphire Rapids)
   - 32 vCPUs
   - System Memory: 157 GB
 - **GPUs**: 2x NVIDIA L4
@@ -50,6 +51,9 @@ For Qwen3-14B:
 
 **Software:**
 - **vLLM**: v0.11.0 (patched with kvconnector stats)
+- **RHEL**: v9.6.0
+- **PCP**: v7.0.2 (patched with dstat and guidellm2pcp fixes)
+- **GuideLLM**: ~v0.4.0 (pre-release patched for comma-separated --rate)
 
 **Models Tested:**
 - Qwen/Qwen3-0.6B
@@ -92,7 +96,7 @@ For Qwen3-14B:
    vllm serve Qwen/Qwen3-14B --tensor-parallel-size 2 \
      --kv-transfer-config '{"kv_connector":"OffloadingConnector","kv_role":"kv_both","kv_connector_extra_config":{"num_cpu_blocks":16000}}'
    ```
-   Note: `num_cpu_blocks` reduced to 16000 (vs 64000 for smaller models) to fit KV cache within available system memory. No `--gpu-memory-utilization` setting used, allowing full GPU memory allocation.
+   Note: `num_cpu_blocks` reduced to 16000 (vs 64000 for smaller models) to fit KV cache within available system memory. No `--gpu-memory-utilization` setting used as more available GPU memory required to run the model. These configuration differences are thus made to fit the model to the configuration of the machine under test while maximizing available CPU memory for offload. Using the same parameters for all runs would have been preferable, but was not possible with the hardware used.
 
 2. **Baseline**:
    ```bash
@@ -122,6 +126,19 @@ For Qwen3-14B:
 
 ## Performance Analysis
 
+### Qwen3-0.6B Results
+
+**Baseline Performance**: 295.84 tok/s, TTFT: 3,014ms, TPOT: 86.74ms
+
+#### OffloadingConnector
+- Throughput: -1.9% (290.31 tok/s)
+  - 5.53 tok/s difference
+- TTFT: +4.0% (3,135 ms)
+  - 121ms slower
+- TPOT: +0.8% (87.40 ms)
+
+Analysis: For Qwen3-0.6B, the CPU offload overhead slightly exceeds the benefits. The performance differences are minimal across all metrics.
+
 ### Qwen3-8B Results
 
 **Baseline Performance**: 52.69 tok/s, TTFT: 6,847ms, TPOT: 129.04ms
@@ -135,7 +152,7 @@ For Qwen3-14B:
 - TPOT: -15.8% (108.59 ms vs 129.04 ms)
   - 20.45ms improvement per token
 
-Analysis: By managing KV cache on CPU, this configuration reduces memory pressure on the GPU, allowing more GPU compute resources to be allocated to model inference. This results in improved throughput despite lower overall GPU utilization.
+Analysis: By managing KV cache on CPU, this configuration reduces memory pressure on the GPU, freeing up GPU compute resources. This results in both improved throughput and reduced overall GPU utilization.
 
 GPU utilization impact:
 - 9.1% reduction in GPU compute utilization
@@ -155,35 +172,22 @@ GPU utilization impact:
 - TPOT: -15.5% (87.29 ms vs 103.29 ms)
   - 16.00ms improvement per token
 
-Analysis: The 14B model shows performance improvements with CPU offload, similar to the 8B model but at a lower magnitude. By managing KV cache on CPU, memory pressure on the GPU is reduced, allowing more GPU compute resources for model inference.
+Analysis: The 14B model shows performance improvements with CPU offload, similar to the 8B model but at a lower magnitude. This is likely a result of the combination of larger model size (hence larger values in the KV cache) while less physical CPU offload memory is available due to hardware limitations. Still, memory pressure on the GPU is noticably reduced, allowing more GPU compute resources for other inference tasks.
 
 GPU utilization impact:
 - 3.8% reduction in GPU compute utilization
 - More efficient use of GPU resources for inference
 - Better scalability under concurrent load
 
-### Qwen3-0.6B Results
-
-**Baseline Performance**: 295.84 tok/s, TTFT: 3,014ms, TPOT: 86.74ms
-
-#### OffloadingConnector
-- Throughput: -1.9% (290.31 tok/s)
-  - 5.53 tok/s difference
-- TTFT: +4.0% (3,135 ms)
-  - 121ms slower
-- TPOT: +0.8% (87.40 ms)
-
-Analysis: For Qwen3-0.6B, the CPU offload overhead slightly exceeds the benefits. The performance differences are minimal across all metrics.
-
 ---
 
 ## Concurrency Scaling Analysis
 
 ### Low Concurrency (5-20 concurrent requests)
+- Qwen3-0.6B configurations perform similarly
 - Qwen3-8B offload consistently outperforms baseline by 30-40%
 - Qwen3-14B offload shows 20-37% improvement over baseline
-- Qwen3-0.6B configurations perform similarly
-- Offload shows its strengths even at moderate load
+- Offload is a worthwhile optimization even at moderate load
 
 ### Medium Concurrency (50-200 concurrent requests)
 - Qwen3-8B offload maintains performance advantage
@@ -202,19 +206,13 @@ Analysis: For Qwen3-0.6B, the CPU offload overhead slightly exceeds the benefits
 
 All benchmark configurations had prefix caching enabled. The PCP archive contains cache metrics:
 
-Available cache metrics:
+Available cache metrics (latter two were patched in, not part of vLLM v0.3.0):
 - `openmetrics.vllm.vllm.prefix_cache_queries_total` - Total prefix cache lookups
 - `openmetrics.vllm.vllm.prefix_cache_hits_total` - Successful prefix cache hits
 - `openmetrics.vllm.vllm.connector_prefix_cache_queries_total` - Connector cache lookups
 - `openmetrics.vllm.vllm.connector_prefix_cache_hits_total` - Connector cache hits
 
-Observed cache activity (total queries across all non-warmup runs):
-- Qwen3-0.6B OffloadingConnector: ~11,000 connector cache queries (250 prompt tokens, 50 output tokens)
-- Qwen3-8B OffloadingConnector: ~3,200 connector cache queries (500 prompt tokens, 100 output tokens)
-- Qwen3-14B Baseline: ~1,990,000 connector cache queries (750 prompt tokens, 150 output tokens)
-- Qwen3-14B OffloadingConnector: ~2,127,000 connector cache queries (750 prompt tokens, 150 output tokens)
-
-The configurations show active cache usage, demonstrating that the KV cache mechanism is actively managing cached key-value pairs. The 14B model shows significantly higher query volumes due to longer prompts (750 tokens vs 250-500) and longer output sequences (150 tokens vs 50-100), which generate more KV cache entries to manage.
+The PCP archives accompanying this report contain all vllm metrics recorded on a 1-second interval.
 
 ---
 
@@ -246,7 +244,7 @@ Performance impact:
 - Throughput: +23.7% (35.7 vs 28.9 tok/s)
 - GPU efficiency: +29.4% (0.42 vs 0.33 tok/s per % GPU)
 
-Observation: The 14B model shows similar patterns to the 8B model, with CPU offload freeing GPU compute resources while improving throughput. The 3.8% reduction in GPU compute usage corresponds to a 23.7% throughput increase, demonstrating efficient resource utilization. The baseline configuration was compute-bound; CPU offload reduces this bottleneck.
+Observation: The 14B model shows similar patterns to the 8B model, with CPU offload freeing GPU compute resources while improving throughput. The 3.8% reduction in GPU compute usage corresponds to a 23.7% throughput increase. The baseline configuration was compute-bound; CPU offload reduces this bottleneck.
 
 #### Qwen3-8B with CPU offload
 
@@ -308,10 +306,8 @@ At high concurrency (200+):
 The GPU efficiency improvements (46.2% for Qwen3-8B, 29.4% for Qwen3-14B) stem from better resource allocation:
 
 1. Baseline bottleneck: GPU was spending significant compute cycles on KV cache memory management
-2. CPU offload optimization: KV cache operations moved to CPU, freeing GPU compute for inference
+2. CPU offload optimization: KV cache operations moved to CPU, freeing GPU compute resources
 3. Result: Same or less GPU usage produces significantly more output
-
-This demonstrates that raw GPU utilization percentage is not the optimization target - what matters is how efficiently those GPU cycles are spent on productive inference work. Both larger models show this efficiency gain, with the 8B model demonstrating the most pronounced improvement.
 
 ---
 
@@ -339,7 +335,7 @@ Cache hit ratio:
 - Baseline: 3.6%
 - Offload: 46.2% (12.8x improvement)
 
-The offload configuration shows substantially higher cache query activity and achieves a 46.2% hit ratio, meaning nearly half of cache lookups successfully retrieve cached KV data from CPU memory. This reduces redundant GPU computation for cached key-value pairs.
+The offload configuration shows substantially higher cache query activity and achieves a 46.2% hit ratio, meaning nearly half of cache lookups successfully retrieve cached KV data from CPU memory.
 
 #### Qwen3-0.6B cache performance
 
@@ -355,7 +351,7 @@ Cache hit ratio:
 - Baseline: 0.0%
 - Offload: 24.8%
 
-For Qwen3-0.6B, the baseline configuration shows minimal cache hit activity while the offload configuration achieves a 24.8% hit ratio. The offload configuration's higher cache query rate indicates more active cache management.
+For Qwen3-0.6B, the baseline configuration shows minimal cache hit activity while the offload configuration achieves a 24.8% hit ratio.
 
 #### Qwen3-14B cache performance
 
@@ -397,9 +393,9 @@ All three models showed significant cache memory utilization, frequently reachin
 ## Observations
 
 1. CPU offload benefits vary by model size:
+   - Qwen3-0.6B: CPU offload slightly regresses performance (-1.9% throughput)
    - Qwen3-8B: CPU offload provides performance improvements (+32.7% throughput)
    - Qwen3-14B: CPU offload provides performance improvements (+23.7% throughput)
-   - Qwen3-0.6B: CPU offload shows minimal overhead (-1.9% throughput)
    - Larger models benefit more from CPU offload
 
 2. GPU efficiency with CPU offload:
@@ -533,12 +529,15 @@ Where `<LEVEL>` was each of: 5, 10, 20, 50, 100, 200, 500, 1000, 2000
 
 ## Conclusion
 
-This evaluation shows that vLLM's OffloadingConnector provides performance improvements for the larger models tested (Qwen3-8B and Qwen3-14B), with throughput increases of 32.7% and 23.7% respectively, alongside reduced latency and lower GPU compute utilization. For Qwen3-0.6B, configurations performed similarly with minimal differences.
+This evaluation shows that vLLM's OffloadingConnector provides significant performance improvements for the larger models tested (Qwen3-8B and Qwen3-14B), with throughput increases of 32.7% and 23.7% respectively, alongside reduced latency and lower GPU compute utilization. For Qwen3-0.6B, configurations performed similarly with minimal differences.
 
 The concurrency-based testing methodology shows that these performance characteristics are sustained across various load levels. CPU offload reduces GPU compute usage while simultaneously improving throughput for the larger models tested, resulting in better overall GPU efficiency. The 8B model shows the most pronounced benefits (+32.7% throughput, -9.1% GPU usage), while the 14B model shows moderate improvements (+23.7% throughput, -3.8% GPU usage). These differences may be influenced by the test configuration - all models were tested on the same hardware with different GPU memory utilization settings (0.2 for 0.6B, 0.6 for 8B, full allocation for 14B) and different CPU cache block allocations (64000 for 0.6B/8B, 16000 for 14B), which affects the available KV cache capacity in both GPU and CPU memory.
 
 ---
 
-*Report generated in conjunction with Claude Code*
-*Data source: PCP archives + GuideLLM benchmark results*
-*Test Dates: October 23 & 26, 2025*
+*Data source:*
+* *[PCP](https://pcp.io) metric [archives](https://git.new/J5Cx50P)*
+* *[GuideLLM](https://github.com/vllm-project/guidellm) benchmark results*
+
+*Test Dates: October 23 & 26, 2025*.
+*Report generated in conjunction with [Claude Code](https://claude.ai)*.
