@@ -82,11 +82,13 @@ else
 fi
 
 # Build JSON patch operations
+# Use jq to properly escape the value string for JSON
+ESCAPED_ARGS=$(echo -n "${NEW_ARGS}" | jq -R -s '.')
 PATCH_OPS=$(cat <<EOF
   {
     "op": "replace",
     "path": "/spec/template/spec/containers/0/args/0",
-    "value": "${NEW_ARGS}"
+    "value": ${ESCAPED_ARGS}
   }
 EOF
 )
