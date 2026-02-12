@@ -139,7 +139,12 @@ sleep 30
 
 echo "  Inference server configured successfully"
 
-# Configure EPP if backend is specified
+# Clean up any existing EPP ConfigMap from previous runs
+echo ""
+echo "Cleaning up previous EPP configuration..."
+kubectl --kubeconfig="${KUBECONFIG}" delete configmap "${EPP_CONFIGMAP}" -n "${NAMESPACE}" --ignore-not-found=true
+
+# Configure EPP based on backend type
 if [ "${EPP_BACKEND_CONFIG}" != "in-memory" ]; then
     echo ""
     echo "Configuring EPP prefix-cache-scorer backend..."
