@@ -341,8 +341,16 @@ echo ""
 echo "Collecting guidellm results..."
 RESULT_FILE="/tmp/benchmark.json"
 # Use kubectl exec with cat instead of kubectl cp for better reliability with large files
-kubectl --kubeconfig="${KUBECONFIG}" exec -n "${NAMESPACE}" "${INTERACTIVE_POD}" -- cat "${RESULT_FILE}" > "${OUTPUT_DIR}/guidellm-results.json"
-if [ $? -eq 0 ]; then
+# Ignore stderr errors (like "read message: unexpected EOF") as long as file is copied
+set +e  # Temporarily disable exit on error
+kubectl --kubeconfig="${KUBECONFIG}" exec -n "${NAMESPACE}" "${INTERACTIVE_POD}" -- cat "${RESULT_FILE}" > "${OUTPUT_DIR}/guidellm-results.json" 2>/dev/null
+COPY_RESULT=$?
+set -e  # Re-enable exit on error
+
+# Check if file was actually copied (non-empty)
+if [ -s "${OUTPUT_DIR}/guidellm-results.json" ]; then
+    echo "Saved to: ${OUTPUT_DIR}/guidellm-results.json"
+elif [ ${COPY_RESULT} -eq 0 ]; then
     echo "Saved to: ${OUTPUT_DIR}/guidellm-results.json"
 else
     echo "ERROR: Failed to copy guidellm results"
