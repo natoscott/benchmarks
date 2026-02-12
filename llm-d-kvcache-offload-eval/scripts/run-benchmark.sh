@@ -1,0 +1,386 @@
+#!/bin/bash
+set -e
+
+# Benchmark configuration parameters
+KUBECONFIG="${KUBECONFIG:-./kubeconfig}"
+NAMESPACE="llm-d-pfc-cpu"
+
+# Benchmark parameters (customizable)
+TARGET="${TARGET:-http://llm-d-inference-gateway-istio:80}"
+RATE_TYPE="${RATE_TYPE:-concurrent}"
+RATE="${RATE:-1,2,4,8}"
+MAX_SECONDS="${MAX_SECONDS:-30}"
+RANDOM_SEED="${RANDOM_SEED:-889}"
+PROMPT_TOKENS="${PROMPT_TOKENS:-128}"
+OUTPUT_TOKENS="${OUTPUT_TOKENS:-128}"
+PREFIX_TOKENS="${PREFIX_TOKENS:-10000}"
+TURNS="${TURNS:-5}"
+SAMPLE_REQUESTS="${SAMPLE_REQUESTS:-0}"
+
+# Inference server configuration (optional)
+# If VLLM_EXTRA_ARGS is set, the inference server will be restarted with these additional arguments
+VLLM_EXTRA_ARGS="${VLLM_EXTRA_ARGS:-}"
+VLLM_ENV_VARS="${VLLM_ENV_VARS:-}"
+INFERENCE_DEPLOYMENT="${INFERENCE_DEPLOYMENT:-llm-d-model-server}"
+
+# EPP configuration (optional)
+# If EPP_BACKEND_CONFIG is set, the EPP ConfigMap will be updated and EPP deployment restarted
+# Valid values: "in-memory" (default), "redis", "valkey"
+EPP_BACKEND_CONFIG="${EPP_BACKEND_CONFIG:-in-memory}"
+EPP_CONFIGMAP="${EPP_CONFIGMAP:-llm-d-infpool-epp}"
+EPP_DEPLOYMENT="${EPP_DEPLOYMENT:-llm-d-infpool-epp}"
+
+# Hardware/software configuration for directory naming
+HARDWARE="${HARDWARE:-1x2xL40S}"
+SOFTWARE="${SOFTWARE:-upstream-llm-d-0.4.0}"
+MODEL="${MODEL:-Qwen/Qwen3-0.6B}"
+MODEL_NAME="${MODEL_NAME:-Qwen3-0.6B}"
+PARAMETERS="${PARAMETERS:-no-cpu-offload}"
+
+# Generate run ID and output directory (no timestamp - results contain timestamps)
+RUN_ID="${HARDWARE}_${SOFTWARE}_${MODEL_NAME}_${PARAMETERS}"
+OUTPUT_DIR="./results/${RUN_ID}"
+
+echo "=========================================="
+echo "Preparing for Benchmark Run"
+echo "=========================================="
+
+# Restart PCP pod to get fresh archives
+echo "Restarting PCP pod for clean archives..."
+OLD_PCP_PODS=$(kubectl --kubeconfig="${KUBECONFIG}" get pods -n "${NAMESPACE}" -l app.kubernetes.io/name=pcp -o jsonpath='{.items[*].metadata.name}')
+if [ -n "${OLD_PCP_PODS}" ]; then
+    for pod in ${OLD_PCP_PODS}; do
+        echo "  Deleting PCP pod: ${pod}"
+        kubectl --kubeconfig="${KUBECONFIG}" delete pod -n "${NAMESPACE}" "${pod}" --wait=false 2>/dev/null
+    done
+    echo "  Waiting for new PCP pod(s) to be ready..."
+    kubectl --kubeconfig="${KUBECONFIG}" wait --for=condition=ready pod -l app.kubernetes.io/name=pcp -n "${NAMESPACE}" --timeout=120s
+    echo "  PCP pod(s) restarted successfully"
+else
+    echo "  No existing PCP pods found"
+fi
+
+# Always restart inference server to ensure correct model and configuration
+echo ""
+echo "Configuring inference server..."
+echo "  Model: ${MODEL}"
+if [ -n "${VLLM_EXTRA_ARGS}" ]; then
+    echo "  Extra args: ${VLLM_EXTRA_ARGS}"
+fi
+if [ -n "${VLLM_ENV_VARS}" ]; then
+    echo "  Extra env:  ${VLLM_ENV_VARS}"
+fi
+
+# Build base vLLM command with the specified model
+BASE_VLLM_ARGS="exec vllm serve ${MODEL} --tensor-parallel-size 1 --port 8000 --max-num-seq 1024"
+
+# Append extra args if provided
+if [ -n "${VLLM_EXTRA_ARGS}" ]; then
+    NEW_ARGS="${BASE_VLLM_ARGS} ${VLLM_EXTRA_ARGS}"
+else
+    NEW_ARGS="${BASE_VLLM_ARGS}"
+fi
+
+# Build JSON patch operations
+PATCH_OPS=$(cat <<EOF
+  {
+    "op": "replace",
+    "path": "/spec/template/spec/containers/0/args/0",
+    "value": "${NEW_ARGS}"
+  }
+EOF
+)
+
+# Add env patch if VLLM_ENV_VARS is set
+if [ -n "${VLLM_ENV_VARS}" ]; then
+    # Parse VLLM_ENV_VARS (format: "VAR1=value1 VAR2=value2")
+    ENV_JSON=""
+    for env_pair in ${VLLM_ENV_VARS}; do
+        env_name="${env_pair%%=*}"
+        env_value="${env_pair#*=}"
+        if [ -n "${ENV_JSON}" ]; then
+            ENV_JSON="${ENV_JSON},"
+        fi
+        ENV_JSON="${ENV_JSON}{\"name\":\"${env_name}\",\"value\":\"${env_value}\"}"
+    done
+
+    # Get current env array length
+    ENV_COUNT=$(kubectl --kubeconfig="${KUBECONFIG}" get deployment "${INFERENCE_DEPLOYMENT}" -n "${NAMESPACE}" -o jsonpath='{.spec.template.spec.containers[0].env}' | jq 'length')
+
+    ENV_PATCH=$(cat <<EOF
+  {
+    "op": "add",
+    "path": "/spec/template/spec/containers/0/env/${ENV_COUNT}",
+    "value": ${ENV_JSON}
+  }
+EOF
+)
+
+    if [ -n "${PATCH_OPS}" ]; then
+        PATCH_OPS="${PATCH_OPS},${ENV_PATCH}"
+    else
+        PATCH_OPS="${ENV_PATCH}"
+    fi
+fi
+
+# Create final JSON patch
+PATCH_JSON="[${PATCH_OPS}]"
+
+# Apply patch
+echo "${PATCH_JSON}" | kubectl --kubeconfig="${KUBECONFIG}" patch deployment "${INFERENCE_DEPLOYMENT}" -n "${NAMESPACE}" --type='json' -p "$(cat)"
+
+# Wait for rollout
+echo "  Waiting for inference server rollout to complete..."
+kubectl --kubeconfig="${KUBECONFIG}" rollout status deployment/"${INFERENCE_DEPLOYMENT}" -n "${NAMESPACE}" --timeout=300s
+
+# Wait an additional 30 seconds for the server to fully initialize
+echo "  Waiting 30 seconds for server initialization..."
+sleep 30
+
+echo "  Inference server configured successfully"
+
+# Configure EPP if backend is specified
+if [ "${EPP_BACKEND_CONFIG}" != "in-memory" ]; then
+    echo ""
+    echo "Configuring EPP prefix-cache-scorer backend..."
+    echo "  Backend: ${EPP_BACKEND_CONFIG}"
+
+    # Define the indexerConfig based on backend type
+    case "${EPP_BACKEND_CONFIG}" in
+        "redis")
+            INDEX_CONFIG='
+      indexerConfig:
+        kvBlockIndexConfig:
+          redisConfig:
+            address: "redis://redis.'"${NAMESPACE}"'.svc.cluster.local:6379"
+          enableMetrics: true
+          metricsLoggingInterval: "1m0s"'
+            ;;
+        "valkey")
+            INDEX_CONFIG='
+      indexerConfig:
+        kvBlockIndexConfig:
+          redisConfig:
+            address: "valkey://valkey.'"${NAMESPACE}"'.svc.cluster.local:6379"
+            backendType: "valkey"
+          enableMetrics: true
+          metricsLoggingInterval: "1m0s"'
+            ;;
+        *)
+            echo "ERROR: Invalid EPP_BACKEND_CONFIG value: ${EPP_BACKEND_CONFIG}"
+            echo "Valid values: in-memory, redis, valkey"
+            exit 1
+            ;;
+    esac
+
+    # Create updated custom-plugins.yaml with indexerConfig
+    NEW_CUSTOM_PLUGINS=$(cat <<EOF
+apiVersion: inference.networking.x-k8s.io/v1alpha1
+kind: EndpointPickerConfig
+plugins:
+- type: queue-scorer
+- type: kv-cache-utilization-scorer
+- type: prefix-cache-scorer
+  name: gpu-prefix-cache-scorer
+  parameters:${INDEX_CONFIG}
+- type: prefix-cache-scorer
+  name: cpu-prefix-cache-scorer
+  parameters:
+    autoTune: false
+    lruCapacityPerServer: 41000${INDEX_CONFIG}
+schedulingProfiles:
+- name: default
+  plugins:
+  - pluginRef: queue-scorer
+    weight: 2
+  - pluginRef: kv-cache-utilization-scorer
+    weight: 2
+  - pluginRef: gpu-prefix-cache-scorer
+    weight: 1
+  - pluginRef: cpu-prefix-cache-scorer
+    weight: 1
+EOF
+)
+
+    # Update the ConfigMap
+    echo "  Updating ConfigMap ${EPP_CONFIGMAP}..."
+    kubectl --kubeconfig="${KUBECONFIG}" create configmap "${EPP_CONFIGMAP}" \
+        -n "${NAMESPACE}" \
+        --from-literal=custom-plugins.yaml="${NEW_CUSTOM_PLUGINS}" \
+        --dry-run=client -o yaml | \
+        kubectl --kubeconfig="${KUBECONFIG}" apply -f -
+
+    # Restart EPP deployment
+    echo "  Restarting EPP deployment..."
+    kubectl --kubeconfig="${KUBECONFIG}" rollout restart deployment/"${EPP_DEPLOYMENT}" -n "${NAMESPACE}"
+
+    # Wait for rollout
+    echo "  Waiting for EPP deployment rollout to complete..."
+    kubectl --kubeconfig="${KUBECONFIG}" rollout status deployment/"${EPP_DEPLOYMENT}" -n "${NAMESPACE}" --timeout=120s
+
+    echo "  EPP configured successfully"
+fi
+
+echo ""
+echo "=========================================="
+echo "Detecting Cluster Resources"
+echo "=========================================="
+
+# Detect current pods
+echo "Detecting PCP pods..."
+PCP_PODS=$(kubectl --kubeconfig="${KUBECONFIG}" get pods -n "${NAMESPACE}" -l app.kubernetes.io/name=pcp -o jsonpath='{.items[*].metadata.name}')
+if [ -z "${PCP_PODS}" ]; then
+    echo "ERROR: No PCP pods found in namespace ${NAMESPACE}"
+    exit 1
+fi
+PCP_POD_COUNT=$(echo "${PCP_PODS}" | wc -w)
+echo "Found ${PCP_POD_COUNT} PCP pod(s): ${PCP_PODS}"
+
+echo "Detecting current interactive pod..."
+INTERACTIVE_POD=$(kubectl --kubeconfig="${KUBECONFIG}" get pods -n "${NAMESPACE}" -l app=interactive-pod -o jsonpath='{.items[0].metadata.name}')
+if [ -z "${INTERACTIVE_POD}" ]; then
+    echo "ERROR: No interactive pod found in namespace ${NAMESPACE}"
+    exit 1
+fi
+echo "Found interactive pod: ${INTERACTIVE_POD}"
+
+echo ""
+echo "=========================================="
+echo "Benchmark Run Configuration"
+echo "=========================================="
+echo "Run ID: ${RUN_ID}"
+echo "Output Directory: ${OUTPUT_DIR}"
+echo "Namespace: ${NAMESPACE}"
+echo "Interactive Pod: ${INTERACTIVE_POD}"
+echo "PCP Pods (${PCP_POD_COUNT}): ${PCP_PODS}"
+echo "Target: ${TARGET}"
+echo "Rate: ${RATE}"
+echo "Max Seconds: ${MAX_SECONDS}"
+echo "Data: prompt_tokens=${PROMPT_TOKENS},output_tokens=${OUTPUT_TOKENS},prefix_tokens=${PREFIX_TOKENS},turns=${TURNS}"
+echo "=========================================="
+
+# Create output directory
+mkdir -p "${OUTPUT_DIR}"
+
+# Record start time for PCP archive filtering
+START_TIME=$(date +%s)
+echo "Benchmark start time: $(date -d @${START_TIME})"
+
+# Save configuration to file
+cat > "${OUTPUT_DIR}/benchmark-config.txt" <<EOF
+Run ID: ${RUN_ID}
+Date: $(date)
+Target: ${TARGET}
+Rate Type: ${RATE_TYPE}
+Rate: ${RATE}
+Max Seconds: ${MAX_SECONDS}
+Random Seed: ${RANDOM_SEED}
+Prompt Tokens: ${PROMPT_TOKENS}
+Output Tokens: ${OUTPUT_TOKENS}
+Prefix Tokens: ${PREFIX_TOKENS}
+Turns: ${TURNS}
+Sample Requests: ${SAMPLE_REQUESTS}
+Hardware: ${HARDWARE}
+Software: ${SOFTWARE}
+Model: ${MODEL}
+Model Name: ${MODEL_NAME}
+Parameters: ${PARAMETERS}
+Namespace: ${NAMESPACE}
+Interactive Pod: ${INTERACTIVE_POD}
+PCP Pods: ${PCP_PODS}
+PCP Pod Count: ${PCP_POD_COUNT}
+Inference Deployment: ${INFERENCE_DEPLOYMENT}
+vLLM Extra Args: ${VLLM_EXTRA_ARGS}
+vLLM Env Vars: ${VLLM_ENV_VARS}
+EPP Backend: ${EPP_BACKEND_CONFIG}
+EPP ConfigMap: ${EPP_CONFIGMAP}
+EPP Deployment: ${EPP_DEPLOYMENT}
+EOF
+
+echo ""
+echo "Running guidellm benchmark..."
+kubectl --kubeconfig="${KUBECONFIG}" exec -n "${NAMESPACE}" "${INTERACTIVE_POD}" -- \
+    guidellm benchmark run \
+    --target="${TARGET}" \
+    --rate-type="${RATE_TYPE}" \
+    --rate="${RATE}" \
+    --max-seconds="${MAX_SECONDS}" \
+    --random-seed="${RANDOM_SEED}" \
+    --data="{\"prompt_tokens\":${PROMPT_TOKENS},\"output_tokens\":${OUTPUT_TOKENS},\"prefix_tokens\":${PREFIX_TOKENS},\"turns\":${TURNS}}" \
+    --sample-requests="${SAMPLE_REQUESTS}" \
+    --outputs=/tmp/benchmark.json
+
+END_TIME=$(date +%s)
+echo "Benchmark end time: $(date -d @${END_TIME})"
+DURATION=$((END_TIME - START_TIME))
+echo "Benchmark duration: ${DURATION} seconds"
+
+echo ""
+echo "Collecting guidellm results..."
+RESULT_FILE="/tmp/benchmark.json"
+# Use kubectl exec with cat instead of kubectl cp for better reliability with large files
+kubectl --kubeconfig="${KUBECONFIG}" exec -n "${NAMESPACE}" "${INTERACTIVE_POD}" -- cat "${RESULT_FILE}" > "${OUTPUT_DIR}/guidellm-results.json"
+if [ $? -eq 0 ]; then
+    echo "Saved to: ${OUTPUT_DIR}/guidellm-results.json"
+else
+    echo "ERROR: Failed to copy guidellm results"
+    exit 1
+fi
+
+echo ""
+echo "Collecting PCP archives from ${PCP_POD_COUNT} pod(s)..."
+# Create PCP archives directory
+mkdir -p "${OUTPUT_DIR}/pcp-archives"
+
+# Copy PCP archives from each PCP pod (one per node)
+echo "Finding PCP archives for time window: $(date -d @${START_TIME}) to $(date -d @${END_TIME})"
+for PCP_POD in ${PCP_PODS}; do
+    echo ""
+    echo "Collecting archives from PCP pod: ${PCP_POD}"
+
+    # Get the node/hostname for this PCP pod
+    POD_NODE=$(kubectl --kubeconfig="${KUBECONFIG}" get pod -n "${NAMESPACE}" "${PCP_POD}" -o jsonpath='{.spec.nodeName}')
+    echo "  Node: ${POD_NODE}"
+
+    # Create subdirectory for this node's archives
+    mkdir -p "${OUTPUT_DIR}/pcp-archives/${POD_NODE}"
+
+    # Copy archives from this PCP pod
+    kubectl --kubeconfig="${KUBECONFIG}" exec -n "${NAMESPACE}" "${PCP_POD}" -- \
+        sh -c 'ls -1 /var/log/pcp/pmlogger/*/[0-9]* 2>/dev/null | head -20' | while read -r archive_path; do
+        archive_file=$(basename "${archive_path}")
+
+        echo "  Copying: ${archive_file}"
+        # Use kubectl exec cat for reliable file copying
+        kubectl --kubeconfig="${KUBECONFIG}" exec -n "${NAMESPACE}" "${PCP_POD}" -- cat "${archive_path}" \
+            > "${OUTPUT_DIR}/pcp-archives/${POD_NODE}/${archive_file}" 2>/dev/null || true
+
+        # Also copy index and meta files
+        for ext in index meta; do
+            ext_file="${archive_path}.${ext}"
+            kubectl --kubeconfig="${KUBECONFIG}" exec -n "${NAMESPACE}" "${PCP_POD}" -- cat "${ext_file}" \
+                > "${OUTPUT_DIR}/pcp-archives/${POD_NODE}/${archive_file}.${ext}" 2>/dev/null || true
+        done
+    done
+done
+
+echo ""
+echo "Compressing PCP archives with zstd..."
+# Compress PCP archive files (.meta, .index, and .[0-9]+ data files) with zstd
+find "${OUTPUT_DIR}/pcp-archives" -type f \( -name "*.meta" -o -name "*.index" -o -regex ".*\.[0-9][0-9]*$" \) -print0 | while IFS= read -r -d '' file; do
+    echo "  Compressing: $(basename "$file")"
+    zstd -q --rm "$file" || echo "  Warning: Failed to compress $(basename "$file")"
+done
+echo "Compression complete"
+
+echo ""
+echo "=========================================="
+echo "Benchmark Complete!"
+echo "=========================================="
+echo "Results saved to: ${OUTPUT_DIR}"
+echo "Contents:"
+ls -lh "${OUTPUT_DIR}"
+echo ""
+echo "PCP Archives:"
+ls -lh "${OUTPUT_DIR}/pcp-archives/" 2>/dev/null || echo "No PCP archives collected"
+echo "=========================================="

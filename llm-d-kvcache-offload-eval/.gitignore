@@ -1,0 +1,12 @@
+# Benchmark results
+results/*
+!results/.gitkeep
+
+# Temporary files
+*.tmp
+*.log
+
+# Kubernetes configs with secrets
+*kubeconfig*
+*.key
+*.crt

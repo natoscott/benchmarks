@@ -1,0 +1,4 @@
+#pmlogconf-setup 2.0
+ident   Istio metrics from openmetrics PMDA
+force   include
+	openmetrics.istio

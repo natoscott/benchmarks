@@ -1,0 +1,128 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    deployment.kubernetes.io/revision: "5"
+    meta.helm.sh/release-name: llm-d-infpool
+    meta.helm.sh/release-namespace: llm-d-pfc-cpu
+  creationTimestamp: "2026-02-11T05:24:08Z"
+  generation: 5
+  labels:
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: llm-d-infpool-epp
+    app.kubernetes.io/version: v1.3.0
+  name: llm-d-infpool-epp
+  namespace: llm-d-pfc-cpu
+  resourceVersion: "384389"
+  uid: e753055b-e0f1-49bf-b31f-83b7c105034f
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      inferencepool: llm-d-infpool-epp
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/restartedAt: "2026-02-12T15:38:08+11:00"
+      labels:
+        inferencepool: llm-d-infpool-epp
+    spec:
+      containers:
+      - args:
+        - --pool-name
+        - llm-d-infpool
+        - --pool-namespace
+        - llm-d-pfc-cpu
+        - --pool-group
+        - inference.networking.k8s.io
+        - --zap-encoder
+        - json
+        - --config-file
+        - /config/custom-plugins.yaml
+        - --kv-cache-usage-percentage-metric
+        - vllm:kv_cache_usage_perc
+        - --v
+        - "1"
+        - --tracing=false
+        - --metrics-endpoint-auth=false
+        env:
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.name
+        image: registry.k8s.io/gateway-api-inference-extension/epp:v1.3.0
+        imagePullPolicy: Always
+        livenessProbe:
+          failureThreshold: 3
+          grpc:
+            port: 9003
+            service: inference-extension
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 1
+        name: epp
+        ports:
+        - containerPort: 9002
+          name: grpc
+          protocol: TCP
+        - containerPort: 9003
+          name: grpc-health
+          protocol: TCP
+        - containerPort: 9090
+          name: metrics
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 3
+          grpc:
+            port: 9003
+            service: inference-extension
+          periodSeconds: 2
+          successThreshold: 1
+          timeoutSeconds: 1
+        resources: {}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /config
+          name: plugins-config-volume
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      serviceAccount: llm-d-infpool-epp
+      serviceAccountName: llm-d-infpool-epp
+      terminationGracePeriodSeconds: 130
+      volumes:
+      - configMap:
+          defaultMode: 420
+          name: llm-d-infpool-epp
+        name: plugins-config-volume
+status:
+  conditions:
+  - lastTransitionTime: "2026-02-12T04:38:08Z"
+    lastUpdateTime: "2026-02-12T04:38:08Z"
+    message: Deployment does not have minimum availability.
+    reason: MinimumReplicasUnavailable
+    status: "False"
+    type: Available
+  - lastTransitionTime: "2026-02-11T05:24:08Z"
+    lastUpdateTime: "2026-02-12T04:38:08Z"
+    message: ReplicaSet "llm-d-infpool-epp-659cd8c65c" is progressing.
+    reason: ReplicaSetUpdated
+    status: "True"
+    type: Progressing
+  observedGeneration: 5
+  replicas: 1
+  unavailableReplicas: 1
+  updatedReplicas: 1

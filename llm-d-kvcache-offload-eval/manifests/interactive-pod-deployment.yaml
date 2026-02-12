@@ -1,0 +1,94 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    deployment.kubernetes.io/revision: "5"
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"apps/v1","kind":"Deployment","metadata":{"annotations":{},"labels":{"app":"interactive-pod"},"name":"interactive-pod","namespace":"llm-d-pfc-cpu"},"spec":{"replicas":1,"revisionHistoryLimit":2,"selector":{"matchLabels":{"app":"interactive-pod"}},"strategy":{"type":"Recreate"},"template":{"metadata":{"labels":{"app":"interactive-pod"}},"spec":{"containers":[{"command":["bash","-lc","sleep infinity"],"env":[{"name":"NAMESPACE","valueFrom":{"fieldRef":{"fieldPath":"metadata.namespace"}}}],"image":"quay.io/nathans/interactive-pod:update-guidellm-latest","imagePullPolicy":"Always","name":"benchmark-runner","resources":{"limits":{"cpu":"4","memory":"8Gi"},"requests":{"cpu":"2","memory":"4Gi"}},"stdin":true,"tty":true}],"serviceAccountName":"interactive-pod","terminationGracePeriodSeconds":10}}}}
+  creationTimestamp: "2026-02-11T04:56:19Z"
+  generation: 5
+  labels:
+    app: interactive-pod
+  name: interactive-pod
+  namespace: llm-d-pfc-cpu
+  resourceVersion: "350724"
+  uid: 49ae35a0-e6db-433a-9c1a-d5a3f3595373
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 1
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app: interactive-pod
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: interactive-pod
+    spec:
+      containers:
+      - command:
+        - bash
+        - -lc
+        - sleep infinity
+        env:
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
+        - name: HF_HOME
+          value: /models/.hf
+        - name: HF_TOKEN
+          valueFrom:
+            secretKeyRef:
+              key: HF_TOKEN
+              name: llm-d-hf-token
+        image: quay.io/nathans/interactive-pod:add-pcp-bpftrace-to-interactive-pod
+        imagePullPolicy: Always
+        name: benchmark-runner
+        resources:
+          limits:
+            cpu: "4"
+            memory: 8Gi
+          requests:
+            cpu: "2"
+            memory: 4Gi
+        stdin: true
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        tty: true
+        volumeMounts:
+        - mountPath: /models
+          name: model-cache
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      serviceAccount: interactive-pod
+      serviceAccountName: interactive-pod
+      terminationGracePeriodSeconds: 10
+      volumes:
+      - name: model-cache
+        persistentVolumeClaim:
+          claimName: llm-d-model-cache
+status:
+  availableReplicas: 1
+  conditions:
+  - lastTransitionTime: "2026-02-12T02:21:29Z"
+    lastUpdateTime: "2026-02-12T02:21:29Z"
+    message: Deployment has minimum availability.
+    reason: MinimumReplicasAvailable
+    status: "True"
+    type: Available
+  - lastTransitionTime: "2026-02-11T04:58:49Z"
+    lastUpdateTime: "2026-02-12T02:21:29Z"
+    message: ReplicaSet "interactive-pod-6b6bdc56c8" has successfully progressed.
+    reason: NewReplicaSetAvailable
+    status: "True"
+    type: Progressing
+  observedGeneration: 5
+  readyReplicas: 1
+  replicas: 1
+  updatedReplicas: 1

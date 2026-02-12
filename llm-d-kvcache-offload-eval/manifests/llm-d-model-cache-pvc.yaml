@@ -1,0 +1,33 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  annotations:
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"v1","kind":"PersistentVolumeClaim","metadata":{"annotations":{},"name":"llm-d-model-cache","namespace":"llm-d-pfc-cpu"},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"200Gi"}},"storageClassName":"ibmc-vpc-block-10iops-tier"}}
+    pv.kubernetes.io/bind-completed: "yes"
+    pv.kubernetes.io/bound-by-controller: "yes"
+    volume.beta.kubernetes.io/storage-provisioner: vpc.block.csi.ibm.io
+    volume.kubernetes.io/selected-node: nathans-llm-d-9-pkmdj-master-0
+    volume.kubernetes.io/storage-provisioner: vpc.block.csi.ibm.io
+  creationTimestamp: "2026-02-11T04:20:43Z"
+  finalizers:
+  - kubernetes.io/pvc-protection
+  name: llm-d-model-cache
+  namespace: llm-d-pfc-cpu
+  resourceVersion: "30470"
+  uid: 50456d0c-a13b-4fce-a1bf-22dee8894915
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 200Gi
+  storageClassName: ibmc-vpc-block-10iops-tier
+  volumeMode: Filesystem
+  volumeName: pvc-50456d0c-a13b-4fce-a1bf-22dee8894915
+status:
+  accessModes:
+  - ReadWriteOnce
+  capacity:
+    storage: 200Gi
+  phase: Bound
