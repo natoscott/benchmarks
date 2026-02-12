@@ -1,27 +1,34 @@
 #!/bin/bash
 set -e
 
-# Benchmark configuration parameters
-KUBECONFIG="${KUBECONFIG:-./kubeconfig}"
-NAMESPACE="llm-d-pfc-cpu"
-RATE="${RATE:-1,2,4,8}"
-MAX_SECONDS="${MAX_SECONDS:-30}"
+# This wrapper script iterates through test configurations and models
+# Usage:
+#   ./run-all.sh                          # Run all tests
+#   RUNS="no-offload native-offload" ./run-all.sh   # Run subset
+#   MODELS="Qwen/Qwen3-0.6B" ./run-all.sh           # Single model
 
-# Hardware/software configuration for directory naming
-HARDWARE="${HARDWARE:-1x2xL40S}"
-SOFTWARE="${SOFTWARE:-upstream-llm-d-0.4.0}"
+# Configuration list - can be overridden via environment
+RUNS="${RUNS:-no-offload native-offload lmcache-local lmcache-redis lmcache-valkey llm-d-redis llm-d-valkey}"
+MODELS="${MODELS:-Qwen/Qwen3-0.6B Qwen/Qwen3-7B Qwen/Qwen3-14B}"
+
+# Export common variables that run-benchmark.sh will use
+# These can be overridden from environment
+export KUBECONFIG="${KUBECONFIG:-./kubeconfig}"
+export NAMESPACE="${NAMESPACE:-llm-d-pfc-cpu}"
+export RATE="${RATE:-1,2,4,8}"
+export MAX_SECONDS="${MAX_SECONDS:-30}"
+export HARDWARE="${HARDWARE:-1x2xL40S}"
+export SOFTWARE="${SOFTWARE:-upstream-llm-d-0.4.0}"
 
 # Iterate through models
-for model in "Qwen/Qwen3-0.6B" "Qwen/Qwen3-7B" "Qwen/Qwen3-14B"
+for model in ${MODELS}
 do
     # Set model variables
     export MODEL="$model"  # Full path: Qwen/Qwen3-0.6B
     export MODEL_NAME="${model##*/}"  # Short name for directory: Qwen3-0.6B
 
     # Iterate through different KV cache configurations
-    # vLLM-level: no-offload, native-offload, lmcache-local, lmcache-redis, lmcache-valkey
-    # llm-d EPP index: llm-d-redis, llm-d-valkey
-    for run in "no-offload" "native-offload" "lmcache-local" "lmcache-redis" "lmcache-valkey" "llm-d-redis" "llm-d-valkey"
+    for run in ${RUNS}
     do
         export PARAMETERS="$run"
 
@@ -71,18 +78,21 @@ do
                 ;;
         esac
 
-    echo ""
-    echo "******************************************"
-    echo "Benchmark Iteration: $HARDWARE $SOFTWARE $MODEL_NAME $PARAMETERS"
-    echo "Model: $MODEL"
-    echo "vLLM Args: $VLLM_EXTRA_ARGS"
-    if [ -n "$VLLM_ENV_VARS" ]; then
-        echo "vLLM Env:  $VLLM_ENV_VARS"
-    fi
-    echo "EPP Backend: $EPP_BACKEND_CONFIG"
-    echo "******************************************"
-    echo ""
+        echo ""
+        echo "******************************************"
+        echo "Benchmark Iteration: $HARDWARE $SOFTWARE $MODEL_NAME $PARAMETERS"
+        echo "Model: $MODEL"
+        echo "vLLM Args: $VLLM_EXTRA_ARGS"
+        if [ -n "$VLLM_ENV_VARS" ]; then
+            echo "vLLM Env:  $VLLM_ENV_VARS"
+        fi
+        echo "EPP Backend: $EPP_BACKEND_CONFIG"
+        echo "Rate: $RATE"
+        echo "Max Seconds: $MAX_SECONDS"
+        echo "******************************************"
+        echo ""
 
-    ./run-benchmark.sh
+        # Run benchmark (expects to be called from repo root)
+        scripts/run-benchmark.sh
     done
 done
