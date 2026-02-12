@@ -224,6 +224,23 @@ EOF
     kubectl --kubeconfig="${KUBECONFIG}" rollout status deployment/"${EPP_DEPLOYMENT}" -n "${NAMESPACE}" --timeout=120s
 
     echo "  EPP configured successfully"
+else
+    # For in-memory mode, use the default in-memory configuration
+    echo ""
+    echo "Configuring EPP for in-memory mode..."
+
+    # Apply the in-memory configmap from manifests
+    kubectl --kubeconfig="${KUBECONFIG}" apply -f manifests/epp-configmap-in-memory.yaml
+
+    # Restart EPP deployment
+    echo "  Restarting EPP deployment..."
+    kubectl --kubeconfig="${KUBECONFIG}" rollout restart deployment/"${EPP_DEPLOYMENT}" -n "${NAMESPACE}"
+
+    # Wait for rollout
+    echo "  Waiting for EPP deployment rollout to complete..."
+    kubectl --kubeconfig="${KUBECONFIG}" rollout status deployment/"${EPP_DEPLOYMENT}" -n "${NAMESPACE}" --timeout=120s
+
+    echo "  EPP configured for in-memory mode successfully"
 fi
 
 echo ""

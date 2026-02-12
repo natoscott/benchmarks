@@ -36,7 +36,7 @@ do
         case "$run" in
             "no-offload")
                 # Baseline: GPU-only, no CPU offloading
-                export VLLM_EXTRA_ARGS="--kv-transfer-config '{}'"
+                export VLLM_EXTRA_ARGS=""
                 export VLLM_ENV_VARS=""
                 export EPP_BACKEND_CONFIG="in-memory"
                 ;;
