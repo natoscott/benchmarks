@@ -129,9 +129,9 @@ PATCH_JSON="[${PATCH_OPS}]"
 # Apply patch
 echo "${PATCH_JSON}" | kubectl --kubeconfig="${KUBECONFIG}" patch deployment "${INFERENCE_DEPLOYMENT}" -n "${NAMESPACE}" --type='json' -p "$(cat)"
 
-# Wait for rollout
+# Wait for rollout (allow time for model downloads - up to 15 minutes)
 echo "  Waiting for inference server rollout to complete..."
-kubectl --kubeconfig="${KUBECONFIG}" rollout status deployment/"${INFERENCE_DEPLOYMENT}" -n "${NAMESPACE}" --timeout=300s
+kubectl --kubeconfig="${KUBECONFIG}" rollout status deployment/"${INFERENCE_DEPLOYMENT}" -n "${NAMESPACE}" --timeout=900s
 
 # Wait an additional 30 seconds for the server to fully initialize
 echo "  Waiting 30 seconds for server initialization..."
