@@ -1,0 +1,4 @@
+#pmlogconf-setup 2.0
+ident   DCGM metrics from openmetrics PMDA
+force   include
+	openmetrics.dcgm

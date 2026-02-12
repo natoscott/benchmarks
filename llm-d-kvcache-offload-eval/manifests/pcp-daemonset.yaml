@@ -1,0 +1,161 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  annotations:
+    deprecated.daemonset.template.generation: "8"
+    meta.helm.sh/release-name: pcp
+    meta.helm.sh/release-namespace: llm-d-pfc-cpu
+  creationTimestamp: "2026-02-11T05:06:02Z"
+  generation: 8
+  labels:
+    app.kubernetes.io/instance: pcp
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: pcp
+    app.kubernetes.io/version: latest
+    helm.sh/chart: pcp-1.0.1
+  name: pcp
+  namespace: llm-d-pfc-cpu
+  resourceVersion: "384312"
+  uid: de7b4350-2649-43ee-85c6-ae80de777903
+spec:
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: pcp
+      app.kubernetes.io/name: pcp
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: pcp
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: pcp
+        app.kubernetes.io/version: latest
+        helm.sh/chart: pcp-1.0.1
+        name: pcp
+    spec:
+      containers:
+      - command:
+        - /bin/bash
+        - -c
+        - |
+          # Enable external access for pmcd and pmproxy
+          sed -i 's/PMCD_LOCAL=1/PMCD_LOCAL=0/' /etc/sysconfig/pmcd
+          sed -i 's/# PMPROXY_LOCAL=1/PMPROXY_LOCAL=0/' /etc/sysconfig/pmproxy
+          echo "PCP external access configured"
+          # container-entrypoint for PCP_DOMAIN_AGENTS, then start systemd
+          exec /usr/bin/container-entrypoint /usr/sbin/init
+        env:
+        - name: KEY_SERVERS
+          value: localhost:6379
+        - name: PCP_DOMAIN_AGENTS
+          value: openmetrics,redis
+        - name: PCP_SERVICES
+          value: pmcd,pmlogger,pmproxy
+        image: quay.io/performancecopilot/pcp:latest
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          exec:
+            command:
+            - /bin/bash
+            - -c
+            - systemctl is-active pmcd
+          failureThreshold: 3
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 5
+        name: pcp
+        ports:
+        - containerPort: 44321
+          name: pmcd-port
+          protocol: TCP
+        - containerPort: 44322
+          name: pmproxy-port
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 3
+          initialDelaySeconds: 15
+          periodSeconds: 5
+          successThreshold: 1
+          tcpSocket:
+            port: pmcd-port
+          timeoutSeconds: 3
+        resources: {}
+        securityContext:
+          allowPrivilegeEscalation: true
+          privileged: true
+          runAsNonRoot: false
+          seccompProfile:
+            type: Unconfined
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /var/lib/pcp/config/pmlogconf/openmetrics
+          name: openmetrics-pmlogconf-volume
+          readOnly: true
+        - mountPath: /var/lib/pcp/pmdas/redis/redis.conf
+          name: redis-pmda-volume
+          readOnly: true
+          subPath: redis.conf
+        - mountPath: /var/lib/pcp/pmdas/openmetrics/config.d/epp.url
+          name: openmetrics-pmda-volume
+          readOnly: true
+          subPath: epp.url
+        - mountPath: /var/lib/pcp/pmdas/openmetrics/config.d/vllm.url
+          name: openmetrics-pmda-volume
+          readOnly: true
+          subPath: vllm.url
+        - mountPath: /var/lib/pcp/pmdas/openmetrics/config.d/istio.url
+          name: openmetrics-pmda-volume
+          readOnly: true
+          subPath: istio.url
+        - mountPath: /var/lib/pcp/pmdas/openmetrics/config.d/dcgm.url
+          name: openmetrics-pmda-volume
+          readOnly: true
+          subPath: dcgm.url
+        - mountPath: /var/log/pcp/pmlogger
+          name: pmlogger-storage
+        - mountPath: /var/log/pcp/pmproxy
+          name: pmproxy-storage
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      serviceAccount: pcp
+      serviceAccountName: pcp
+      shareProcessNamespace: false
+      terminationGracePeriodSeconds: 15
+      volumes:
+      - configMap:
+          defaultMode: 420
+          name: openmetrics-pmlogconf-configmap
+        name: openmetrics-pmlogconf-volume
+      - configMap:
+          defaultMode: 420
+          name: redis-pmda-configmap
+        name: redis-pmda-volume
+      - configMap:
+          defaultMode: 420
+          name: openmetrics-pmda-configmap
+        name: openmetrics-pmda-volume
+      - hostPath:
+          path: /var/log/pcp/pmlogger
+          type: DirectoryOrCreate
+        name: pmlogger-storage
+      - hostPath:
+          path: /var/log/pcp/pmproxy
+          type: DirectoryOrCreate
+        name: pmproxy-storage
+  updateStrategy:
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+    type: RollingUpdate
+status:
+  currentNumberScheduled: 1
+  desiredNumberScheduled: 1
+  numberAvailable: 1
+  numberMisscheduled: 0
+  numberReady: 1
+  observedGeneration: 8
+  updatedNumberScheduled: 1

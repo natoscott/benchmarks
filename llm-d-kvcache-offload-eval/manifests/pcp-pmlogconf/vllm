@@ -1,0 +1,4 @@
+#pmlogconf-setup 2.0
+ident   vLLM metrics from openmetrics PMDA
+force   include
+	openmetrics.vllm

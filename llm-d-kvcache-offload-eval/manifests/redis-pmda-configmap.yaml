@@ -1,0 +1,26 @@
+apiVersion: v1
+data:
+  redis.conf: |
+    #
+    # Simple key-value configuration file, lines starting with hash are ignored
+    #
+
+    #
+    # Mandatory items
+    #
+
+    # db_name = <>
+    db_name = db0
+
+    # host = <hostname or IP address>:<port number>
+    host=redis.llm-d-pfc-cpu.svc.cluster.local:6379
+kind: ConfigMap
+metadata:
+  annotations:
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"v1","data":{"redis.conf":"#\n# Simple key-value configuration file, lines starting with hash are ignored\n#\n\n#\n# Mandatory items\n#\n\n# db_name = \u003c\u003e\ndb_name = db0\n\n# host = \u003chostname or IP address\u003e:\u003cport number\u003e\nhost=redis.llm-d-pfc-cpu.svc.cluster.local:6379\n"},"kind":"ConfigMap","metadata":{"annotations":{},"name":"redis-pmda-configmap","namespace":"llm-d-pfc-cpu"}}
+  creationTimestamp: "2026-02-11T05:48:45Z"
+  name: redis-pmda-configmap
+  namespace: llm-d-pfc-cpu
+  resourceVersion: "47001"
+  uid: 90d06843-1c62-4b72-9544-170a079f9950

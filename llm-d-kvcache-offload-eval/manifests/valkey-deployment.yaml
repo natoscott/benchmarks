@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: valkey
+  namespace: llm-d-pfc-cpu
+  labels:
+    app: valkey
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: valkey
+  template:
+    metadata:
+      labels:
+        app: valkey
+    spec:
+      containers:
+      - name: valkey
+        image: docker.io/valkey/valkey:8-alpine
+        command:
+        - valkey-server
+        - --maxmemory
+        - 512mb
+        - --maxmemory-policy
+        - allkeys-lru
+        ports:
+        - containerPort: 6379
+          name: valkey
+          protocol: TCP
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: valkey
+  namespace: llm-d-pfc-cpu
+  labels:
+    app: valkey
+spec:
+  type: ClusterIP
+  selector:
+    app: valkey
+  ports:
+  - name: valkey
+    port: 6379
+    targetPort: 6379
+    protocol: TCP

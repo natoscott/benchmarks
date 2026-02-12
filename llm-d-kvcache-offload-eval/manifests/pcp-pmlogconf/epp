@@ -1,0 +1,4 @@
+#pmlogconf-setup 2.0
+ident   EPP metrics from openmetrics PMDA
+force   include
+	openmetrics.epp
