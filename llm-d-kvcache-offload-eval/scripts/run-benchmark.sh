@@ -21,6 +21,7 @@ SAMPLE_REQUESTS="${SAMPLE_REQUESTS:-0}"
 # If VLLM_EXTRA_ARGS is set, the inference server will be restarted with these additional arguments
 VLLM_EXTRA_ARGS="${VLLM_EXTRA_ARGS:-}"
 VLLM_ENV_VARS="${VLLM_ENV_VARS:-}"
+CONTAINER_IMAGE="${CONTAINER_IMAGE:-}"
 INFERENCE_DEPLOYMENT="${INFERENCE_DEPLOYMENT:-llm-d-model-server}"
 
 # EPP configuration (optional)
@@ -45,17 +46,42 @@ echo "=========================================="
 echo "Preparing for Benchmark Run"
 echo "=========================================="
 
-# Restart PCP pod to get fresh archives
-echo "Restarting PCP pod for clean archives..."
+# Restart PCP pod to get fresh pod/directory for this benchmark run
+echo "Restarting PCP pod to create fresh archive directory..."
 OLD_PCP_PODS=$(kubectl --kubeconfig="${KUBECONFIG}" get pods -n "${NAMESPACE}" -l app.kubernetes.io/name=pcp -o jsonpath='{.items[*].metadata.name}')
 if [ -n "${OLD_PCP_PODS}" ]; then
     for pod in ${OLD_PCP_PODS}; do
         echo "  Deleting PCP pod: ${pod}"
         kubectl --kubeconfig="${KUBECONFIG}" delete pod -n "${NAMESPACE}" "${pod}" --wait=false 2>/dev/null
     done
+
+    # Wait for old pods to be fully deleted before waiting for new ones
+    echo "  Waiting for old PCP pod(s) to terminate..."
+    for pod in ${OLD_PCP_PODS}; do
+        kubectl --kubeconfig="${KUBECONFIG}" wait --for=delete pod/"${pod}" -n "${NAMESPACE}" --timeout=60s 2>/dev/null || true
+    done
+
     echo "  Waiting for new PCP pod(s) to be ready..."
     kubectl --kubeconfig="${KUBECONFIG}" wait --for=condition=ready pod -l app.kubernetes.io/name=pcp -n "${NAMESPACE}" --timeout=120s
     echo "  PCP pod(s) restarted successfully"
+
+    # Wait for pmlogger to be fully operational by checking pmcd.pmlogger.host contains expected hostname
+    echo "  Waiting for pmlogger to initialize..."
+    NEW_PCP_PODS=$(kubectl --kubeconfig="${KUBECONFIG}" get pods -n "${NAMESPACE}" -l app.kubernetes.io/name=pcp -o jsonpath='{.items[*].metadata.name}')
+    for pod in ${NEW_PCP_PODS}; do
+        echo "  Checking pmlogger in pod: ${pod}"
+        for i in {1..30}; do
+            # Check if pminfo output contains the pod hostname
+            if kubectl --kubeconfig="${KUBECONFIG}" exec -n "${NAMESPACE}" "${pod}" -- sh -c "pminfo -f pmcd.pmlogger.host 2>/dev/null | grep -q \"\$(hostname)\"" 2>/dev/null; then
+                echo "    pmlogger operational and logging to correct hostname"
+                break
+            fi
+            if [ $i -eq 30 ]; then
+                echo "    Warning: pmlogger not ready in ${pod} after 30 seconds"
+            fi
+            sleep 1
+        done
+    done
 else
     echo "  No existing PCP pods found"
 fi
@@ -64,6 +90,9 @@ fi
 echo ""
 echo "Configuring inference server..."
 echo "  Model: ${MODEL}"
+if [ -n "${CONTAINER_IMAGE}" ]; then
+    echo "  Container image: ${CONTAINER_IMAGE}"
+fi
 if [ -n "${VLLM_EXTRA_ARGS}" ]; then
     echo "  Extra args: ${VLLM_EXTRA_ARGS}"
 fi
@@ -82,9 +111,25 @@ else
 fi
 
 # Build JSON patch operations
+PATCH_OPS=""
+
+# Add container image patch if CONTAINER_IMAGE is set
+if [ -n "${CONTAINER_IMAGE}" ]; then
+    ESCAPED_IMAGE=$(echo -n "${CONTAINER_IMAGE}" | jq -R -s '.')
+    IMAGE_PATCH=$(cat <<EOF
+  {
+    "op": "replace",
+    "path": "/spec/template/spec/containers/0/image",
+    "value": ${ESCAPED_IMAGE}
+  }
+EOF
+)
+    PATCH_OPS="${IMAGE_PATCH}"
+fi
+
 # Use jq to properly escape the value string for JSON
 ESCAPED_ARGS=$(echo -n "${NEW_ARGS}" | jq -R -s '.')
-PATCH_OPS=$(cat <<EOF
+ARGS_PATCH=$(cat <<EOF
   {
     "op": "replace",
     "path": "/spec/template/spec/containers/0/args/0",
@@ -93,36 +138,41 @@ PATCH_OPS=$(cat <<EOF
 EOF
 )
 
+if [ -n "${PATCH_OPS}" ]; then
+    PATCH_OPS="${PATCH_OPS},${ARGS_PATCH}"
+else
+    PATCH_OPS="${ARGS_PATCH}"
+fi
+
 # Add env patch if VLLM_ENV_VARS is set
 if [ -n "${VLLM_ENV_VARS}" ]; then
     # Parse VLLM_ENV_VARS (format: "VAR1=value1 VAR2=value2")
-    ENV_JSON=""
-    for env_pair in ${VLLM_ENV_VARS}; do
-        env_name="${env_pair%%=*}"
-        env_value="${env_pair#*=}"
-        if [ -n "${ENV_JSON}" ]; then
-            ENV_JSON="${ENV_JSON},"
-        fi
-        ENV_JSON="${ENV_JSON}{\"name\":\"${env_name}\",\"value\":\"${env_value}\"}"
-    done
-
     # Get current env array length
     ENV_COUNT=$(kubectl --kubeconfig="${KUBECONFIG}" get deployment "${INFERENCE_DEPLOYMENT}" -n "${NAMESPACE}" -o jsonpath='{.spec.template.spec.containers[0].env}' | jq 'length')
 
-    ENV_PATCH=$(cat <<EOF
+    # Create separate patch for each environment variable
+    for env_pair in ${VLLM_ENV_VARS}; do
+        env_name="${env_pair%%=*}"
+        env_value="${env_pair#*=}"
+
+        ENV_PATCH=$(cat <<EOF
   {
     "op": "add",
     "path": "/spec/template/spec/containers/0/env/${ENV_COUNT}",
-    "value": ${ENV_JSON}
+    "value": {"name":"${env_name}","value":"${env_value}"}
   }
 EOF
 )
 
-    if [ -n "${PATCH_OPS}" ]; then
-        PATCH_OPS="${PATCH_OPS},${ENV_PATCH}"
-    else
-        PATCH_OPS="${ENV_PATCH}"
-    fi
+        if [ -n "${PATCH_OPS}" ]; then
+            PATCH_OPS="${PATCH_OPS},${ENV_PATCH}"
+        else
+            PATCH_OPS="${ENV_PATCH}"
+        fi
+
+        # Increment counter for next env var
+        ENV_COUNT=$((ENV_COUNT + 1))
+    done
 fi
 
 # Create final JSON patch
@@ -377,9 +427,11 @@ for PCP_POD in ${PCP_PODS}; do
     # Create subdirectory for this node's archives
     mkdir -p "${OUTPUT_DIR}/pcp-archives/${POD_NODE}"
 
-    # Copy archives from this PCP pod
+    # Copy archives from this PCP pod's current directory only
+    # Using $(hostname) ensures we only get archives from THIS pod's directory, not old pod directories
+    # Filter to only main archive files (ending in digits like .0, .1), not .index or .meta files
     kubectl --kubeconfig="${KUBECONFIG}" exec -n "${NAMESPACE}" "${PCP_POD}" -- \
-        sh -c 'ls -1 /var/log/pcp/pmlogger/*/[0-9]* 2>/dev/null | head -20' | while read -r archive_path; do
+        sh -c 'ls -1 /var/log/pcp/pmlogger/$(hostname)/[0-9]* 2>/dev/null | grep -E "\.[0-9]+$" | head -20' | while read -r archive_path; do
         archive_file=$(basename "${archive_path}")
 
         echo "  Copying: ${archive_file}"
@@ -388,10 +440,14 @@ for PCP_POD in ${PCP_PODS}; do
             > "${OUTPUT_DIR}/pcp-archives/${POD_NODE}/${archive_file}" 2>/dev/null || true
 
         # Also copy index and meta files
+        # PCP archive naming: data file is like 20260213.00.49.0, but index/meta are 20260213.00.49.{index,meta}
+        # So we need to strip the trailing volume number (.0, .1, etc.) before appending .index/.meta
+        archive_base="${archive_path%.[0-9]*}"
+        archive_base_name=$(basename "${archive_base}")
         for ext in index meta; do
-            ext_file="${archive_path}.${ext}"
+            ext_file="${archive_base}.${ext}"
             kubectl --kubeconfig="${KUBECONFIG}" exec -n "${NAMESPACE}" "${PCP_POD}" -- cat "${ext_file}" \
-                > "${OUTPUT_DIR}/pcp-archives/${POD_NODE}/${archive_file}.${ext}" 2>/dev/null || true
+                > "${OUTPUT_DIR}/pcp-archives/${POD_NODE}/${archive_base_name}.${ext}" 2>/dev/null || true
         done
     done
 done
