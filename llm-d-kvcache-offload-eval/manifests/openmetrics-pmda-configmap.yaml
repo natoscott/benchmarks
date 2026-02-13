@@ -12,5 +12,5 @@ metadata:
   creationTimestamp: "2026-02-11T05:10:27Z"
   name: openmetrics-pmda-configmap
   namespace: llm-d-pfc-cpu
-  resourceVersion: "315300"
+  resourceVersion: "698444"
   uid: 1b700cfc-b8bd-42c6-aa5d-150acf5af04c

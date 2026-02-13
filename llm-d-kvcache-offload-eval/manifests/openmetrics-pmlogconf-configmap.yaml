@@ -7,8 +7,11 @@ data:
   vllm: "#pmlogconf-setup 2.0\nident   vLLM metrics from openmetrics PMDA\nforce   include\n\topenmetrics.vllm\n"
 kind: ConfigMap
 metadata:
+  annotations:
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"v1","data":{"dcgm":"#pmlogconf-setup 2.0\nident   DCGM metrics from openmetrics PMDA\nforce   include\n\topenmetrics.dcgm\n","epp":"#pmlogconf-setup 2.0\nident   EPP metrics from openmetrics PMDA\nforce   include\n\topenmetrics.epp\n","etcd":"#pmlogconf-setup 2.0\nident   etcd metrics from openmetrics PMDA\nforce   include\n\topenmetrics.etcd\n","istio":"#pmlogconf-setup 2.0\nident   Istio metrics from openmetrics PMDA\nforce   include\n\topenmetrics.istio\n","vllm":"#pmlogconf-setup 2.0\nident   vLLM metrics from openmetrics PMDA\nforce   include\n\topenmetrics.vllm\n"},"kind":"ConfigMap","metadata":{"annotations":{},"creationTimestamp":"2026-02-12T03:11:30Z","name":"openmetrics-pmlogconf-configmap","namespace":"llm-d-pfc-cpu","resourceVersion":"363142","uid":"602bc6ab-980e-4448-b3af-1ea138ba52c3"}}
   creationTimestamp: "2026-02-12T03:11:30Z"
   name: openmetrics-pmlogconf-configmap
   namespace: llm-d-pfc-cpu
-  resourceVersion: "363142"
+  resourceVersion: "698441"
   uid: 602bc6ab-980e-4448-b3af-1ea138ba52c3
