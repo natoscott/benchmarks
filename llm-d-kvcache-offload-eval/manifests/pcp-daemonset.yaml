@@ -2,11 +2,11 @@ apiVersion: apps/v1
 kind: DaemonSet
 metadata:
   annotations:
-    deprecated.daemonset.template.generation: "8"
+    deprecated.daemonset.template.generation: "13"
     meta.helm.sh/release-name: pcp
     meta.helm.sh/release-namespace: llm-d-pfc-cpu
   creationTimestamp: "2026-02-11T05:06:02Z"
-  generation: 8
+  generation: 13
   labels:
     app.kubernetes.io/instance: pcp
     app.kubernetes.io/managed-by: Helm
@@ -15,7 +15,7 @@ metadata:
     helm.sh/chart: pcp-1.0.1
   name: pcp
   namespace: llm-d-pfc-cpu
-  resourceVersion: "384312"
+  resourceVersion: "699554"
   uid: de7b4350-2649-43ee-85c6-ae80de777903
 spec:
   revisionHistoryLimit: 10
@@ -154,8 +154,8 @@ spec:
 status:
   currentNumberScheduled: 1
   desiredNumberScheduled: 1
-  numberAvailable: 1
   numberMisscheduled: 0
-  numberReady: 1
-  observedGeneration: 8
+  numberReady: 0
+  numberUnavailable: 1
+  observedGeneration: 13
   updatedNumberScheduled: 1

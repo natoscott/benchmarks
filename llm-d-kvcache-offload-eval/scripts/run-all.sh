@@ -36,42 +36,67 @@ do
         case "$run" in
             "no-offload")
                 # Baseline: GPU-only, no CPU offloading
+                export CONTAINER_IMAGE="ghcr.io/llm-d/llm-d-cuda:v0.4.0"
                 export VLLM_EXTRA_ARGS=""
                 export VLLM_ENV_VARS=""
                 export EPP_BACKEND_CONFIG="in-memory"
                 ;;
             "native-offload")
                 # vLLM native CPU offloading with OffloadingConnector
+                export CONTAINER_IMAGE="ghcr.io/llm-d/llm-d-cuda:v0.4.0"
                 export VLLM_EXTRA_ARGS="--kv-transfer-config '{\"kv_connector\":\"OffloadingConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"num_cpu_blocks\":10000}}'"
                 export VLLM_ENV_VARS=""
                 export EPP_BACKEND_CONFIG="in-memory"
                 ;;
             "lmcache-local")
                 # LMCache local CPU offloading
-                export VLLM_EXTRA_ARGS="--kv-transfer-config '{\"kv_connector\":\"LMCacheConnector\",\"kv_role\":\"kv_both\"}'"
-                export VLLM_ENV_VARS=""
+                # Using environment variables to match native-offload CPU memory (10000 blocks)
+                # Each model has different KV block sizes, so CPU memory allocation varies:
+                # Qwen3-0.6B: 4 GB, Qwen3-8B: 9 GB, Qwen3-14B: 29 GB
+                case "$MODEL_NAME" in
+                    "Qwen3-0.6B")
+                        LMCACHE_SIZE=4
+                        ;;
+                    "Qwen3-8B")
+                        LMCACHE_SIZE=9
+                        ;;
+                    "Qwen3-14B")
+                        LMCACHE_SIZE=29
+                        ;;
+                    *)
+                        echo "Warning: Unknown model $MODEL_NAME, defaulting to 10 GB"
+                        LMCACHE_SIZE=10
+                        ;;
+                esac
+                export CONTAINER_IMAGE="docker.io/lmcache/vllm-openai:v0.3.7"
+                export VLLM_EXTRA_ARGS="--kv-transfer-config '{\"kv_connector\":\"LMCacheConnectorV1\",\"kv_role\":\"kv_both\"}'"
+                export VLLM_ENV_VARS="LMCACHE_LOCAL_CPU=true LMCACHE_MAX_LOCAL_CPU_SIZE=${LMCACHE_SIZE} PYTHONHASHSEED=123"
                 export EPP_BACKEND_CONFIG="in-memory"
                 ;;
             "lmcache-redis")
                 # LMCache with Redis remote backend
-                export VLLM_EXTRA_ARGS="--kv-transfer-config '{\"kv_connector\":\"LMCacheConnector\",\"kv_role\":\"kv_both\"}'"
-                export VLLM_ENV_VARS="LMCACHE_REMOTE_URL=redis://redis.${NAMESPACE}.svc.cluster.local:6379 LMCACHE_USE_EXPERIMENTAL=true"
+                export CONTAINER_IMAGE="docker.io/lmcache/vllm-openai:v0.3.7"
+                export VLLM_EXTRA_ARGS="--kv-transfer-config '{\"kv_connector\":\"LMCacheConnectorV1\",\"kv_role\":\"kv_both\"}'"
+                export VLLM_ENV_VARS="LMCACHE_REMOTE_URL=redis://redis.${NAMESPACE}.svc.cluster.local:6379 LMCACHE_USE_EXPERIMENTAL=true PYTHONHASHSEED=123"
                 export EPP_BACKEND_CONFIG="in-memory"
                 ;;
             "lmcache-valkey")
                 # LMCache with Valkey remote backend
-                export VLLM_EXTRA_ARGS="--kv-transfer-config '{\"kv_connector\":\"LMCacheConnector\",\"kv_role\":\"kv_both\"}'"
-                export VLLM_ENV_VARS="LMCACHE_REMOTE_URL=valkey://valkey.${NAMESPACE}.svc.cluster.local:6379 LMCACHE_USE_EXPERIMENTAL=true"
+                export CONTAINER_IMAGE="docker.io/lmcache/vllm-openai:v0.3.7"
+                export VLLM_EXTRA_ARGS="--kv-transfer-config '{\"kv_connector\":\"LMCacheConnectorV1\",\"kv_role\":\"kv_both\"}'"
+                export VLLM_ENV_VARS="LMCACHE_REMOTE_URL=valkey://valkey.${NAMESPACE}.svc.cluster.local:6379 LMCACHE_USE_EXPERIMENTAL=true PYTHONHASHSEED=123"
                 export EPP_BACKEND_CONFIG="in-memory"
                 ;;
             "llm-d-redis")
                 # llm-d EPP with Redis index backend for distributed KV-cache-aware routing
+                export CONTAINER_IMAGE="ghcr.io/llm-d/llm-d-cuda:v0.4.0"
                 export VLLM_EXTRA_ARGS=""
                 export VLLM_ENV_VARS=""
                 export EPP_BACKEND_CONFIG="redis"
                 ;;
             "llm-d-valkey")
                 # llm-d EPP with Valkey index backend for distributed KV-cache-aware routing
+                export CONTAINER_IMAGE="ghcr.io/llm-d/llm-d-cuda:v0.4.0"
                 export VLLM_EXTRA_ARGS=""
                 export VLLM_ENV_VARS=""
                 export EPP_BACKEND_CONFIG="valkey"
