@@ -322,9 +322,9 @@ PCP_POD_COUNT=$(echo "${PCP_PODS}" | wc -w)
 echo "Found ${PCP_POD_COUNT} PCP pod(s): ${PCP_PODS}"
 
 echo "Detecting current interactive pod..."
-INTERACTIVE_POD=$(kubectl --kubeconfig="${KUBECONFIG}" get pods -n "${NAMESPACE}" -l app=interactive-pod -o jsonpath='{.items[0].metadata.name}')
+INTERACTIVE_POD=$(kubectl --kubeconfig="${KUBECONFIG}" get pods -n "${NAMESPACE}" -l app=interactive-pod --field-selector=status.phase=Running -o jsonpath='{.items[0].metadata.name}')
 if [ -z "${INTERACTIVE_POD}" ]; then
-    echo "ERROR: No interactive pod found in namespace ${NAMESPACE}"
+    echo "ERROR: No running interactive pod found in namespace ${NAMESPACE}"
     exit 1
 fi
 echo "Found interactive pod: ${INTERACTIVE_POD}"
@@ -393,7 +393,7 @@ kubectl --kubeconfig="${KUBECONFIG}" exec -n "${NAMESPACE}" "${INTERACTIVE_POD}"
     --random-seed="${RANDOM_SEED}" \
     --data="{\"prompt_tokens\":${PROMPT_TOKENS},\"output_tokens\":${OUTPUT_TOKENS},\"prefix_tokens\":${PREFIX_TOKENS},\"turns\":${TURNS}}" \
     --sample-requests="${SAMPLE_REQUESTS}" \
-    --outputs=/tmp/benchmark.json
+    --outputs=/models/benchmark.json
 
 END_TIME=$(date +%s)
 echo "Benchmark end time: $(date -d @${END_TIME})"
@@ -402,11 +402,11 @@ echo "Benchmark duration: ${DURATION} seconds"
 
 echo ""
 echo "Collecting guidellm results..."
-RESULT_FILE="/tmp/benchmark.json"
+RESULT_FILE="/models/benchmark.json"
 
 # Compress the results file with zstd in the pod before downloading to reduce transfer time
 echo "Compressing guidellm results with zstd..."
-kubectl --kubeconfig="${KUBECONFIG}" exec -n "${NAMESPACE}" "${INTERACTIVE_POD}" -- zstd -q --rm "${RESULT_FILE}" 2>/dev/null || \
+kubectl --kubeconfig="${KUBECONFIG}" exec -n "${NAMESPACE}" "${INTERACTIVE_POD}" -- zstd -q -f --rm "${RESULT_FILE}" 2>/dev/null || \
     echo "Warning: zstd compression failed or already compressed, trying to copy anyway"
 
 # Use kubectl exec with cat instead of kubectl cp for better reliability with large files
@@ -426,8 +426,12 @@ set -e  # Re-enable exit on error
 # Check if file was actually copied (non-empty)
 if [ -s "${OUTPUT_DIR}/guidellm-results.json.zst" ]; then
     echo "Saved to: ${OUTPUT_DIR}/guidellm-results.json.zst"
+    # Clean up compressed file from pod to prevent reuse in next benchmark
+    kubectl --kubeconfig="${KUBECONFIG}" exec -n "${NAMESPACE}" "${INTERACTIVE_POD}" -- rm -f "${RESULT_FILE}.zst" 2>/dev/null || true
 elif [ -s "${OUTPUT_DIR}/guidellm-results.json" ]; then
     echo "Saved to: ${OUTPUT_DIR}/guidellm-results.json"
+    # Clean up uncompressed file from pod to prevent reuse in next benchmark
+    kubectl --kubeconfig="${KUBECONFIG}" exec -n "${NAMESPACE}" "${INTERACTIVE_POD}" -- rm -f "${RESULT_FILE}" 2>/dev/null || true
 elif [ ${COPY_RESULT} -eq 0 ]; then
     echo "Saved guidellm results"
 else

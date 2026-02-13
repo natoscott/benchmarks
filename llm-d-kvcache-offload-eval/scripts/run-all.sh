@@ -15,8 +15,8 @@ MODELS="${MODELS:-Qwen/Qwen3-0.6B Qwen/Qwen3-8B Qwen/Qwen3-14B}"
 # These can be overridden from environment
 export KUBECONFIG="${KUBECONFIG:-./kubeconfig}"
 export NAMESPACE="${NAMESPACE:-llm-d-pfc-cpu}"
-export RATE="${RATE:-1,2,4,8}"
-export MAX_SECONDS="${MAX_SECONDS:-30}"
+export RATE="${RATE:-1,50,100,150,300,400,500,650}"
+export MAX_SECONDS="${MAX_SECONDS:-120}"
 export HARDWARE="${HARDWARE:-1x2xL40S}"
 export SOFTWARE="${SOFTWARE:-upstream-llm-d-0.4.0}"
 
