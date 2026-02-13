@@ -403,18 +403,33 @@ echo "Benchmark duration: ${DURATION} seconds"
 echo ""
 echo "Collecting guidellm results..."
 RESULT_FILE="/tmp/benchmark.json"
+
+# Compress the results file with zstd in the pod before downloading to reduce transfer time
+echo "Compressing guidellm results with zstd..."
+kubectl --kubeconfig="${KUBECONFIG}" exec -n "${NAMESPACE}" "${INTERACTIVE_POD}" -- zstd -q --rm "${RESULT_FILE}" 2>/dev/null || \
+    echo "Warning: zstd compression failed or already compressed, trying to copy anyway"
+
 # Use kubectl exec with cat instead of kubectl cp for better reliability with large files
-# Ignore stderr errors (like "read message: unexpected EOF") as long as file is copied
+# Try compressed file first, fall back to uncompressed if needed
 set +e  # Temporarily disable exit on error
-kubectl --kubeconfig="${KUBECONFIG}" exec -n "${NAMESPACE}" "${INTERACTIVE_POD}" -- cat "${RESULT_FILE}" > "${OUTPUT_DIR}/guidellm-results.json" 2>/dev/null
-COPY_RESULT=$?
+if kubectl --kubeconfig="${KUBECONFIG}" exec -n "${NAMESPACE}" "${INTERACTIVE_POD}" -- test -f "${RESULT_FILE}.zst" 2>/dev/null; then
+    echo "Downloading compressed results..."
+    kubectl --kubeconfig="${KUBECONFIG}" exec -n "${NAMESPACE}" "${INTERACTIVE_POD}" -- cat "${RESULT_FILE}.zst" > "${OUTPUT_DIR}/guidellm-results.json.zst" 2>/dev/null
+    COPY_RESULT=$?
+else
+    echo "Downloading uncompressed results..."
+    kubectl --kubeconfig="${KUBECONFIG}" exec -n "${NAMESPACE}" "${INTERACTIVE_POD}" -- cat "${RESULT_FILE}" > "${OUTPUT_DIR}/guidellm-results.json" 2>/dev/null
+    COPY_RESULT=$?
+fi
 set -e  # Re-enable exit on error
 
 # Check if file was actually copied (non-empty)
-if [ -s "${OUTPUT_DIR}/guidellm-results.json" ]; then
+if [ -s "${OUTPUT_DIR}/guidellm-results.json.zst" ]; then
+    echo "Saved to: ${OUTPUT_DIR}/guidellm-results.json.zst"
+elif [ -s "${OUTPUT_DIR}/guidellm-results.json" ]; then
     echo "Saved to: ${OUTPUT_DIR}/guidellm-results.json"
 elif [ ${COPY_RESULT} -eq 0 ]; then
-    echo "Saved to: ${OUTPUT_DIR}/guidellm-results.json"
+    echo "Saved guidellm results"
 else
     echo "ERROR: Failed to copy guidellm results"
     exit 1
