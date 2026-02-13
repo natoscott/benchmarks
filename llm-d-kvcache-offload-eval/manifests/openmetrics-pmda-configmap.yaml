@@ -2,8 +2,8 @@ apiVersion: v1
 data:
   dcgm.url: http://nvidia-dcgm-exporter.nvidia-gpu-operator.svc.cluster.local:9400/metrics
   epp.url: http://llm-d-infpool-epp.llm-d-pfc-cpu.svc.cluster.local:9090/metrics
-  istio.url: http://10.128.0.207:15020/stats/prometheus
-  vllm.url: http://10.128.0.200:8000/metrics
+  istio.url: http://istio-gateway-metrics.llm-d-pfc-cpu.svc.cluster.local:15020/stats/prometheus
+  vllm.url: http://vllm-metrics.llm-d-pfc-cpu.svc.cluster.local:8000/metrics
 kind: ConfigMap
 metadata:
   annotations:
