@@ -5,6 +5,7 @@ USER root
 
 # Install lmcache with CUDA architecture support for multiple GPU generations
 # TORCH_CUDA_ARCH_LIST controls which GPU architectures PyTorch extensions are compiled for
+# --no-binary forces pip to build from source instead of using pre-built wheels
 # Supported architectures:
 #   8.0 = Ampere (A100, A30, A10)
 #   8.6 = Ampere (A40, RTX A6000)
@@ -13,7 +14,7 @@ USER root
 #   10.0 = Blackwell (B100, B200, GB200)
 ENV TORCH_CUDA_ARCH_LIST="8.0;8.6;8.9;9.0;10.0"
 RUN /opt/vllm/bin/python3 -m ensurepip && \
-    /opt/vllm/bin/pip3 install --no-cache-dir lmcache
+    /opt/vllm/bin/pip3 install --no-cache-dir --no-binary lmcache lmcache
 
 # Switch back to the original user (if any)
 USER vllm
