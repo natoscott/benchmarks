@@ -30,7 +30,7 @@ spec:
       containers:
       - name: vllm
         image: quay.io/nathans/llm-d-cuda-lmcache:latest
-        imagePullPolicy: Always
+        imagePullPolicy: IfNotPresent
         command:
         - /bin/bash
         - -c
