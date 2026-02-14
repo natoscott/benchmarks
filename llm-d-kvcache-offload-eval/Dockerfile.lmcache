@@ -5,16 +5,19 @@ USER root
 
 # Install lmcache with CUDA architecture support for multiple GPU generations
 # TORCH_CUDA_ARCH_LIST controls which GPU architectures PyTorch extensions are compiled for
+# ENABLE_CXX11_ABI ensures C++ ABI compatibility with vLLM's PyTorch
 # --no-binary forces pip to build from source instead of using pre-built wheels
+# --no-build-isolation ensures CUDA kernels compile against vLLM's PyTorch version
 # Supported architectures:
 #   8.0 = Ampere (A100, A30, A10)
 #   8.6 = Ampere (A40, RTX A6000)
 #   8.9 = Ada Lovelace (L40S, L40, RTX 4090, RTX 6000 Ada)
 #   9.0 = Hopper (H100, H200)
 #   10.0 = Blackwell (B100, B200, GB200)
-ENV TORCH_CUDA_ARCH_LIST="8.0;8.6;8.9;9.0;10.0"
+ENV TORCH_CUDA_ARCH_LIST="8.0;8.6;8.9;9.0;10.0" \
+    ENABLE_CXX11_ABI=1
 RUN /opt/vllm/bin/python3 -m ensurepip && \
-    /opt/vllm/bin/pip3 install --no-cache-dir --no-binary lmcache lmcache
+    /opt/vllm/bin/pip3 install --no-cache-dir --no-binary lmcache --no-build-isolation lmcache
 
 # Switch back to the original user (if any)
 USER vllm
