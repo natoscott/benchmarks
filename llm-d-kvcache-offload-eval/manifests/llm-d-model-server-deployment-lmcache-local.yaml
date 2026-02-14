@@ -49,12 +49,6 @@ spec:
               key: HF_TOKEN
         - name: HF_HOME
           value: /data/.hf
-        - name: LMCACHE_LOCAL_CPU
-          value: "true"
-        - name: LMCACHE_MAX_LOCAL_CPU_SIZE
-          value: "4"  # 4GB for Qwen3-0.6B (matches 10000 blocks in native-offload)
-        - name: PYTHONHASHSEED
-          value: "123"
         ports:
         - name: http
           containerPort: 8000
