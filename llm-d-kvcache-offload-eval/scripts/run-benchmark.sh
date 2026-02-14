@@ -340,6 +340,26 @@ else
     echo "  EPP configured for in-memory mode successfully"
 fi
 
+# Final health check after EPP configuration to ensure EPP can route to model server
+echo ""
+echo "Verifying end-to-end health after EPP configuration..."
+INTERACTIVE_POD_FINAL=$(kubectl --kubeconfig="${KUBECONFIG}" get pods -n "${NAMESPACE}" -l app=interactive-pod --field-selector=status.phase=Running -o jsonpath='{.items[0].metadata.name}')
+if [ -n "${INTERACTIVE_POD_FINAL}" ]; then
+    for i in {1..60}; do
+        HTTP_CODE=$(kubectl --kubeconfig="${KUBECONFIG}" exec -n "${NAMESPACE}" "${INTERACTIVE_POD_FINAL}" -- curl -s -o /dev/null -w "%{http_code}" http://llm-d-inference-gateway-istio/health 2>/dev/null || echo "000")
+        if [ "${HTTP_CODE}" = "200" ]; then
+            echo "  End-to-end health check successful (HTTP ${HTTP_CODE}) after ${i} attempts"
+            break
+        fi
+        if [ $i -eq 60 ]; then
+            echo "  Warning: End-to-end health check did not return 200 after 60 attempts (last code: ${HTTP_CODE})"
+        fi
+        sleep 1
+    done
+else
+    echo "  Warning: Could not find interactive pod for final health check"
+fi
+
 echo ""
 echo "=========================================="
 echo "Detecting Cluster Resources"
