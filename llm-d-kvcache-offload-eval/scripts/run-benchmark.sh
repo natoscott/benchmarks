@@ -198,9 +198,37 @@ echo "${PATCH_JSON}" | kubectl --kubeconfig="${KUBECONFIG}" patch deployment "${
 echo "  Waiting for inference server rollout to complete..."
 kubectl --kubeconfig="${KUBECONFIG}" rollout status deployment/"${INFERENCE_DEPLOYMENT}" -n "${NAMESPACE}" --timeout=900s
 
-# Wait an additional 30 seconds for the server to fully initialize
-echo "  Waiting 30 seconds for server initialization..."
-sleep 30
+# Wait for the server to fully initialize by polling health endpoint
+# Need to ensure server is stable and can handle concurrent health checks from guidellm workers
+echo "  Waiting for server to respond to health checks..."
+INTERACTIVE_POD_FOR_HEALTH=$(kubectl --kubeconfig="${KUBECONFIG}" get pods -n "${NAMESPACE}" -l app=interactive-pod --field-selector=status.phase=Running -o jsonpath='{.items[0].metadata.name}')
+if [ -n "${INTERACTIVE_POD_FOR_HEALTH}" ]; then
+    # Wait for initial health check to pass
+    for i in {1..120}; do
+        HTTP_CODE=$(kubectl --kubeconfig="${KUBECONFIG}" exec -n "${NAMESPACE}" "${INTERACTIVE_POD_FOR_HEALTH}" -- curl -s -o /dev/null -w "%{http_code}" http://llm-d-inference-gateway-istio/health 2>/dev/null || echo "000")
+        if [ "${HTTP_CODE}" = "200" ]; then
+            echo "  Server health check successful (HTTP ${HTTP_CODE}) after ${i} attempts"
+            break
+        fi
+        if [ $i -eq 120 ]; then
+            echo "  Warning: Server health check did not return 200 after 120 attempts (last code: ${HTTP_CODE})"
+        fi
+        sleep 1
+    done
+
+    # Wait an additional 30 seconds for server to stabilize and handle concurrent load
+    # This is necessary because guidellm spawns 10 worker processes that all validate concurrently
+    # which can overwhelm the server if it's not fully stable, triggering liveness probe failures
+    echo "  Waiting additional 30 seconds for server to stabilize..."
+    sleep 30
+
+    # Verify health check still passes after stabilization period
+    HTTP_CODE=$(kubectl --kubeconfig="${KUBECONFIG}" exec -n "${NAMESPACE}" "${INTERACTIVE_POD_FOR_HEALTH}" -- curl -s -o /dev/null -w "%{http_code}" http://llm-d-inference-gateway-istio/health 2>/dev/null || echo "000")
+    echo "  Final health check: HTTP ${HTTP_CODE}"
+else
+    echo "  Warning: Could not find interactive pod for health check, falling back to sleep"
+    sleep 90
+fi
 
 echo "  Inference server configured successfully"
 
@@ -304,6 +332,10 @@ else
     # Wait for rollout
     echo "  Waiting for EPP deployment rollout to complete..."
     kubectl --kubeconfig="${KUBECONFIG}" rollout status deployment/"${EPP_DEPLOYMENT}" -n "${NAMESPACE}" --timeout=120s
+
+    # Wait for EPP to fully initialize before starting benchmarks
+    echo "  Waiting 30 seconds for EPP to fully initialize..."
+    sleep 30
 
     echo "  EPP configured for in-memory mode successfully"
 fi
