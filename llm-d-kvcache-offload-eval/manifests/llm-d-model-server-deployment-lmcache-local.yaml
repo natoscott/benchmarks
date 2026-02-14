@@ -88,10 +88,10 @@ spec:
             path: /health
             port: http
             scheme: HTTP
-          periodSeconds: 5
+          periodSeconds: 1
           successThreshold: 1
-          failureThreshold: 10
-          timeoutSeconds: 5
+          failureThreshold: 5
+          timeoutSeconds: 1
         lifecycle:
           preStop:
             sleep:
