@@ -1,0 +1,104 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llm-d-model-server
+  namespace: llm-d-pfc-cpu
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      llm-d.ai/inference-serving: "true"
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        llm-d.ai/accelerator-vendor: nvidia
+        llm-d.ai/hardware-variant: gpu
+        llm-d.ai/inference-serving: "true"
+    spec:
+      enableServiceLinks: false
+      terminationGracePeriodSeconds: 130
+      restartPolicy: Always
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: llm-d-model-cache
+      - name: shm
+        emptyDir:
+          medium: Memory
+      containers:
+      - name: vllm
+        image: quay.io/nathans/llm-d-cuda-lmcache:latest
+        imagePullPolicy: Always
+        command:
+        - /bin/bash
+        - -c
+        args:
+        - |
+          exec vllm serve Qwen/Qwen3-0.6B \
+            --tensor-parallel-size 1 \
+            --port 8000 \
+            --max-num-seq 1024 \
+            --kv-transfer-config '{"kv_connector":"LMCacheConnectorV1","kv_role":"kv_both"}'
+        env:
+        - name: HUGGING_FACE_HUB_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: llm-d-hf-token
+              key: HF_TOKEN
+        - name: HF_HOME
+          value: /data/.hf
+        - name: LMCACHE_LOCAL_CPU
+          value: "true"
+        - name: LMCACHE_MAX_LOCAL_CPU_SIZE
+          value: "4"  # 4GB for Qwen3-0.6B (matches 10000 blocks in native-offload)
+        - name: PYTHONHASHSEED
+          value: "123"
+        ports:
+        - name: http
+          containerPort: 8000
+          protocol: TCP
+        volumeMounts:
+        - name: data
+          mountPath: /data
+        - name: shm
+          mountPath: /dev/shm
+        resources:
+          requests:
+            nvidia.com/gpu: 2
+            memory: 200Gi
+          limits:
+            nvidia.com/gpu: 2
+        startupProbe:
+          httpGet:
+            path: /health
+            port: http
+            scheme: HTTP
+          initialDelaySeconds: 2
+          periodSeconds: 1
+          failureThreshold: 600
+          successThreshold: 1
+          timeoutSeconds: 1
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: http
+            scheme: HTTP
+          periodSeconds: 1
+          successThreshold: 1
+          failureThreshold: 1
+          timeoutSeconds: 1
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+            scheme: HTTP
+          periodSeconds: 1
+          successThreshold: 1
+          failureThreshold: 5
+          timeoutSeconds: 1
+        lifecycle:
+          preStop:
+            sleep:
+              seconds: 30
