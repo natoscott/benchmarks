@@ -39,6 +39,7 @@ do
                 export CONTAINER_IMAGE="ghcr.io/llm-d/llm-d-cuda:v0.4.0"
                 export VLLM_EXTRA_ARGS=""
                 export VLLM_ENV_VARS=""
+                export VLLM_INSTALL_LMCACHE=""
                 export EPP_BACKEND_CONFIG="in-memory"
                 ;;
             "native-offload")
@@ -46,6 +47,7 @@ do
                 export CONTAINER_IMAGE="ghcr.io/llm-d/llm-d-cuda:v0.4.0"
                 export VLLM_EXTRA_ARGS="--kv-transfer-config '{\"kv_connector\":\"OffloadingConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"num_cpu_blocks\":10000}}'"
                 export VLLM_ENV_VARS=""
+                export VLLM_INSTALL_LMCACHE=""
                 export EPP_BACKEND_CONFIG="in-memory"
                 ;;
             "lmcache-local")
@@ -68,23 +70,26 @@ do
                         LMCACHE_SIZE=10
                         ;;
                 esac
-                export CONTAINER_IMAGE="docker.io/lmcache/vllm-openai:v0.3.7"
+                export CONTAINER_IMAGE="quay.io/nathans/llm-d-cuda-lmcache:latest"
                 export VLLM_EXTRA_ARGS="--kv-transfer-config '{\"kv_connector\":\"LMCacheConnectorV1\",\"kv_role\":\"kv_both\"}'"
                 export VLLM_ENV_VARS="LMCACHE_LOCAL_CPU=true LMCACHE_MAX_LOCAL_CPU_SIZE=${LMCACHE_SIZE} PYTHONHASHSEED=123"
+                export VLLM_INSTALL_LMCACHE=""
                 export EPP_BACKEND_CONFIG="in-memory"
                 ;;
             "lmcache-redis")
                 # LMCache with Redis remote backend
-                export CONTAINER_IMAGE="docker.io/lmcache/vllm-openai:v0.3.7"
+                export CONTAINER_IMAGE="quay.io/nathans/llm-d-cuda-lmcache:latest"
                 export VLLM_EXTRA_ARGS="--kv-transfer-config '{\"kv_connector\":\"LMCacheConnectorV1\",\"kv_role\":\"kv_both\"}'"
                 export VLLM_ENV_VARS="LMCACHE_REMOTE_URL=redis://redis.${NAMESPACE}.svc.cluster.local:6379 LMCACHE_USE_EXPERIMENTAL=true PYTHONHASHSEED=123"
+                export VLLM_INSTALL_LMCACHE=""
                 export EPP_BACKEND_CONFIG="in-memory"
                 ;;
             "lmcache-valkey")
                 # LMCache with Valkey remote backend
-                export CONTAINER_IMAGE="docker.io/lmcache/vllm-openai:v0.3.7"
+                export CONTAINER_IMAGE="quay.io/nathans/llm-d-cuda-lmcache:latest"
                 export VLLM_EXTRA_ARGS="--kv-transfer-config '{\"kv_connector\":\"LMCacheConnectorV1\",\"kv_role\":\"kv_both\"}'"
                 export VLLM_ENV_VARS="LMCACHE_REMOTE_URL=valkey://valkey.${NAMESPACE}.svc.cluster.local:6379 LMCACHE_USE_EXPERIMENTAL=true PYTHONHASHSEED=123"
+                export VLLM_INSTALL_LMCACHE=""
                 export EPP_BACKEND_CONFIG="in-memory"
                 ;;
             "llm-d-redis")
@@ -92,6 +97,7 @@ do
                 export CONTAINER_IMAGE="ghcr.io/llm-d/llm-d-cuda:v0.4.0"
                 export VLLM_EXTRA_ARGS=""
                 export VLLM_ENV_VARS=""
+                export VLLM_INSTALL_LMCACHE=""
                 export EPP_BACKEND_CONFIG="redis"
                 ;;
             "llm-d-valkey")
@@ -99,6 +105,7 @@ do
                 export CONTAINER_IMAGE="ghcr.io/llm-d/llm-d-cuda:v0.4.0"
                 export VLLM_EXTRA_ARGS=""
                 export VLLM_ENV_VARS=""
+                export VLLM_INSTALL_LMCACHE=""
                 export EPP_BACKEND_CONFIG="valkey"
                 ;;
         esac

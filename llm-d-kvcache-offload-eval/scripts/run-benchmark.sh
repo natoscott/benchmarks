@@ -112,6 +112,8 @@ if [ -n "${VLLM_ENV_VARS}" ]; then
 fi
 
 # Build base vLLM command with the specified model
+# All containers now use vllm serve command (llm-d image)
+# Note: lmcache-enabled images (quay.io/nathans/llm-d-cuda-lmcache) have lmcache pre-installed
 BASE_VLLM_ARGS="exec vllm serve ${MODEL} --tensor-parallel-size 1 --port 8000 --max-num-seq 1024"
 
 # Append extra args if provided
