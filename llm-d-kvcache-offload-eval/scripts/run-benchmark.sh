@@ -46,6 +46,34 @@ echo "=========================================="
 echo "Preparing for Benchmark Run"
 echo "=========================================="
 
+# Restart Redis/Valkey pods to clear cache state before benchmarks
+if [ "${EPP_BACKEND_CONFIG}" = "redis" ] || [ "${EPP_BACKEND_CONFIG}" = "valkey" ]; then
+    echo "Restarting ${EPP_BACKEND_CONFIG} pod to clear cache state..."
+
+    # Determine which deployment to restart
+    CACHE_DEPLOYMENT="${EPP_BACKEND_CONFIG}"
+
+    OLD_CACHE_PODS=$(kubectl --kubeconfig="${KUBECONFIG}" get pods -n "${NAMESPACE}" -l app="${CACHE_DEPLOYMENT}" -o jsonpath='{.items[*].metadata.name}')
+    if [ -n "${OLD_CACHE_PODS}" ]; then
+        for pod in ${OLD_CACHE_PODS}; do
+            echo "  Deleting ${EPP_BACKEND_CONFIG} pod: ${pod}"
+            kubectl --kubeconfig="${KUBECONFIG}" delete pod -n "${NAMESPACE}" "${pod}" --wait=false 2>/dev/null
+        done
+
+        echo "  Waiting for old ${EPP_BACKEND_CONFIG} pod(s) to terminate..."
+        for pod in ${OLD_CACHE_PODS}; do
+            kubectl --kubeconfig="${KUBECONFIG}" wait --for=delete pod/"${pod}" -n "${NAMESPACE}" --timeout=60s 2>/dev/null || true
+        done
+
+        echo "  Waiting for new ${EPP_BACKEND_CONFIG} pod(s) to be ready..."
+        kubectl --kubeconfig="${KUBECONFIG}" wait --for=condition=ready pod -l app="${CACHE_DEPLOYMENT}" -n "${NAMESPACE}" --timeout=120s
+        echo "  ${EPP_BACKEND_CONFIG} pod(s) restarted successfully"
+    else
+        echo "  Warning: No ${EPP_BACKEND_CONFIG} pods found"
+    fi
+    echo ""
+fi
+
 # Restart PCP pod to get fresh pod/directory for this benchmark run
 echo "Restarting PCP pod to create fresh archive directory..."
 OLD_PCP_PODS=$(kubectl --kubeconfig="${KUBECONFIG}" get pods -n "${NAMESPACE}" -l app.kubernetes.io/name=pcp -o jsonpath='{.items[*].metadata.name}')
@@ -114,7 +142,7 @@ fi
 # Build base vLLM command with the specified model
 # All containers now use vllm serve command (llm-d image)
 # Note: lmcache-enabled images (quay.io/nathans/llm-d-cuda-lmcache) have lmcache pre-installed
-BASE_VLLM_ARGS="exec vllm serve ${MODEL} --tensor-parallel-size 1 --port 8000 --max-num-seq 1024"
+BASE_VLLM_ARGS="exec vllm serve ${MODEL} --tensor-parallel-size 2 --port 8000 --max-num-seq 1024"
 
 # Append extra args if provided
 if [ -n "${VLLM_EXTRA_ARGS}" ]; then
@@ -210,103 +238,40 @@ echo "Cleaning up previous EPP configuration..."
 kubectl --kubeconfig="${KUBECONFIG}" delete configmap "${EPP_CONFIGMAP}" -n "${NAMESPACE}" --ignore-not-found=true
 
 # Configure EPP based on backend type
-if [ "${EPP_BACKEND_CONFIG}" != "in-memory" ]; then
-    echo ""
-    echo "Configuring EPP prefix-cache-scorer backend..."
-    echo "  Backend: ${EPP_BACKEND_CONFIG}"
+echo ""
+echo "Configuring EPP backend..."
+echo "  Backend: ${EPP_BACKEND_CONFIG}"
 
-    # Define the indexerConfig based on backend type
-    case "${EPP_BACKEND_CONFIG}" in
-        "redis")
-            INDEX_CONFIG='
-      indexerConfig:
-        kvBlockIndexConfig:
-          redisConfig:
-            address: "redis://redis.'"${NAMESPACE}"'.svc.cluster.local:6379"
-          enableMetrics: true
-          metricsLoggingInterval: "1m0s"'
-            ;;
-        "valkey")
-            INDEX_CONFIG='
-      indexerConfig:
-        kvBlockIndexConfig:
-          redisConfig:
-            address: "valkey://valkey.'"${NAMESPACE}"'.svc.cluster.local:6379"
-            backendType: "valkey"
-          enableMetrics: true
-          metricsLoggingInterval: "1m0s"'
-            ;;
-        *)
-            echo "ERROR: Invalid EPP_BACKEND_CONFIG value: ${EPP_BACKEND_CONFIG}"
-            echo "Valid values: in-memory, redis, valkey"
-            exit 1
-            ;;
-    esac
+case "${EPP_BACKEND_CONFIG}" in
+    "in-memory")
+        MANIFEST_FILE="manifests/epp-configmap-in-memory.yaml"
+        ;;
+    "redis")
+        MANIFEST_FILE="manifests/epp-configmap-redis.yaml"
+        ;;
+    "valkey")
+        MANIFEST_FILE="manifests/epp-configmap-valkey.yaml"
+        ;;
+    *)
+        echo "ERROR: Invalid EPP_BACKEND_CONFIG value: ${EPP_BACKEND_CONFIG}"
+        echo "Valid values: in-memory, redis, valkey"
+        exit 1
+        ;;
+esac
 
-    # Create updated custom-plugins.yaml with indexerConfig
-    NEW_CUSTOM_PLUGINS=$(cat <<EOF
-apiVersion: inference.networking.x-k8s.io/v1alpha1
-kind: EndpointPickerConfig
-plugins:
-- type: queue-scorer
-- type: kv-cache-utilization-scorer
-- type: prefix-cache-scorer
-  name: gpu-prefix-cache-scorer
-  parameters:${INDEX_CONFIG}
-- type: prefix-cache-scorer
-  name: cpu-prefix-cache-scorer
-  parameters:
-    autoTune: false
-    lruCapacityPerServer: 41000${INDEX_CONFIG}
-schedulingProfiles:
-- name: default
-  plugins:
-  - pluginRef: queue-scorer
-    weight: 2
-  - pluginRef: kv-cache-utilization-scorer
-    weight: 2
-  - pluginRef: gpu-prefix-cache-scorer
-    weight: 1
-  - pluginRef: cpu-prefix-cache-scorer
-    weight: 1
-EOF
-)
+# Apply the ConfigMap from manifest
+echo "  Applying ConfigMap from ${MANIFEST_FILE}..."
+kubectl --kubeconfig="${KUBECONFIG}" apply -f "${MANIFEST_FILE}"
 
-    # Update the ConfigMap
-    echo "  Updating ConfigMap ${EPP_CONFIGMAP}..."
-    kubectl --kubeconfig="${KUBECONFIG}" create configmap "${EPP_CONFIGMAP}" \
-        -n "${NAMESPACE}" \
-        --from-literal=custom-plugins.yaml="${NEW_CUSTOM_PLUGINS}" \
-        --dry-run=client -o yaml | \
-        kubectl --kubeconfig="${KUBECONFIG}" apply -f -
+# Restart EPP deployment
+echo "  Restarting EPP deployment..."
+kubectl --kubeconfig="${KUBECONFIG}" rollout restart deployment/"${EPP_DEPLOYMENT}" -n "${NAMESPACE}"
 
-    # Restart EPP deployment
-    echo "  Restarting EPP deployment..."
-    kubectl --kubeconfig="${KUBECONFIG}" rollout restart deployment/"${EPP_DEPLOYMENT}" -n "${NAMESPACE}"
+# Wait for rollout
+echo "  Waiting for EPP deployment rollout to complete..."
+kubectl --kubeconfig="${KUBECONFIG}" rollout status deployment/"${EPP_DEPLOYMENT}" -n "${NAMESPACE}" --timeout=120s
 
-    # Wait for rollout
-    echo "  Waiting for EPP deployment rollout to complete..."
-    kubectl --kubeconfig="${KUBECONFIG}" rollout status deployment/"${EPP_DEPLOYMENT}" -n "${NAMESPACE}" --timeout=120s
-
-    echo "  EPP configured successfully"
-else
-    # For in-memory mode, use the default in-memory configuration
-    echo ""
-    echo "Configuring EPP for in-memory mode..."
-
-    # Apply the in-memory configmap from manifests
-    kubectl --kubeconfig="${KUBECONFIG}" apply -f manifests/epp-configmap-in-memory.yaml
-
-    # Restart EPP deployment
-    echo "  Restarting EPP deployment..."
-    kubectl --kubeconfig="${KUBECONFIG}" rollout restart deployment/"${EPP_DEPLOYMENT}" -n "${NAMESPACE}"
-
-    # Wait for rollout
-    echo "  Waiting for EPP deployment rollout to complete..."
-    kubectl --kubeconfig="${KUBECONFIG}" rollout status deployment/"${EPP_DEPLOYMENT}" -n "${NAMESPACE}" --timeout=120s
-
-    echo "  EPP configured for in-memory mode successfully"
-fi
+echo "  EPP configured successfully"
 
 echo ""
 echo "=========================================="
