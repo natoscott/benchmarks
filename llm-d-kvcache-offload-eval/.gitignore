@@ -1,3 +1,6 @@
+# Automated analysis
+/analysis
+
 # Temporary files
 *.tmp
 *.log
