@@ -1,0 +1,43 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: llm-d-infpool-epp
+  namespace: llm-d-pfc-cpu
+data:
+  custom-plugins.yaml: |
+    apiVersion: inference.networking.x-k8s.io/v1alpha1
+    kind: EndpointPickerConfig
+    plugins:
+    - type: queue-scorer
+    - type: kv-cache-utilization-scorer
+    - type: prefix-cache-scorer
+      name: gpu-prefix-cache-scorer
+      parameters:
+        indexerConfig:
+          kvBlockIndexConfig:
+            redisConfig:
+              address: "redis://redis.llm-d-pfc-cpu.svc.cluster.local:6379"
+            enableMetrics: true
+            metricsLoggingInterval: "1m0s"
+    - type: prefix-cache-scorer
+      name: cpu-prefix-cache-scorer
+      parameters:
+        autoTune: false
+        lruCapacityPerServer: 41000
+        indexerConfig:
+          kvBlockIndexConfig:
+            redisConfig:
+              address: "redis://redis.llm-d-pfc-cpu.svc.cluster.local:6379"
+            enableMetrics: true
+            metricsLoggingInterval: "1m0s"
+    schedulingProfiles:
+    - name: default
+      plugins:
+      - pluginRef: queue-scorer
+        weight: 2
+      - pluginRef: kv-cache-utilization-scorer
+        weight: 2
+      - pluginRef: gpu-prefix-cache-scorer
+        weight: 1
+      - pluginRef: cpu-prefix-cache-scorer
+        weight: 1
