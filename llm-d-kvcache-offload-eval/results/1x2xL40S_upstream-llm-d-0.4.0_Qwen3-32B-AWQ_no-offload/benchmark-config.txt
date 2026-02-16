@@ -1,0 +1,27 @@
+Run ID: 1x2xL40S_upstream-llm-d-0.4.0_Qwen3-32B-AWQ_no-offload
+Date: Mon 16 Feb 2026 09:52:31 AEDT
+Target: http://llm-d-inference-gateway-istio:80
+Rate Type: concurrent
+Rate: 1,50,100,150,300
+Max Seconds: 120
+Random Seed: 889
+Prompt Tokens: 128
+Output Tokens: 128
+Prefix Tokens: 10000
+Turns: 5
+Sample Requests: 0
+Hardware: 1x2xL40S
+Software: upstream-llm-d-0.4.0
+Model: Qwen/Qwen3-32B-AWQ
+Model Name: Qwen3-32B-AWQ
+Parameters: no-offload
+Namespace: llm-d-pfc-cpu
+Interactive Pod: interactive-pod-6b6bdc56c8-hgptz
+PCP Pods: pcp-4tnhp
+PCP Pod Count: 1
+Inference Deployment: llm-d-model-server
+vLLM Extra Args: 
+vLLM Env Vars: 
+EPP Backend: in-memory
+EPP ConfigMap: llm-d-infpool-epp
+EPP Deployment: llm-d-infpool-epp
