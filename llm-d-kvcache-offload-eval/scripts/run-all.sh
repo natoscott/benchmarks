@@ -70,7 +70,7 @@ do
                         LMCACHE_SIZE=10.0
                         ;;
                 esac
-                export CONTAINER_IMAGE="lmcache/vllm-openai:v0.3.7"
+                export CONTAINER_IMAGE="docker.io/lmcache/vllm-openai:v0.3.7"
                 export VLLM_EXTRA_ARGS="--kv-transfer-config '{\"kv_connector\":\"LMCacheConnectorV1\",\"kv_role\":\"kv_both\"}' --enable-prefix-caching"
                 export VLLM_ENV_VARS="LMCACHE_MAX_LOCAL_CPU_SIZE=${LMCACHE_SIZE} PYTHONHASHSEED=123"
                 export VLLM_INSTALL_LMCACHE=""
@@ -78,7 +78,7 @@ do
                 ;;
             "lmcache-redis")
                 # LMCache with Redis remote backend (using official lmcache/vllm-openai image)
-                export CONTAINER_IMAGE="lmcache/vllm-openai:v0.3.7"
+                export CONTAINER_IMAGE="docker.io/lmcache/vllm-openai:v0.3.7"
                 export VLLM_EXTRA_ARGS="--kv-transfer-config '{\"kv_connector\":\"LMCacheConnectorV1\",\"kv_role\":\"kv_both\"}' --enable-prefix-caching"
                 export VLLM_ENV_VARS="LMCACHE_REMOTE_URL=redis://redis.${NAMESPACE}.svc.cluster.local:6379 LMCACHE_USE_EXPERIMENTAL=true PYTHONHASHSEED=123"
                 export VLLM_INSTALL_LMCACHE=""
@@ -86,7 +86,7 @@ do
                 ;;
             "lmcache-valkey")
                 # LMCache with Valkey remote backend (using official lmcache/vllm-openai image)
-                export CONTAINER_IMAGE="lmcache/vllm-openai:v0.3.7"
+                export CONTAINER_IMAGE="docker.io/lmcache/vllm-openai:v0.3.7"
                 export VLLM_EXTRA_ARGS="--kv-transfer-config '{\"kv_connector\":\"LMCacheConnectorV1\",\"kv_role\":\"kv_both\"}' --enable-prefix-caching"
                 export VLLM_ENV_VARS="LMCACHE_REMOTE_URL=valkey://valkey.${NAMESPACE}.svc.cluster.local:6379 LMCACHE_USE_EXPERIMENTAL=true PYTHONHASHSEED=123"
                 export VLLM_INSTALL_LMCACHE=""
