@@ -51,43 +51,43 @@ do
                 export EPP_BACKEND_CONFIG="in-memory"
                 ;;
             "lmcache-local")
-                # LMCache local CPU offloading
-                # Using environment variables to match native-offload CPU memory (10000 blocks)
-                # Each model has different KV block sizes, so CPU memory allocation varies:
+                # LMCache local CPU offloading (using official lmcache/vllm-openai image)
+                # LMCACHE_MAX_LOCAL_CPU_SIZE controls CPU memory for KV cache (in GB)
+                # Values adjusted per model to match ~10000 blocks similar to native-offload:
                 # Qwen3-0.6B: 4 GB, Qwen3-8B: 9 GB, Qwen3-14B: 29 GB
                 case "$MODEL_NAME" in
                     "Qwen3-0.6B")
-                        LMCACHE_SIZE=4
+                        LMCACHE_SIZE=4.0
                         ;;
                     "Qwen3-8B")
-                        LMCACHE_SIZE=9
+                        LMCACHE_SIZE=9.0
                         ;;
                     "Qwen3-14B")
-                        LMCACHE_SIZE=29
+                        LMCACHE_SIZE=29.0
                         ;;
                     *)
                         echo "Warning: Unknown model $MODEL_NAME, defaulting to 10 GB"
-                        LMCACHE_SIZE=10
+                        LMCACHE_SIZE=10.0
                         ;;
                 esac
-                export CONTAINER_IMAGE="quay.io/nathans/llm-d-cuda-lmcache:latest"
-                export VLLM_EXTRA_ARGS="--kv-transfer-config '{\"kv_connector\":\"LMCacheConnectorV1\",\"kv_role\":\"kv_both\"}'"
-                export VLLM_ENV_VARS="LMCACHE_LOCAL_CPU=true LMCACHE_MAX_LOCAL_CPU_SIZE=${LMCACHE_SIZE} PYTHONHASHSEED=123"
+                export CONTAINER_IMAGE="lmcache/vllm-openai:v0.3.7"
+                export VLLM_EXTRA_ARGS="--kv-transfer-config '{\"kv_connector\":\"LMCacheConnectorV1\",\"kv_role\":\"kv_both\"}' --enable-prefix-caching"
+                export VLLM_ENV_VARS="LMCACHE_MAX_LOCAL_CPU_SIZE=${LMCACHE_SIZE} PYTHONHASHSEED=123"
                 export VLLM_INSTALL_LMCACHE=""
                 export EPP_BACKEND_CONFIG="in-memory"
                 ;;
             "lmcache-redis")
-                # LMCache with Redis remote backend
-                export CONTAINER_IMAGE="quay.io/nathans/llm-d-cuda-lmcache:latest"
-                export VLLM_EXTRA_ARGS="--kv-transfer-config '{\"kv_connector\":\"LMCacheConnectorV1\",\"kv_role\":\"kv_both\"}'"
+                # LMCache with Redis remote backend (using official lmcache/vllm-openai image)
+                export CONTAINER_IMAGE="lmcache/vllm-openai:v0.3.7"
+                export VLLM_EXTRA_ARGS="--kv-transfer-config '{\"kv_connector\":\"LMCacheConnectorV1\",\"kv_role\":\"kv_both\"}' --enable-prefix-caching"
                 export VLLM_ENV_VARS="LMCACHE_REMOTE_URL=redis://redis.${NAMESPACE}.svc.cluster.local:6379 LMCACHE_USE_EXPERIMENTAL=true PYTHONHASHSEED=123"
                 export VLLM_INSTALL_LMCACHE=""
                 export EPP_BACKEND_CONFIG="in-memory"
                 ;;
             "lmcache-valkey")
-                # LMCache with Valkey remote backend
-                export CONTAINER_IMAGE="quay.io/nathans/llm-d-cuda-lmcache:latest"
-                export VLLM_EXTRA_ARGS="--kv-transfer-config '{\"kv_connector\":\"LMCacheConnectorV1\",\"kv_role\":\"kv_both\"}'"
+                # LMCache with Valkey remote backend (using official lmcache/vllm-openai image)
+                export CONTAINER_IMAGE="lmcache/vllm-openai:v0.3.7"
+                export VLLM_EXTRA_ARGS="--kv-transfer-config '{\"kv_connector\":\"LMCacheConnectorV1\",\"kv_role\":\"kv_both\"}' --enable-prefix-caching"
                 export VLLM_ENV_VARS="LMCACHE_REMOTE_URL=valkey://valkey.${NAMESPACE}.svc.cluster.local:6379 LMCACHE_USE_EXPERIMENTAL=true PYTHONHASHSEED=123"
                 export VLLM_INSTALL_LMCACHE=""
                 export EPP_BACKEND_CONFIG="in-memory"
