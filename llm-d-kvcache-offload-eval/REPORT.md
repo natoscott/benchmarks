@@ -402,27 +402,5 @@ This evaluation demonstrates that llm-d's distributed KV-block indexing introduc
 
 ## Appendix: Detailed Metrics
 
-Complete performance metrics are available in the `analysis/` directory:
-
-**GuideLLM Benchmark Metrics:**
-- `all_peak_metrics.csv`: Peak performance metrics for all configurations
-- `performance_comparisons.csv`: Detailed comparisons vs baseline
-- `<model>_<config>_metrics.csv`: Per-configuration detailed metrics
-
-**Performance Visualization Graphs:**
-- `peak_throughput_comparison.png`: Bar chart comparing peak throughput across configurations
-- `throughput_vs_concurrency_all_models.png`: Combined throughput curves for all models
-- `throughput_curve_<model>.png`: Individual throughput vs concurrency curves per model
-- `latency_comparison.png`: TTFT and TPOT comparison at peak throughput
-- `performance_delta_heatmap.png`: Heatmap showing performance delta vs baseline
-
-**PCP System Metrics:**
-- `pcp_metrics_summary.csv`: GPU KV-cache usage and vLLM scheduler queue metrics
-- `cpu_gpu_utilization.csv`: CPU and GPU utilization metrics across all configurations
-- `kv_cache_comparison.png`: GPU KV-cache utilization across configurations
-- `cpu_gpu_utilization.png`: CPU and GPU utilization comparison graphs
-- `gpu_memory_copy_utilization.png`: GPU memory copy utilization across configurations
-- `request_queues.png`: vLLM scheduler queue depth analysis
-
-**Raw Data:**
-- PCP archives containing complete system-level time-series metrics are available in `results/*/pcp-archives/` directories for detailed analysis
+- GuideLLM JSON results are available in `results/*/guidellm-results.json.zst`
+- PCP archives containing complete system-level time-series metrics are available in `results/*/pcp-archives/` directories
