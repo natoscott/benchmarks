@@ -6,14 +6,14 @@ This report presents a performance evaluation of KV-cache management strategies 
 
 **Key Findings:**
 
-- **llm-d distributed caching** (Redis/Valkey backends) achieves throughput parity with GPU-only baseline (within ±1.2%)
+- **llm-d EPP distributed KV-block indexing** (Redis/Valkey backends) achieves throughput parity with GPU-only baseline (within ±1.2%)
 - **vLLM native offloading** shows throughput degradation of 1.8-7.0% compared to baseline
 - **Tensor parallelism scaling**: 14B model shows 80% throughput improvement with TP=2 (1,100 → 2,000 tok/s)
 - **AWQ quantization**: 32B-AWQ model achieves 1,063 tok/s despite 2.2× parameter count vs 14B full-precision
 - **Performance consistency** across distributed backends: Redis and Valkey perform equivalently
 - **Optimal concurrency scales with TP**: 14B peak moves from 100 to 400 concurrent requests with TP=2
 
-The llm-d distributed caching solution demonstrates production viability, providing cache-aware request routing with negligible performance overhead.
+The llm-d EPP (Endpoint Provisioning Proxy) distributed KV-block indexing shows negligible performance overhead (<1.2%) for cache-aware request routing.
 
 ---
 
@@ -30,7 +30,7 @@ The llm-d distributed caching solution demonstrates production viability, provid
 
 **Software:**
 - **llm-d**: v0.4.0
-- **vLLM**: Bundled with llm-d v0.4.0
+- **vLLM**: v0.11.2 (bundled with llm-d v0.4.0)
 - **Operating System**: Linux (OpenShift containerized environment)
 - **PCP**: Performance Co-Pilot for metrics collection
 - **GuideLLM**: Benchmark orchestration
@@ -52,13 +52,12 @@ The llm-d distributed caching solution demonstrates production viability, provid
   - Output tokens: 128 per turn
   - Prefix tokens: 10,000 (shared across requests)
   - Turns: 5 per conversation
-- **Total Input**: ~10,141 tokens per request (prefix + 5×128 prompts)
-- **Random Seed**: 889 (for reproducibility)
+- **Measured mean token count**: 10,141 per request by GuideLLM
 
 ### Configurations Tested
 
 #### 1. Baseline (no-offload)
-GPU-only KV-cache storage without offloading or distributed caching.
+GPU-only KV-cache storage without offloading or distributed KV-block indexing.
 
 ```bash
 vllm serve <model> --tensor-parallel-size 2 --port 8000 --max-num-seq 1024
@@ -79,7 +78,7 @@ vllm serve <model> --tensor-parallel-size 2 --port 8000 --max-num-seq 1024 \
 **llm-d EPP**: In-memory prefix cache scorer
 
 #### 3. llm-d Redis (llm-d-redis)
-llm-d distributed caching with Redis as the KV-block index backend.
+llm-d EPP with Redis-backed distributed KV-block indexing.
 
 ```bash
 vllm serve <model> --tensor-parallel-size 2 --port 8000 --max-num-seq 1024
@@ -91,7 +90,7 @@ vllm serve <model> --tensor-parallel-size 2 --port 8000 --max-num-seq 1024
 - **Metrics**: Enabled with 1-minute logging interval
 
 #### 4. llm-d Valkey (llm-d-valkey)
-llm-d distributed caching with Valkey (Redis-compatible) as the KV-block index backend.
+llm-d EPP with Valkey-backed distributed KV-block indexing (Redis-compatible backend).
 
 ```bash
 vllm serve <model> --tensor-parallel-size 2 --port 8000 --max-num-seq 1024
@@ -113,21 +112,59 @@ Results presented show peak output token throughput achieved at optimal concurre
 | Model | Configuration | Peak Throughput (tok/s) | Optimal Concurrency | vs Baseline |
 |-------|---------------|------------------------:|--------------------:|------------:|
 | **Qwen3-0.6B** | no-offload | 4,889 | 500 | — |
+| | native-offload | 3,450 | 100 | **-29.4%** |
 | | llm-d-redis | 4,868 | 650 | **-0.4%** |
 | | llm-d-valkey | 4,851 | 400 | **-0.8%** |
-| | native-offload | 3,450 | 100 | **-29.4%** |
-| **Qwen3-8B** | llm-d-valkey | 2,649 | 500 | **+1.1%** |
-| | no-offload | 2,619 | 500 | — |
-| | llm-d-redis | 2,609 | 500 | **-0.4%** |
+| **Qwen3-8B** | no-offload | 2,619 | 500 | — |
 | | native-offload | 2,437 | 500 | **-7.0%** |
-| **Qwen3-14B** | llm-d-redis | 2,027 | 400 | **+1.2%** |
-| | llm-d-valkey | 2,006 | 400 | **+0.1%** |
-| | no-offload | 2,003 | 400 | — |
+| | llm-d-redis | 2,609 | 500 | **-0.4%** |
+| | llm-d-valkey | 2,649 | 500 | **+1.1%** |
+| **Qwen3-14B** | no-offload | 2,003 | 400 | — |
 | | native-offload | 1,906 | 400 | **-4.8%** |
-| **Qwen3-32B-AWQ** | llm-d-redis | 1,066 | 150 | **+0.3%** |
-| | no-offload | 1,063 | 150 | — |
-| | llm-d-valkey | 1,062 | 150 | **-0.1%** |
+| | llm-d-redis | 2,027 | 400 | **+1.2%** |
+| | llm-d-valkey | 2,006 | 400 | **+0.1%** |
+| **Qwen3-32B-AWQ** | no-offload | 1,063 | 150 | — |
 | | native-offload | 1,044 | 150 | **-1.8%** |
+| | llm-d-redis | 1,066 | 150 | **+0.3%** |
+| | llm-d-valkey | 1,062 | 150 | **-0.1%** |
+
+![Peak Throughput Comparison](analysis/peak_throughput_comparison.png)
+
+### Throughput vs Concurrency
+
+The following graphs show output token throughput as a function of concurrency level for each model and configuration.
+
+![Throughput vs Concurrency - All Models](analysis/throughput_vs_concurrency_all_models.png)
+
+**Individual Model Performance Curves:**
+
+<details>
+<summary>Qwen3-0.6B Throughput Curve</summary>
+
+![Qwen3-0.6B Throughput](analysis/throughput_curve_Qwen3-0.6B.png)
+
+</details>
+
+<details>
+<summary>Qwen3-8B Throughput Curve</summary>
+
+![Qwen3-8B Throughput](analysis/throughput_curve_Qwen3-8B.png)
+
+</details>
+
+<details>
+<summary>Qwen3-14B Throughput Curve</summary>
+
+![Qwen3-14B Throughput](analysis/throughput_curve_Qwen3-14B.png)
+
+</details>
+
+<details>
+<summary>Qwen3-32B-AWQ Throughput Curve</summary>
+
+![Qwen3-32B-AWQ Throughput](analysis/throughput_curve_Qwen3-32B-AWQ.png)
+
+</details>
 
 ### Latency Analysis
 
@@ -151,13 +188,15 @@ Latency measurements at peak throughput conditions:
 | Qwen3-14B | 201.7 ms | 211.8 ms (+5%) | 199.5 ms (-1.1%) | 201.5 ms (-0.1%) |
 | Qwen3-32B-AWQ | 144.4 ms | 147.0 ms (+2%) | 144.0 ms (-0.3%) | 144.5 ms (+0.1%) |
 
+![Latency Comparison](analysis/latency_comparison.png)
+
 ---
 
 ## Analysis
 
-### Distributed Caching Performance
+### Distributed KV-Block Indexing Performance
 
-The llm-d distributed caching system (both Redis and Valkey backends) demonstrates performance parity with the GPU-only baseline configuration:
+llm-d's distributed KV-block indexing via EPP (both Redis and Valkey backends) demonstrates performance parity with the GPU-only baseline configuration:
 
 - **Qwen3-0.6B**: -0.4% to -0.8% throughput (within measurement variance)
 - **Qwen3-8B**: -0.4% to +1.1% (within measurement variance, Valkey leads)
@@ -166,7 +205,9 @@ The llm-d distributed caching system (both Redis and Valkey backends) demonstrat
 
 These results indicate that the overhead of distributed KV-block indexing and cache-aware request routing is minimal across all model sizes, including the large 32B quantized model. The slight throughput variations (all within ±1.2%) fall within normal benchmark variance.
 
-**TPOT latency** remains nearly identical to baseline (within ±1.3% for 8B/14B/32B models), confirming that token generation performance is unaffected by the distributed caching layer.
+**TPOT latency** remains nearly identical to baseline (within ±1.3% for 8B/14B/32B models), confirming that token generation performance is unaffected by the distributed KV-block indexing layer.
+
+![Performance Delta Heatmap](analysis/performance_delta_heatmap.png)
 
 ### Native Offloading Performance Degradation
 
@@ -235,7 +276,7 @@ Analysis of Performance Co-Pilot (PCP) metrics provides insights into KV-cache u
 
 #### Prefix Cache Hit Rates
 
-Prefix caching performed consistently across all configurations with hit rates of **~98.5%**, demonstrating excellent cache effectiveness for the multi-turn conversation workload:
+vLLM's automatic prefix caching (which reuses KV-cache blocks for shared prompt prefixes) performed consistently across all configurations with hit rates of **~98.5%**, demonstrating excellent cache effectiveness for the multi-turn conversation workload:
 
 | Model | no-offload | native-offload | llm-d-redis | llm-d-valkey |
 |-------|------------|----------------|-------------|--------------|
@@ -246,11 +287,9 @@ Prefix caching performed consistently across all configurations with hit rates o
 
 The minimal variance (<0.1%) across configurations confirms that caching strategy does not impact cache effectiveness, with all configurations benefiting equally from the 10,000-token shared prefix in the workload.
 
-![Prefix Cache Hit Rates](analysis/prefix_cache_hit_rate.png)
+#### GPU KV-Cache Utilization
 
-#### KV-Cache Utilization
-
-Mean KV-cache usage percentages show interesting patterns:
+Mean GPU KV-cache usage percentages show interesting patterns (note: for native-offload, this measures GPU blocks only; additional blocks offloaded to CPU are not included in this metric):
 
 | Model | no-offload | native-offload | llm-d-redis | llm-d-valkey |
 |-------|------------|----------------|-------------|--------------|
@@ -265,26 +304,23 @@ Key observations:
 - **14B baseline**: Higher cache usage (123%) at peak concurrency (400) reflects effective utilization at scale
 - **Configuration parity**: llm-d-redis and llm-d-valkey show similar cache usage patterns to no-offload baseline across all models, confirming minimal overhead from distributed indexing
 
-![KV-Cache Utilization](analysis/kv_cache_comparison.png)
+![GPU KV-Cache Utilization](analysis/kv_cache_comparison.png)
 
-#### Memory Usage
+#### CPU and GPU Utilization
 
-Process resident memory usage remained consistent across configurations:
+CPU and GPU utilization metrics were collected via PCP but are not analyzed in this report. The PCP archives (available in `results/*/pcp-archives/`) contain comprehensive system-level metrics including:
+- CPU utilization (kernel.all.cpu.user, kernel.all.cpu.sys, kernel.all.cpu.idle)
+- GPU utilization and memory usage (nvidia.* metrics via nvidia PMDA)
+- Per-process CPU and memory consumption
 
-| Model | no-offload | native-offload | llm-d-redis | llm-d-valkey |
-|-------|------------|----------------|-------------|--------------|
-| Qwen3-0.6B | 1.63 GB | 1.38 GB | 1.60 GB | 1.90 GB |
-| Qwen3-8B | 1.58 GB | 1.59 GB | 1.58 GB | 1.90 GB |
-| Qwen3-14B | 1.81 GB | 1.57 GB | 1.58 GB | 1.93 GB |
-| Qwen3-32B-AWQ | 1.46 GB | 1.43 GB | 1.42 GB | 1.68 GB |
+Analysis of these metrics could provide insights into:
+- Whether native-offload's CPU KV-cache management introduces significant CPU overhead
+- GPU compute vs memory bandwidth saturation patterns across model sizes
+- Impact of distributed KV-block indexing on CPU utilization
 
-Memory usage is dominated by model weights (loaded once per GPU), with configuration overhead negligible (±10%). The 32B-AWQ model's lower memory usage reflects the efficiency of 4-bit quantization compared to full-precision smaller models.
+#### vLLM Scheduler Queue Depth
 
-![Memory Usage](analysis/memory_usage.png)
-
-#### Request Queue Depth
-
-Average running and waiting requests provide insight into system saturation:
+These metrics represent vLLM's internal request scheduler state (not kernel I/O queues). Average running and waiting requests provide insight into vLLM scheduler saturation and request processing efficiency:
 
 **Running Requests (average):**
 - Qwen3-0.6B: 238-343 concurrent requests
@@ -306,9 +342,9 @@ The 0.6B native-offload configuration shows significantly higher waiting queue d
 
 ## Conclusions
 
-This evaluation demonstrates that llm-d's distributed KV-cache indexing provides a production-viable solution for cache-aware request routing with negligible performance overhead across model sizes from 0.6B to 32B parameters. Key takeaways:
+This evaluation demonstrates that llm-d's distributed KV-block indexing introduces negligible performance overhead (<1.2%) for cache-aware request routing across model sizes from 0.6B to 32B parameters. Key takeaways:
 
-1. **Distributed caching viability**: llm-d Redis/Valkey configurations perform at parity with GPU-only baseline (within ±1.2%), enabling multi-pod deployments with coordinated cache management without sacrificing performance across all tested models.
+1. **Distributed KV-block indexing viability**: llm-d Redis/Valkey configurations perform at parity with GPU-only baseline (within ±1.2%), enabling multi-pod deployments with cache-aware request routing via coordinated KV-block indexing without sacrificing performance across all tested models.
 
 2. **Native offloading limitations**: vLLM's OffloadingConnector shows measurable performance degradation (1.8-7.0%), suggesting CPU offload introduces overhead that may not be justified for GPU-rich deployments. The overhead decreases for larger models as compute dominates over transfer costs.
 
@@ -318,7 +354,7 @@ This evaluation demonstrates that llm-d's distributed KV-cache indexing provides
 
 5. **Backend equivalence**: Redis and Valkey backends perform identically across all model sizes, providing deployment flexibility based on operational preferences (licensing, ecosystem, features).
 
-6. **Production readiness**: The minimal performance impact of llm-d distributed caching (<1.2% in all cases) combined with the benefits of cache-aware routing makes it suitable for production deployments requiring horizontal scaling.
+6. **Minimal overhead confirmed**: The minimal performance impact of llm-d's distributed KV-block indexing (<1.2% in all cases) validates the architectural approach for cache-aware routing in multi-pod deployments.
 
 ### Recommendations
 
@@ -327,15 +363,6 @@ This evaluation demonstrates that llm-d's distributed KV-cache indexing provides
 - **For 14B+ models**: Enable tensor parallelism (TP=2+) for significant throughput improvements (~80% for 14B)
 - **For large models with limited VRAM**: Consider AWQ quantization to run larger models (e.g., 32B-AWQ achieves 53% of 14B throughput)
 - **CPU offload**: Reconsider native-offload unless memory constraints are critical, as performance degradation (1.8-7.0%) may outweigh benefits
-
-### Future Work
-
-- Evaluate impact of cache hit rates on routing effectiveness under varying workload patterns
-- Assess performance under heterogeneous hardware configurations (mixed GPU types)
-- Measure impact of network latency on distributed indexing performance in geo-distributed deployments
-- Test higher tensor parallelism levels (TP=4, TP=8) for very large models
-- Evaluate other quantization methods (GPTQ, INT8) vs AWQ for performance-memory tradeoffs
-- Investigate resource utilization patterns for native-offload configuration to understand performance differences
 
 ---
 
@@ -348,12 +375,17 @@ Complete performance metrics are available in the `analysis/` directory:
 - `performance_comparisons.csv`: Detailed comparisons vs baseline
 - `<model>_<config>_metrics.csv`: Per-configuration detailed metrics
 
+**Performance Visualization Graphs:**
+- `peak_throughput_comparison.png`: Bar chart comparing peak throughput across configurations
+- `throughput_vs_concurrency_all_models.png`: Combined throughput curves for all models
+- `throughput_curve_<model>.png`: Individual throughput vs concurrency curves per model
+- `latency_comparison.png`: TTFT and TPOT comparison at peak throughput
+- `performance_delta_heatmap.png`: Heatmap showing performance delta vs baseline
+
 **PCP System Metrics:**
-- `pcp_metrics_summary.csv`: KV-cache usage, memory, and queue depth metrics
-- `kv_cache_comparison.png`: KV-cache utilization across configurations
-- `prefix_cache_hit_rate.png`: Prefix cache effectiveness comparison
-- `memory_usage.png`: Process memory usage patterns
-- `request_queues.png`: Request queue depth analysis
+- `pcp_metrics_summary.csv`: GPU KV-cache usage and vLLM scheduler queue metrics
+- `kv_cache_comparison.png`: GPU KV-cache utilization across configurations
+- `request_queues.png`: vLLM scheduler queue depth analysis
 
 **Raw Data:**
 - PCP archives containing complete system-level time-series metrics are available in `results/*/pcp-archives/` directories for detailed analysis
@@ -363,6 +395,6 @@ Complete performance metrics are available in the `analysis/` directory:
 **Report Generated**: 2026-02-17
 **Benchmark Duration**: ~4 hours (16 runs × ~15 minutes each)
 **Hardware**: 2x NVIDIA L40S GPUs (48GB VRAM total)
-**Software**: llm-d v0.4.0, vLLM (bundled), GuideLLM
+**Software**: llm-d v0.4.0, vLLM v0.11.2, GuideLLM
 **Tensor Parallelism**: TP=2 across all benchmarks
 **Note**: All 16 benchmarks completed successfully
