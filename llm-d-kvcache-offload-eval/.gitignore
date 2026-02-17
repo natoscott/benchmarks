@@ -1,5 +1,6 @@
 # Automated analysis
-/analysis
+/analysis/*.parquet
+/analysis/*.csv
 
 # Temporary files
 *.tmp
