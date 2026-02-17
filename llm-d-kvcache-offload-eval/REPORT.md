@@ -112,7 +112,7 @@ Results presented show peak output token throughput achieved at optimal concurre
 | Model | Configuration | Peak Throughput (tok/s) | Optimal Concurrency | vs Baseline |
 |-------|---------------|------------------------:|--------------------:|------------:|
 | **Qwen3-0.6B** | no-offload | 4,889 | 500 | — |
-| | native-offload | 3,450 | 100 | **-29.4%** |
+| | native-offload | 4,268 | 400 | **-12.7%** |
 | | llm-d-redis | 4,868 | 650 | **-0.4%** |
 | | llm-d-valkey | 4,851 | 400 | **-0.8%** |
 | **Qwen3-8B** | no-offload | 2,619 | 500 | — |
@@ -174,7 +174,7 @@ Latency measurements at peak throughput conditions:
 
 | Model | no-offload | native-offload | llm-d-redis | llm-d-valkey |
 |-------|------------|----------------|-------------|--------------|
-| Qwen3-0.6B | 827 ms | 266 ms (-68%) | 1,076 ms (+30%) | 594 ms (-28%) |
+| Qwen3-0.6B | 827 ms | 684 ms (-17%) | 1,076 ms (+30%) | 594 ms (-28%) |
 | Qwen3-8B | 1,900 ms | 1,970 ms (+4%) | 1,895 ms (-0.3%) | 1,820 ms (-4%) |
 | Qwen3-14B | 2,174 ms | 2,318 ms (+7%) | 2,180 ms (+0.3%) | 2,167 ms (-0.3%) |
 | Qwen3-32B-AWQ | 2,129 ms | 2,173 ms (+2%) | 2,117 ms (-0.6%) | 2,125 ms (-0.2%) |
@@ -183,7 +183,7 @@ Latency measurements at peak throughput conditions:
 
 | Model | no-offload | native-offload | llm-d-redis | llm-d-valkey |
 |-------|------------|----------------|-------------|--------------|
-| Qwen3-0.6B | 102.2 ms | 27.9 ms (-73%) | 133.4 ms (+31%) | 82.5 ms (-19%) |
+| Qwen3-0.6B | 102.2 ms | 86.2 ms (-16%) | 133.4 ms (+31%) | 82.5 ms (-19%) |
 | Qwen3-8B | 192.0 ms | 206.4 ms (+8%) | 192.5 ms (+0.2%) | 189.5 ms (-1.3%) |
 | Qwen3-14B | 201.7 ms | 211.8 ms (+5%) | 199.5 ms (-1.1%) | 201.5 ms (-0.1%) |
 | Qwen3-32B-AWQ | 144.4 ms | 147.0 ms (+2%) | 144.0 ms (-0.3%) | 144.5 ms (+0.1%) |
@@ -211,14 +211,14 @@ These results indicate that the overhead of distributed KV-block indexing and ca
 
 ### Native Offloading Performance Degradation
 
-The vLLM OffloadingConnector shows mixed results:
+The vLLM OffloadingConnector shows varying performance impact across model sizes:
 
-- **Qwen3-0.6B**: -29.4% throughput
+- **Qwen3-0.6B**: -12.7% throughput
 - **Qwen3-8B**: -7.0% throughput
 - **Qwen3-14B**: -4.8% throughput
 - **Qwen3-32B-AWQ**: -1.8% throughput
 
-The 0.6B model exhibits severe performance degradation (-29.4%) when combining native-offload with TP=2. The latency metrics show anomalous improvements (TTFT -68%, TPOT -73%) that contradict the severe throughput degradation. This suggests the model may be operating in a suboptimal mode where individual requests complete faster but overall system throughput is significantly reduced, possibly due to serialization or resource contention issues specific to tiny models with TP=2.
+The 0.6B model exhibits moderate performance degradation (-12.7%) when combining native-offload with TP=2. The latency metrics show modest reductions compared to baseline (TTFT -17%, TPOT -16%) measured at peak throughput conditions (concurrency 400 vs 500 for baseline), indicating that CPU-GPU data transfer overhead impacts token generation efficiency. The throughput degradation is less severe than initially observed due to the model achieving peak performance at concurrency 400 rather than the incomplete benchmark's concurrency 100.
 
 For larger models (8B/14B/32B), the degradation correlates with increased **TPOT latency** (+2% to +8%), suggesting that CPU-GPU data transfer overhead impacts token generation throughput. The degradation decreases for larger models (8B: -7.0% → 32B: -1.8%), possibly because compute-bound operations increasingly dominate over memory transfer overhead.
 
@@ -314,7 +314,7 @@ System-level CPU and GPU utilization metrics were extracted from PCP archives to
 
 | Model | no-offload | native-offload | llm-d-redis | llm-d-valkey |
 |-------|------------|----------------|-------------|--------------|
-| Qwen3-0.6B | 22.8% | **45.0% (+22.2%)** | 24.0% (+1.2%) | 25.9% (+3.1%) |
+| Qwen3-0.6B | 22.8% | 26.6% (+3.8%) | 24.0% (+1.2%) | 25.9% (+3.1%) |
 | Qwen3-8B | 21.7% | 21.1% (-0.6%) | 21.8% (+0.1%) | 23.4% (+1.7%) |
 | Qwen3-14B | 35.5% | 20.9% (-14.6%) | 20.7% (-14.8%) | 22.4% (-13.1%) |
 | Qwen3-32B-AWQ | 22.8% | 22.3% (-0.4%) | 22.6% (-0.1%) | 26.1% (+3.3%) |
@@ -323,7 +323,7 @@ System-level CPU and GPU utilization metrics were extracted from PCP archives to
 
 | Model | no-offload | native-offload | llm-d-redis | llm-d-valkey |
 |-------|------------|----------------|-------------|--------------|
-| Qwen3-0.6B | 68.7% | **112.1% (+43.5%)** | 66.8% (-1.9%) | 75.0% (+6.3%) |
+| Qwen3-0.6B | 68.7% | 76.8% (+8.1%) | 66.8% (-1.9%) | 75.0% (+6.3%) |
 | Qwen3-8B | 74.4% | 74.9% (+0.5%) | 77.1% (+2.7%) | 85.6% (+11.2%) |
 | Qwen3-14B | 84.8% | 78.7% (-6.1%) | 78.1% (-6.7%) | 83.5% (-1.3%) |
 | Qwen3-32B-AWQ | 72.5% | 74.9% (+2.4%) | 72.0% (-0.5%) | 87.7% (+15.1%) |
@@ -332,14 +332,14 @@ System-level CPU and GPU utilization metrics were extracted from PCP archives to
 
 | Model | no-offload | native-offload | llm-d-redis | llm-d-valkey |
 |-------|------------|----------------|-------------|--------------|
-| Qwen3-0.6B | 42.1% | **72.1% (+30.0%)** | 39.6% (-2.5%) | 45.9% (+3.9%) |
+| Qwen3-0.6B | 42.1% | 48.2% (+6.1%) | 39.6% (-2.5%) | 45.9% (+3.9%) |
 | Qwen3-8B | 45.4% | 39.9% (-5.4%) | 41.3% (-4.0%) | 47.8% (+2.4%) |
 | Qwen3-14B | 73.6% | 48.4% (-25.1%) | 47.8% (-25.7%) | 50.5% (-23.0%) |
 | Qwen3-32B-AWQ | 38.6% | 35.3% (-3.3%) | 39.2% (+0.6%) | 46.8% (+8.1%) |
 
 Key observations:
 
-- **0.6B native-offload shows significant overhead**: CPU utilization increases by 22.2% (45.0% vs 22.8%), confirming that CPU KV-cache management introduces measurable overhead. The anomalously high GPU utilization (112%) is likely due to DCGM metrics being aggregated across both GPUs in the TP=2 configuration. GPU memory copy utilization increases by 30.0%, indicating substantial GPU-CPU transfer activity that contributes to the -29.4% throughput degradation.
+- **0.6B native-offload shows modest overhead**: CPU utilization increases by 3.8% (26.6% vs 22.8%), GPU utilization increases by 8.1% (76.8% vs 68.7%), and GPU memory copy utilization increases by 6.1% (48.2% vs 42.1%). These modest increases confirm that CPU KV-cache offloading introduces measurable but not excessive overhead, contributing to the -12.7% throughput degradation observed at higher concurrency levels.
 
 - **llm-d distributed indexing has minimal CPU overhead**: llm-d-redis and llm-d-valkey configurations show CPU utilization within +0.1% to +3.3% of baseline for 8B/32B models, confirming that distributed KV-block indexing and cache-aware request routing introduce negligible CPU overhead.
 
