@@ -31,9 +31,10 @@ The llm-d EPP (Endpoint Provisioning Proxy) distributed KV-block indexing shows 
 **Software:**
 - **llm-d**: v0.4.0
 - **vLLM**: v0.11.2 (bundled with llm-d v0.4.0)
-- **Operating System**: Linux (OpenShift containerized environment)
-- **PCP**: Performance Co-Pilot for metrics collection
-- **GuideLLM**: Benchmark orchestration
+- **LMCache**: v0.3.7 (3rd party distributed kv-cache)
+- **OpenShift**: v4.22.0 (OpenShift containerized environment)
+- **PCP**: v7.0.3 (Performance Co-Pilot metrics collection)
+- **GuideLLM**: v0.5.3 (benchmark orchestration)
 
 **Models Tested:**
 - Qwen/Qwen3-0.6B (577M parameters, FP16)
