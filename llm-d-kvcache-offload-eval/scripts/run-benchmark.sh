@@ -139,16 +139,24 @@ if [ -n "${VLLM_ENV_VARS}" ]; then
     echo "  Extra env:  ${VLLM_ENV_VARS}"
 fi
 
-# Build base vLLM command with the specified model
-# All containers now use vllm serve command (llm-d image)
-# Note: lmcache-enabled images (quay.io/nathans/llm-d-cuda-lmcache) have lmcache pre-installed
-BASE_VLLM_ARGS="exec vllm serve ${MODEL} --tensor-parallel-size 2 --port 8000 --max-num-seq 1024"
+# Build vLLM command/args based on image type
+if [ "${USE_LMCACHE_IMAGE}" = "true" ]; then
+    # LMCache images use /opt/venv/bin/vllm command with array args
+    echo "  Using LMCache image command structure"
 
-# Append extra args if provided
-if [ -n "${VLLM_EXTRA_ARGS}" ]; then
-    NEW_ARGS="${BASE_VLLM_ARGS} ${VLLM_EXTRA_ARGS}"
+    # Build args array with all lmcache arguments
+    # All lmcache configs use --kv-transfer-config and --enable-prefix-caching
+    VLLM_ARGS_ARRAY='["serve","'${MODEL}'","--tensor-parallel-size","2","--port","8000","--max-num-seq","1024","--kv-transfer-config","{\"kv_connector\":\"LMCacheConnectorV1\",\"kv_role\":\"kv_both\"}","--enable-prefix-caching"]'
 else
-    NEW_ARGS="${BASE_VLLM_ARGS}"
+    # llm-d images use bash -c with exec vllm serve
+    BASE_VLLM_ARGS="exec vllm serve ${MODEL} --tensor-parallel-size 2 --port 8000 --max-num-seq 1024"
+
+    # Append extra args if provided
+    if [ -n "${VLLM_EXTRA_ARGS}" ]; then
+        NEW_ARGS="${BASE_VLLM_ARGS} ${VLLM_EXTRA_ARGS}"
+    else
+        NEW_ARGS="${BASE_VLLM_ARGS}"
+    fi
 fi
 
 # Build JSON patch operations
@@ -168,9 +176,35 @@ EOF
     PATCH_OPS="${IMAGE_PATCH}"
 fi
 
-# Use jq to properly escape the value string for JSON
-ESCAPED_ARGS=$(echo -n "${NEW_ARGS}" | jq -R -s '.')
-ARGS_PATCH=$(cat <<EOF
+# Build command and args patches based on image type
+if [ "${USE_LMCACHE_IMAGE}" = "true" ]; then
+    # For LMCache images, replace command and args
+    COMMAND_PATCH=$(cat <<EOF
+  {
+    "op": "replace",
+    "path": "/spec/template/spec/containers/0/command",
+    "value": ["/opt/venv/bin/vllm"]
+  }
+EOF
+)
+    ARGS_PATCH=$(cat <<EOF
+  {
+    "op": "replace",
+    "path": "/spec/template/spec/containers/0/args",
+    "value": ${VLLM_ARGS_ARRAY}
+  }
+EOF
+)
+
+    if [ -n "${PATCH_OPS}" ]; then
+        PATCH_OPS="${PATCH_OPS},${COMMAND_PATCH},${ARGS_PATCH}"
+    else
+        PATCH_OPS="${COMMAND_PATCH},${ARGS_PATCH}"
+    fi
+else
+    # For llm-d images, only replace args/0
+    ESCAPED_ARGS=$(echo -n "${NEW_ARGS}" | jq -R -s '.')
+    ARGS_PATCH=$(cat <<EOF
   {
     "op": "replace",
     "path": "/spec/template/spec/containers/0/args/0",
@@ -179,41 +213,60 @@ ARGS_PATCH=$(cat <<EOF
 EOF
 )
 
-if [ -n "${PATCH_OPS}" ]; then
-    PATCH_OPS="${PATCH_OPS},${ARGS_PATCH}"
-else
-    PATCH_OPS="${ARGS_PATCH}"
+    if [ -n "${PATCH_OPS}" ]; then
+        PATCH_OPS="${PATCH_OPS},${ARGS_PATCH}"
+    else
+        PATCH_OPS="${ARGS_PATCH}"
+    fi
 fi
 
-# Add env patch if VLLM_ENV_VARS is set
+# Set environment variables using kubectl set env (replaces existing vars instead of appending)
 if [ -n "${VLLM_ENV_VARS}" ]; then
-    # Parse VLLM_ENV_VARS (format: "VAR1=value1 VAR2=value2")
-    # Get current env array length
-    ENV_COUNT=$(kubectl --kubeconfig="${KUBECONFIG}" get deployment "${INFERENCE_DEPLOYMENT}" -n "${NAMESPACE}" -o jsonpath='{.spec.template.spec.containers[0].env}' | jq 'length')
-
-    # Create separate patch for each environment variable
+    echo "  Setting environment variables..."
+    # Build env var arguments for kubectl set env
+    ENV_ARGS=""
     for env_pair in ${VLLM_ENV_VARS}; do
-        env_name="${env_pair%%=*}"
-        env_value="${env_pair#*=}"
+        ENV_ARGS="${ENV_ARGS} ${env_pair}"
+    done
 
-        ENV_PATCH=$(cat <<EOF
+    # Use kubectl set env to replace environment variables
+    kubectl --kubeconfig="${KUBECONFIG}" set env deployment/"${INFERENCE_DEPLOYMENT}" -n "${NAMESPACE}" --containers=vllm ${ENV_ARGS}
+fi
+
+# Remove health probes for lmcache images (they don't expose /health endpoint)
+# Check if probes exist before trying to remove them
+if [ "${USE_LMCACHE_IMAGE}" = "true" ]; then
+    # Check if startupProbe exists
+    if kubectl --kubeconfig="${KUBECONFIG}" get deployment "${INFERENCE_DEPLOYMENT}" -n "${NAMESPACE}" -o jsonpath='{.spec.template.spec.containers[0].startupProbe}' 2>/dev/null | grep -q .; then
+        REMOVE_STARTUP_PROBE=$(cat <<EOF
   {
-    "op": "add",
-    "path": "/spec/template/spec/containers/0/env/${ENV_COUNT}",
-    "value": {"name":"${env_name}","value":"${env_value}"}
+    "op": "remove",
+    "path": "/spec/template/spec/containers/0/startupProbe"
   }
 EOF
 )
-
         if [ -n "${PATCH_OPS}" ]; then
-            PATCH_OPS="${PATCH_OPS},${ENV_PATCH}"
+            PATCH_OPS="${PATCH_OPS},${REMOVE_STARTUP_PROBE}"
         else
-            PATCH_OPS="${ENV_PATCH}"
+            PATCH_OPS="${REMOVE_STARTUP_PROBE}"
         fi
+    fi
 
-        # Increment counter for next env var
-        ENV_COUNT=$((ENV_COUNT + 1))
-    done
+    # Check if readinessProbe exists
+    if kubectl --kubeconfig="${KUBECONFIG}" get deployment "${INFERENCE_DEPLOYMENT}" -n "${NAMESPACE}" -o jsonpath='{.spec.template.spec.containers[0].readinessProbe}' 2>/dev/null | grep -q .; then
+        REMOVE_READINESS_PROBE=$(cat <<EOF
+  {
+    "op": "remove",
+    "path": "/spec/template/spec/containers/0/readinessProbe"
+  }
+EOF
+)
+        if [ -n "${PATCH_OPS}" ]; then
+            PATCH_OPS="${PATCH_OPS},${REMOVE_READINESS_PROBE}"
+        else
+            PATCH_OPS="${REMOVE_READINESS_PROBE}"
+        fi
+    fi
 fi
 
 # Create final JSON patch
@@ -226,9 +279,15 @@ echo "${PATCH_JSON}" | kubectl --kubeconfig="${KUBECONFIG}" patch deployment "${
 echo "  Waiting for inference server rollout to complete..."
 kubectl --kubeconfig="${KUBECONFIG}" rollout status deployment/"${INFERENCE_DEPLOYMENT}" -n "${NAMESPACE}" --timeout=900s
 
-# Wait an additional 30 seconds for the server to fully initialize
-echo "  Waiting 30 seconds for server initialization..."
-sleep 30
+# Wait for the server to fully initialize
+# LMCache images need extra time without readiness probes
+if [ "${USE_LMCACHE_IMAGE}" = "true" ]; then
+    echo "  Waiting 120 seconds for lmcache server initialization..."
+    sleep 120
+else
+    echo "  Waiting 30 seconds for server initialization..."
+    sleep 30
+fi
 
 echo "  Inference server configured successfully"
 
