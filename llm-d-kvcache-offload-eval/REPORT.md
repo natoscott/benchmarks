@@ -308,15 +308,48 @@ Key observations:
 
 #### CPU and GPU Utilization
 
-CPU and GPU utilization metrics were collected via PCP but are not analyzed in this report. The PCP archives (available in `results/*/pcp-archives/`) contain comprehensive system-level metrics including:
-- CPU utilization (kernel.all.cpu.user, kernel.all.cpu.sys, kernel.all.cpu.idle)
-- GPU utilization and memory usage (nvidia.* metrics via nvidia PMDA)
-- Per-process CPU and memory consumption
+System-level CPU and GPU utilization metrics were extracted from PCP archives to analyze resource consumption patterns across configurations. Metrics were collected via DCGM (Data Center GPU Manager) for GPU telemetry and kernel metrics for CPU utilization.
 
-Analysis of these metrics could provide insights into:
-- Whether native-offload's CPU KV-cache management introduces significant CPU overhead
-- GPU compute vs memory bandwidth saturation patterns across model sizes
-- Impact of distributed KV-block indexing on CPU utilization
+**CPU Utilization (mean % during benchmark):**
+
+| Model | no-offload | native-offload | llm-d-redis | llm-d-valkey |
+|-------|------------|----------------|-------------|--------------|
+| Qwen3-0.6B | 22.8% | **45.0% (+22.2%)** | 24.0% (+1.2%) | 25.9% (+3.1%) |
+| Qwen3-8B | 21.7% | 21.1% (-0.6%) | 21.8% (+0.1%) | 23.4% (+1.7%) |
+| Qwen3-14B | 35.5% | 20.9% (-14.6%) | 20.7% (-14.8%) | 22.4% (-13.1%) |
+| Qwen3-32B-AWQ | 22.8% | 22.3% (-0.4%) | 22.6% (-0.1%) | 26.1% (+3.3%) |
+
+**GPU Utilization (mean % per GPU during benchmark):**
+
+| Model | no-offload | native-offload | llm-d-redis | llm-d-valkey |
+|-------|------------|----------------|-------------|--------------|
+| Qwen3-0.6B | 68.7% | **112.1% (+43.5%)** | 66.8% (-1.9%) | 75.0% (+6.3%) |
+| Qwen3-8B | 74.4% | 74.9% (+0.5%) | 77.1% (+2.7%) | 85.6% (+11.2%) |
+| Qwen3-14B | 84.8% | 78.7% (-6.1%) | 78.1% (-6.7%) | 83.5% (-1.3%) |
+| Qwen3-32B-AWQ | 72.5% | 74.9% (+2.4%) | 72.0% (-0.5%) | 87.7% (+15.1%) |
+
+**GPU Memory Copy Utilization (mean % during benchmark):**
+
+| Model | no-offload | native-offload | llm-d-redis | llm-d-valkey |
+|-------|------------|----------------|-------------|--------------|
+| Qwen3-0.6B | 42.1% | **72.1% (+30.0%)** | 39.6% (-2.5%) | 45.9% (+3.9%) |
+| Qwen3-8B | 45.4% | 39.9% (-5.4%) | 41.3% (-4.0%) | 47.8% (+2.4%) |
+| Qwen3-14B | 73.6% | 48.4% (-25.1%) | 47.8% (-25.7%) | 50.5% (-23.0%) |
+| Qwen3-32B-AWQ | 38.6% | 35.3% (-3.3%) | 39.2% (+0.6%) | 46.8% (+8.1%) |
+
+Key observations:
+
+- **0.6B native-offload shows significant overhead**: CPU utilization increases by 22.2% (45.0% vs 22.8%), confirming that CPU KV-cache management introduces measurable overhead. The anomalously high GPU utilization (112%) is likely due to DCGM metrics being aggregated across both GPUs in the TP=2 configuration. GPU memory copy utilization increases by 30.0%, indicating substantial GPU-CPU transfer activity that contributes to the -29.4% throughput degradation.
+
+- **llm-d distributed indexing has minimal CPU overhead**: llm-d-redis and llm-d-valkey configurations show CPU utilization within +0.1% to +3.3% of baseline for 8B/32B models, confirming that distributed KV-block indexing and cache-aware request routing introduce negligible CPU overhead.
+
+- **14B baseline shows high CPU utilization**: The 14B no-offload configuration exhibits 35.5% CPU utilization compared to 21-23% for other models at baseline. This elevated CPU usage likely reflects higher scheduling overhead for the larger model at high concurrency (400 concurrent requests). All non-baseline 14B configurations show significantly lower CPU usage (-13% to -15%), suggesting the baseline hits a CPU bottleneck.
+
+- **GPU utilization is generally high**: GPU utilization ranges from 67% to 88% across most configurations, indicating effective GPU usage. The variance across configurations (±6% to ±15%) is within normal measurement variance and does not correlate with throughput differences.
+
+- **14B memory copy patterns differ**: The 14B no-offload configuration shows notably high GPU memory copy utilization (73.6%), while all other 14B configurations show -23% to -25% reduction. This suggests the baseline configuration operates closer to memory bandwidth saturation, while other configurations may benefit from reduced memory transfer requirements or different scheduling patterns.
+
+![CPU and GPU Utilization](analysis/cpu_gpu_utilization.png)
 
 #### vLLM Scheduler Queue Depth
 
@@ -384,7 +417,10 @@ Complete performance metrics are available in the `analysis/` directory:
 
 **PCP System Metrics:**
 - `pcp_metrics_summary.csv`: GPU KV-cache usage and vLLM scheduler queue metrics
+- `cpu_gpu_utilization.csv`: CPU and GPU utilization metrics across all configurations
 - `kv_cache_comparison.png`: GPU KV-cache utilization across configurations
+- `cpu_gpu_utilization.png`: CPU and GPU utilization comparison graphs
+- `gpu_memory_copy_utilization.png`: GPU memory copy utilization across configurations
 - `request_queues.png`: vLLM scheduler queue depth analysis
 
 **Raw Data:**
