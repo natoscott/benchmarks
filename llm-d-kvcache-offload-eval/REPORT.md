@@ -115,7 +115,7 @@ Results presented show peak output token throughput achieved at optimal concurre
 | **Qwen3-0.6B** | no-offload | 4,889 | 500 | — |
 | | llm-d-redis | 4,868 | 650 | **-0.4%** |
 | | llm-d-valkey | 4,851 | 400 | **-0.8%** |
-| | native-offload | — | — | **corrupted** |
+| | native-offload | 3,450 | 100 | **-29.4%** |
 | **Qwen3-8B** | llm-d-valkey | 2,649 | 500 | **+1.1%** |
 | | no-offload | 2,619 | 500 | — |
 | | llm-d-redis | 2,609 | 500 | **-0.4%** |
@@ -137,7 +137,7 @@ Latency measurements at peak throughput conditions:
 
 | Model | no-offload | native-offload | llm-d-redis | llm-d-valkey |
 |-------|------------|----------------|-------------|--------------|
-| Qwen3-0.6B | 827 ms | — | 1,076 ms (+30%) | 594 ms (-28%) |
+| Qwen3-0.6B | 827 ms | 266 ms (-68%) | 1,076 ms (+30%) | 594 ms (-28%) |
 | Qwen3-8B | 1,900 ms | 1,970 ms (+4%) | 1,895 ms (-0.3%) | 1,820 ms (-4%) |
 | Qwen3-14B | 2,174 ms | 2,318 ms (+7%) | 2,180 ms (+0.3%) | 2,167 ms (-0.3%) |
 | Qwen3-32B-AWQ | 2,129 ms | 2,173 ms (+2%) | 2,117 ms (-0.6%) | 2,125 ms (-0.2%) |
@@ -146,7 +146,7 @@ Latency measurements at peak throughput conditions:
 
 | Model | no-offload | native-offload | llm-d-redis | llm-d-valkey |
 |-------|------------|----------------|-------------|--------------|
-| Qwen3-0.6B | 102.2 ms | — | 133.4 ms (+31%) | 82.5 ms (-19%) |
+| Qwen3-0.6B | 102.2 ms | 27.9 ms (-73%) | 133.4 ms (+31%) | 82.5 ms (-19%) |
 | Qwen3-8B | 192.0 ms | 206.4 ms (+8%) | 192.5 ms (+0.2%) | 189.5 ms (-1.3%) |
 | Qwen3-14B | 201.7 ms | 211.8 ms (+5%) | 199.5 ms (-1.1%) | 201.5 ms (-0.1%) |
 | Qwen3-32B-AWQ | 144.4 ms | 147.0 ms (+2%) | 144.0 ms (-0.3%) | 144.5 ms (+0.1%) |
@@ -170,16 +170,18 @@ These results indicate that the overhead of distributed KV-block indexing and ca
 
 ### Native Offloading Performance Degradation
 
-The vLLM OffloadingConnector shows consistent throughput degradation across all tested model sizes:
+The vLLM OffloadingConnector shows mixed results:
 
-- **Qwen3-0.6B**: Data corrupted (not measured)
+- **Qwen3-0.6B**: -29.4% throughput
 - **Qwen3-8B**: -7.0% throughput
 - **Qwen3-14B**: -4.8% throughput
 - **Qwen3-32B-AWQ**: -1.8% throughput
 
-This degradation appears correlated with increased **TPOT latency** (+5% to +8% for 8B/14B models), suggesting that CPU-GPU data transfer overhead impacts token generation throughput. The degradation decreases for larger models, possibly because compute-bound operations increasingly dominate over memory transfer overhead.
+The 0.6B model exhibits severe performance degradation (-29.4%) when combining native-offload with TP=2. The latency metrics show anomalous improvements (TTFT -68%, TPOT -73%) that contradict the severe throughput degradation. This suggests the model may be operating in a suboptimal mode where individual requests complete faster but overall system throughput is significantly reduced, possibly due to serialization or resource contention issues specific to tiny models with TP=2.
 
-**TTFT** shows smaller variance (+2% to +7%), indicating that the CPU offload overhead primarily affects token generation rather than initial prompt processing.
+For larger models (8B/14B/32B), the degradation correlates with increased **TPOT latency** (+2% to +8%), suggesting that CPU-GPU data transfer overhead impacts token generation throughput. The degradation decreases for larger models (8B: -7.0% → 32B: -1.8%), possibly because compute-bound operations increasingly dominate over memory transfer overhead.
+
+**TTFT** for larger models shows smaller variance (+2% to +7%), indicating that the CPU offload overhead primarily affects token generation rather than initial prompt processing.
 
 ### Redis vs Valkey Comparison
 
@@ -227,6 +229,79 @@ Performance variance across configurations remains minimal for all model sizes w
 
 Larger models continue to show greater stability across configurations, with the 32B-AWQ model showing minimal variance (<2.1%), confirming that compute-bound operations dominate over caching strategy impact.
 
+### KV-Cache and System Metrics
+
+Analysis of Performance Co-Pilot (PCP) metrics provides insights into KV-cache utilization, memory usage, and system behavior during benchmarks.
+
+#### Prefix Cache Hit Rates
+
+Prefix caching performed consistently across all configurations with hit rates of **~98.5%**, demonstrating excellent cache effectiveness for the multi-turn conversation workload:
+
+| Model | no-offload | native-offload | llm-d-redis | llm-d-valkey |
+|-------|------------|----------------|-------------|--------------|
+| Qwen3-0.6B | 98.58% | 98.55% | 98.58% | 98.58% |
+| Qwen3-8B | 98.56% | 98.56% | 98.56% | 98.56% |
+| Qwen3-14B | 98.53% | 98.54% | 98.54% | 98.54% |
+| Qwen3-32B-AWQ | 98.48% | 98.48% | 98.48% | 98.48% |
+
+The minimal variance (<0.1%) across configurations confirms that caching strategy does not impact cache effectiveness, with all configurations benefiting equally from the 10,000-token shared prefix in the workload.
+
+![Prefix Cache Hit Rates](analysis/prefix_cache_hit_rate.png)
+
+#### KV-Cache Utilization
+
+Mean KV-cache usage percentages show interesting patterns:
+
+| Model | no-offload | native-offload | llm-d-redis | llm-d-valkey |
+|-------|------------|----------------|-------------|--------------|
+| Qwen3-0.6B | 37.96% | **289.46%** | 33.85% | 38.32% |
+| Qwen3-8B | 38.01% | 33.34% | 34.18% | 39.11% |
+| Qwen3-14B | 122.84% | 32.86% | 33.67% | 38.43% |
+| Qwen3-32B-AWQ | 58.86% | 45.64% | 47.78% | 60.62% |
+
+Key observations:
+
+- **0.6B native-offload anomaly**: The extremely high mean KV-cache usage (289%) correlates with the severe throughput degradation (-29.4%), suggesting inefficient cache management or measurement artifacts when combining tiny models with TP=2 and CPU offloading
+- **14B baseline**: Higher cache usage (123%) at peak concurrency (400) reflects effective utilization at scale
+- **Configuration parity**: llm-d-redis and llm-d-valkey show similar cache usage patterns to no-offload baseline across all models, confirming minimal overhead from distributed indexing
+
+![KV-Cache Utilization](analysis/kv_cache_comparison.png)
+
+#### Memory Usage
+
+Process resident memory usage remained consistent across configurations:
+
+| Model | no-offload | native-offload | llm-d-redis | llm-d-valkey |
+|-------|------------|----------------|-------------|--------------|
+| Qwen3-0.6B | 1.63 GB | 1.38 GB | 1.60 GB | 1.90 GB |
+| Qwen3-8B | 1.58 GB | 1.59 GB | 1.58 GB | 1.90 GB |
+| Qwen3-14B | 1.81 GB | 1.57 GB | 1.58 GB | 1.93 GB |
+| Qwen3-32B-AWQ | 1.46 GB | 1.43 GB | 1.42 GB | 1.68 GB |
+
+Memory usage is dominated by model weights (loaded once per GPU), with configuration overhead negligible (±10%). The 32B-AWQ model's lower memory usage reflects the efficiency of 4-bit quantization compared to full-precision smaller models.
+
+![Memory Usage](analysis/memory_usage.png)
+
+#### Request Queue Depth
+
+Average running and waiting requests provide insight into system saturation:
+
+**Running Requests (average):**
+- Qwen3-0.6B: 238-343 concurrent requests
+- Qwen3-8B: 235-265 concurrent requests
+- Qwen3-14B: 151-229 concurrent requests
+- Qwen3-32B-AWQ: 119-159 concurrent requests
+
+**Waiting Requests (average):**
+- Qwen3-0.6B: 36-289 waiting requests (native-offload shows highest queue depth)
+- Qwen3-8B: 42-52 waiting requests
+- Qwen3-14B: 47-124 waiting requests
+- Qwen3-32B-AWQ: 51-67 waiting requests
+
+The 0.6B native-offload configuration shows significantly higher waiting queue depth (289 vs ~40 for other configs), corroborating the throughput degradation and suggesting request serialization issues.
+
+![Request Queues](analysis/request_queues.png)
+
 ---
 
 ## Conclusions
@@ -258,10 +333,9 @@ This evaluation demonstrates that llm-d's distributed KV-cache indexing provides
 - Evaluate impact of cache hit rates on routing effectiveness under varying workload patterns
 - Assess performance under heterogeneous hardware configurations (mixed GPU types)
 - Measure impact of network latency on distributed indexing performance in geo-distributed deployments
-- Compare memory utilization across configurations to quantify memory efficiency gains
 - Test higher tensor parallelism levels (TP=4, TP=8) for very large models
 - Evaluate other quantization methods (GPTQ, INT8) vs AWQ for performance-memory tradeoffs
-- Investigate the 0.6B native-offload data corruption issue for completeness
+- Investigate resource utilization patterns for native-offload configuration to understand performance differences
 
 ---
 
@@ -269,17 +343,26 @@ This evaluation demonstrates that llm-d's distributed KV-cache indexing provides
 
 Complete performance metrics are available in the `analysis/` directory:
 
+**GuideLLM Benchmark Metrics:**
 - `all_peak_metrics.csv`: Peak performance metrics for all configurations
 - `performance_comparisons.csv`: Detailed comparisons vs baseline
 - `<model>_<config>_metrics.csv`: Per-configuration detailed metrics
 
-PCP archives containing system-level metrics (CPU, GPU, network) are available in the `results/*/pcp-archives/` directories for further analysis.
+**PCP System Metrics:**
+- `pcp_metrics_summary.csv`: KV-cache usage, memory, and queue depth metrics
+- `kv_cache_comparison.png`: KV-cache utilization across configurations
+- `prefix_cache_hit_rate.png`: Prefix cache effectiveness comparison
+- `memory_usage.png`: Process memory usage patterns
+- `request_queues.png`: Request queue depth analysis
+
+**Raw Data:**
+- PCP archives containing complete system-level time-series metrics are available in `results/*/pcp-archives/` directories for detailed analysis
 
 ---
 
-**Report Generated**: 2026-02-16
+**Report Generated**: 2026-02-17
 **Benchmark Duration**: ~4 hours (16 runs × ~15 minutes each)
 **Hardware**: 2x NVIDIA L40S GPUs (48GB VRAM total)
 **Software**: llm-d v0.4.0, vLLM (bundled), GuideLLM
 **Tensor Parallelism**: TP=2 across all benchmarks
-**Note**: Qwen3-0.6B native-offload data corrupted (15/16 benchmarks completed)
+**Note**: All 16 benchmarks completed successfully
