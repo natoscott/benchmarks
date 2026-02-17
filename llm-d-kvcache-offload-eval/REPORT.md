@@ -24,7 +24,7 @@ The llm-d EPP (Endpoint Provisioning Proxy) distributed KV-block indexing shows 
 **System:** OpenShift cluster on IBM Cloud
 - **GPUs**: 2x NVIDIA L40S (48GB total VRAM)
   - Tensor Parallelism: 2 GPUs per model
-- **CPU**: 32 vCPUs (exact model not captured in metrics)
+- **CPU**: 32 vCPUs (IBM cloud virtual CPUs)
 - **Memory**: Sufficient for 10,000 CPU KV-cache blocks
 - **Network**: Cluster networking with Redis/Valkey services
 
@@ -354,7 +354,7 @@ Key observations:
 
 #### vLLM Scheduler Queue Depth
 
-These metrics represent vLLM's internal request scheduler state (not kernel I/O queues). Average running and waiting requests provide insight into vLLM scheduler saturation and request processing efficiency:
+These metrics represent vLLM's internal request scheduler state. Average running and waiting requests provide insight into vLLM scheduler saturation and request processing efficiency:
 
 **Running Requests (average):**
 - Qwen3-0.6B: 238-343 concurrent requests
@@ -426,12 +426,3 @@ Complete performance metrics are available in the `analysis/` directory:
 
 **Raw Data:**
 - PCP archives containing complete system-level time-series metrics are available in `results/*/pcp-archives/` directories for detailed analysis
-
----
-
-**Report Generated**: 2026-02-17
-**Benchmark Duration**: ~4 hours (16 runs × ~15 minutes each)
-**Hardware**: 2x NVIDIA L40S GPUs (48GB VRAM total)
-**Software**: llm-d v0.4.0, vLLM v0.11.2, GuideLLM
-**Tensor Parallelism**: TP=2 across all benchmarks
-**Note**: All 16 benchmarks completed successfully
