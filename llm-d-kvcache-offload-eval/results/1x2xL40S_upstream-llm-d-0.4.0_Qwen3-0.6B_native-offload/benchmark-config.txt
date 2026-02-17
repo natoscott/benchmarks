@@ -1,9 +1,9 @@
 Run ID: 1x2xL40S_upstream-llm-d-0.4.0_Qwen3-0.6B_native-offload
-Date: Tue 17 Feb 2026 13:43:36 AEDT
+Date: Tue 17 Feb 2026 16:19:53 AEDT
 Target: http://llm-d-inference-gateway-istio:80
 Rate Type: concurrent
-Rate: 1,50,100
-Max Seconds: 60
+Rate: 1,50,100,150,300,400,500,650
+Max Seconds: 120
 Random Seed: 889
 Prompt Tokens: 128
 Output Tokens: 128
@@ -17,7 +17,7 @@ Model Name: Qwen3-0.6B
 Parameters: native-offload
 Namespace: llm-d-pfc-cpu
 Interactive Pod: interactive-pod-6b6bdc56c8-hgptz
-PCP Pods: pcp-54v7h
+PCP Pods: pcp-kld86
 PCP Pod Count: 1
 Inference Deployment: llm-d-model-server
 vLLM Extra Args: --kv-transfer-config '{"kv_connector":"OffloadingConnector","kv_role":"kv_both","kv_connector_extra_config":{"num_cpu_blocks":10000}}'
