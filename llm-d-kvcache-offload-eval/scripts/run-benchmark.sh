@@ -346,6 +346,10 @@ kubectl --kubeconfig="${KUBECONFIG}" rollout restart deployment/"${EPP_DEPLOYMEN
 echo "  Waiting for EPP deployment rollout to complete..."
 kubectl --kubeconfig="${KUBECONFIG}" rollout status deployment/"${EPP_DEPLOYMENT}" -n "${NAMESPACE}" --timeout=120s
 
+# Wait for EPP to fully initialize and connect to model server
+echo "  Waiting 30 seconds for EPP initialization..."
+sleep 30
+
 echo "  EPP configured successfully"
 
 echo ""
