@@ -11,7 +11,7 @@ set -e
 # Configuration list - can be overridden via environment
 RUNS="${RUNS:-no-offload native-offload lmcache-local lmcache-redis lmcache-valkey llm-d-redis llm-d-valkey}"
 MODELS="${MODELS:-Qwen/Qwen3-0.6B Qwen/Qwen3-8B Qwen/Qwen3-14B}"
-REPLICAS="${REPLICAS:-1 2 4}"
+REPLICAS="${REPLICAS:-1}"
 
 # Export common variables that run-benchmark.sh will use
 # These can be overridden from environment
@@ -23,6 +23,12 @@ export HARDWARE="${HARDWARE:-1x2xL40S}"
 export SOFTWARE="${SOFTWARE:-upstream-llm-d-0.4.0}"
 export TURNS="${TURNS:-5}"
 export INFERENCE_DEPLOYMENT="${INFERENCE_DEPLOYMENT:-llm-d-model-server}"
+
+# GPU configuration - can be overridden for different hardware setups
+# TENSOR_PARALLEL_SIZE: Number of GPUs per replica for tensor parallelism
+# GPUS_PER_REPLICA: Same as TENSOR_PARALLEL_SIZE, used for resource allocation
+export TENSOR_PARALLEL_SIZE="${TENSOR_PARALLEL_SIZE:-2}"
+export GPUS_PER_REPLICA="${TENSOR_PARALLEL_SIZE}"
 
 # Convert comma-separated rates to array
 IFS=',' read -ra RATES <<< "$RATE_LIST"

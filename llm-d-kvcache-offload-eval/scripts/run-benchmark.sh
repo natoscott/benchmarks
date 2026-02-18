@@ -26,6 +26,8 @@ VLLM_EXTRA_ARGS="${VLLM_EXTRA_ARGS:-}"
 VLLM_ENV_VARS="${VLLM_ENV_VARS:-}"
 CONTAINER_IMAGE="${CONTAINER_IMAGE:-}"
 INFERENCE_DEPLOYMENT="${INFERENCE_DEPLOYMENT:-llm-d-model-server}"
+TENSOR_PARALLEL_SIZE="${TENSOR_PARALLEL_SIZE:-2}"
+GPUS_PER_REPLICA="${GPUS_PER_REPLICA:-${TENSOR_PARALLEL_SIZE}}"
 
 # EPP configuration (optional)
 # If EPP_BACKEND_CONFIG is set, the EPP ConfigMap will be updated and EPP deployment restarted
@@ -177,10 +179,10 @@ if [ "${USE_LMCACHE_IMAGE}" = "true" ]; then
 
     # Build args array with all lmcache arguments
     # All lmcache configs use --kv-transfer-config and --enable-prefix-caching
-    VLLM_ARGS_ARRAY='["serve","'${MODEL}'","--tensor-parallel-size","2","--port","8000","--max-num-seq","1024","--kv-transfer-config","{\"kv_connector\":\"LMCacheConnectorV1\",\"kv_role\":\"kv_both\"}","--enable-prefix-caching"]'
+    VLLM_ARGS_ARRAY='["serve","'${MODEL}'","--tensor-parallel-size","'${TENSOR_PARALLEL_SIZE}'","--port","8000","--max-num-seq","1024","--kv-transfer-config","{\"kv_connector\":\"LMCacheConnectorV1\",\"kv_role\":\"kv_both\"}","--enable-prefix-caching"]'
 else
     # llm-d images use bash -c with exec vllm serve
-    BASE_VLLM_ARGS="exec vllm serve ${MODEL} --tensor-parallel-size 2 --port 8000 --max-num-seq 1024"
+    BASE_VLLM_ARGS="exec vllm serve ${MODEL} --tensor-parallel-size ${TENSOR_PARALLEL_SIZE} --port 8000 --max-num-seq 1024"
 
     # Append extra args if provided
     if [ -n "${VLLM_EXTRA_ARGS}" ]; then
