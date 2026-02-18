@@ -6,31 +6,60 @@ set -e
 #   ./run-all.sh                          # Run all tests
 #   RUNS="no-offload native-offload" ./run-all.sh   # Run subset
 #   MODELS="Qwen/Qwen3-0.6B" ./run-all.sh           # Single model
+#   REPLICAS="1 2" ./run-all.sh                     # Test specific replica counts
 
 # Configuration list - can be overridden via environment
 RUNS="${RUNS:-no-offload native-offload lmcache-local lmcache-redis lmcache-valkey llm-d-redis llm-d-valkey}"
 MODELS="${MODELS:-Qwen/Qwen3-0.6B Qwen/Qwen3-8B Qwen/Qwen3-14B}"
+REPLICAS="${REPLICAS:-1 2 4}"
 
 # Export common variables that run-benchmark.sh will use
 # These can be overridden from environment
 export KUBECONFIG="${KUBECONFIG:-./kubeconfig}"
 export NAMESPACE="${NAMESPACE:-llm-d-pfc-cpu}"
-export RATE="${RATE:-1,50,100,150,300,400,500,650}"
+export RATE_LIST="${RATE:-1,50,100,150,300,400,500,650}"
 export MAX_SECONDS="${MAX_SECONDS:-120}"
 export HARDWARE="${HARDWARE:-1x2xL40S}"
 export SOFTWARE="${SOFTWARE:-upstream-llm-d-0.4.0}"
+export TURNS="${TURNS:-5}"
+export INFERENCE_DEPLOYMENT="${INFERENCE_DEPLOYMENT:-llm-d-model-server}"
 
-# Iterate through models
-for model in ${MODELS}
+# Convert comma-separated rates to array
+IFS=',' read -ra RATES <<< "$RATE_LIST"
+
+# Iterate through replica counts
+for replicas in ${REPLICAS}
 do
-    # Set model variables
-    export MODEL="$model"  # Full path: Qwen/Qwen3-0.6B
-    export MODEL_NAME="${model##*/}"  # Short name for directory: Qwen3-0.6B
+    # Export current replica count for run-benchmark.sh to use
+    export CURRENT_REPLICAS="${replicas}"
 
-    # Iterate through different KV cache configurations
-    for run in ${RUNS}
+    echo ""
+    echo "=========================================="
+    echo "Setting replica count to: ${replicas}"
+    echo "=========================================="
+
+    # Scale the inference deployment
+    kubectl --kubeconfig="${KUBECONFIG}" scale deployment/"${INFERENCE_DEPLOYMENT}" -n "${NAMESPACE}" --replicas="${replicas}"
+
+    # Wait for scaling to complete
+    echo "Waiting for deployment to scale to ${replicas} replicas..."
+    kubectl --kubeconfig="${KUBECONFIG}" rollout status deployment/"${INFERENCE_DEPLOYMENT}" -n "${NAMESPACE}" --timeout=300s
+
+    # Wait for all replicas to be fully ready
+    echo "Waiting 30 seconds for all replicas to stabilize..."
+    sleep 30
+
+    # Iterate through models
+    for model in ${MODELS}
     do
-        export PARAMETERS="$run"
+        # Set model variables
+        export MODEL="$model"  # Full path: Qwen/Qwen3-0.6B
+        export MODEL_NAME="${model##*/}"  # Short name for directory: Qwen3-0.6B
+
+        # Iterate through different KV cache configurations
+        for run in ${RUNS}
+        do
+            export PARAMETERS="$run"
 
         # Configure vLLM arguments and environment variables for each case
         case "$run" in
@@ -113,21 +142,41 @@ do
                 ;;
         esac
 
-        echo ""
-        echo "******************************************"
-        echo "Benchmark Iteration: $HARDWARE $SOFTWARE $MODEL_NAME $PARAMETERS"
-        echo "Model: $MODEL"
-        echo "vLLM Args: $VLLM_EXTRA_ARGS"
-        if [ -n "$VLLM_ENV_VARS" ]; then
-            echo "vLLM Env:  $VLLM_ENV_VARS"
-        fi
-        echo "EPP Backend: $EPP_BACKEND_CONFIG"
-        echo "Rate: $RATE"
-        echo "Max Seconds: $MAX_SECONDS"
-        echo "******************************************"
-        echo ""
+            # Iterate through individual rate values
+            for rate in "${RATES[@]}"
+            do
+                # Calculate dynamic parameters based on rate and turns
+                export PREFIX_COUNT=$((2 * rate))
+                export SAMPLE_REQUESTS=$((2 * rate * TURNS))
 
-        # Run benchmark (expects to be called from repo root)
-        scripts/run-benchmark.sh
+                # Generate experiment name with metadata
+                export EXPERIMENT_NAME="${HARDWARE}_${SOFTWARE}_${MODEL_NAME}_${PARAMETERS}_replica${replicas}_rate${rate}"
+
+                # Set the current rate (single value, not comma-separated)
+                export RATE="${rate}"
+
+                echo ""
+                echo "******************************************"
+                echo "Benchmark Iteration: $HARDWARE $SOFTWARE $MODEL_NAME $PARAMETERS"
+                echo "Model: $MODEL"
+                echo "Replicas: $replicas"
+                echo "Concurrency (Rate): $RATE"
+                echo "Prefix Count: $PREFIX_COUNT"
+                echo "Max Requests: $SAMPLE_REQUESTS"
+                echo "Turns: $TURNS"
+                echo "vLLM Args: $VLLM_EXTRA_ARGS"
+                if [ -n "$VLLM_ENV_VARS" ]; then
+                    echo "vLLM Env:  $VLLM_ENV_VARS"
+                fi
+                echo "EPP Backend: $EPP_BACKEND_CONFIG"
+                echo "Max Seconds: $MAX_SECONDS"
+                echo "Experiment: $EXPERIMENT_NAME"
+                echo "******************************************"
+                echo ""
+
+                # Run benchmark (expects to be called from repo root)
+                scripts/run-benchmark.sh
+            done
+        done
     done
 done
