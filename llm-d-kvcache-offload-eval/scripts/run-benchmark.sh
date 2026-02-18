@@ -8,14 +8,17 @@ NAMESPACE="llm-d-pfc-cpu"
 # Benchmark parameters (customizable)
 TARGET="${TARGET:-http://llm-d-inference-gateway-istio:80}"
 RATE_TYPE="${RATE_TYPE:-concurrent}"
-RATE="${RATE:-1,2,4,8}"
+RATE="${RATE:-1}"
 MAX_SECONDS="${MAX_SECONDS:-30}"
 RANDOM_SEED="${RANDOM_SEED:-889}"
 PROMPT_TOKENS="${PROMPT_TOKENS:-128}"
 OUTPUT_TOKENS="${OUTPUT_TOKENS:-128}"
 PREFIX_TOKENS="${PREFIX_TOKENS:-10000}"
 TURNS="${TURNS:-5}"
-SAMPLE_REQUESTS="${SAMPLE_REQUESTS:-0}"
+PREFIX_COUNT="${PREFIX_COUNT:-2}"
+SAMPLE_REQUESTS="${SAMPLE_REQUESTS:-10}"
+EXPERIMENT_NAME="${EXPERIMENT_NAME:-}"
+REPLICAS="${CURRENT_REPLICAS:-1}"
 
 # Inference server configuration (optional)
 # If VLLM_EXTRA_ARGS is set, the inference server will be restarted with these additional arguments
@@ -39,7 +42,8 @@ MODEL_NAME="${MODEL_NAME:-Qwen3-0.6B}"
 PARAMETERS="${PARAMETERS:-no-cpu-offload}"
 
 # Generate run ID and output directory (no timestamp - results contain timestamps)
-RUN_ID="${HARDWARE}_${SOFTWARE}_${MODEL_NAME}_${PARAMETERS}"
+# Include replicas and rate in the directory structure for better organization
+RUN_ID="${HARDWARE}_${SOFTWARE}_${MODEL_NAME}_${PARAMETERS}_replica${REPLICAS}_rate${RATE}"
 OUTPUT_DIR="./results/${RUN_ID}"
 
 echo "=========================================="
@@ -229,25 +233,33 @@ EOF
         PATCH_OPS="${COMMAND_PATCH},${ARGS_PATCH}"
     fi
 else
-    # For llm-d images, only replace args/0
+    # For llm-d images, reset command to bash and set args to single string
+    COMMAND_PATCH=$(cat <<EOF
+  {
+    "op": "replace",
+    "path": "/spec/template/spec/containers/0/command",
+    "value": ["bash", "-c"]
+  }
+EOF
+)
     ESCAPED_ARGS=$(echo -n "${NEW_ARGS}" | jq -R -s '.')
     ARGS_PATCH=$(cat <<EOF
   {
     "op": "replace",
-    "path": "/spec/template/spec/containers/0/args/0",
-    "value": ${ESCAPED_ARGS}
+    "path": "/spec/template/spec/containers/0/args",
+    "value": [${ESCAPED_ARGS}]
   }
 EOF
 )
 
     if [ -n "${PATCH_OPS}" ]; then
-        PATCH_OPS="${PATCH_OPS},${ARGS_PATCH}"
+        PATCH_OPS="${PATCH_OPS},${COMMAND_PATCH},${ARGS_PATCH}"
     else
-        PATCH_OPS="${ARGS_PATCH}"
+        PATCH_OPS="${COMMAND_PATCH},${ARGS_PATCH}"
     fi
 fi
 
-# Set environment variables using kubectl set env (replaces existing vars instead of appending)
+# Set or clear environment variables using kubectl set env
 if [ -n "${VLLM_ENV_VARS}" ]; then
     echo "  Setting environment variables..."
     # Build env var arguments for kubectl set env
@@ -258,6 +270,11 @@ if [ -n "${VLLM_ENV_VARS}" ]; then
 
     # Use kubectl set env to replace environment variables
     kubectl --kubeconfig="${KUBECONFIG}" set env deployment/"${INFERENCE_DEPLOYMENT}" -n "${NAMESPACE}" --containers=vllm ${ENV_ARGS}
+else
+    # Clear LMCache-specific environment variables when not using LMCache
+    echo "  Clearing LMCache environment variables..."
+    kubectl --kubeconfig="${KUBECONFIG}" set env deployment/"${INFERENCE_DEPLOYMENT}" -n "${NAMESPACE}" --containers=vllm \
+        HOME- LMCACHE_MAX_LOCAL_CPU_SIZE- LMCACHE_REMOTE_URL- LMCACHE_USE_EXPERIMENTAL- PYTHONHASHSEED- 2>/dev/null || true
 fi
 
 # Remove health probes for lmcache images (they don't expose /health endpoint)
@@ -409,12 +426,17 @@ echo "=========================================="
 echo "Run ID: ${RUN_ID}"
 echo "Output Directory: ${OUTPUT_DIR}"
 echo "Namespace: ${NAMESPACE}"
+echo "Replicas: ${REPLICAS}"
 echo "Interactive Pod: ${INTERACTIVE_POD}"
 echo "PCP Pods (${PCP_POD_COUNT}): ${PCP_PODS}"
 echo "Target: ${TARGET}"
-echo "Rate: ${RATE}"
+echo "Rate (Concurrency): ${RATE}"
 echo "Max Seconds: ${MAX_SECONDS}"
-echo "Data: prompt_tokens=${PROMPT_TOKENS},output_tokens=${OUTPUT_TOKENS},prefix_tokens=${PREFIX_TOKENS},turns=${TURNS}"
+echo "Data: prompt_tokens=${PROMPT_TOKENS},output_tokens=${OUTPUT_TOKENS},prefix_tokens=${PREFIX_TOKENS},turns=${TURNS},prefix_count=${PREFIX_COUNT}"
+echo "Max Requests: ${SAMPLE_REQUESTS}"
+if [ -n "${EXPERIMENT_NAME}" ]; then
+    echo "Experiment: ${EXPERIMENT_NAME}"
+fi
 echo "=========================================="
 
 # Create output directory
@@ -430,19 +452,22 @@ Run ID: ${RUN_ID}
 Date: $(date)
 Target: ${TARGET}
 Rate Type: ${RATE_TYPE}
-Rate: ${RATE}
+Rate (Concurrency): ${RATE}
 Max Seconds: ${MAX_SECONDS}
 Random Seed: ${RANDOM_SEED}
 Prompt Tokens: ${PROMPT_TOKENS}
 Output Tokens: ${OUTPUT_TOKENS}
 Prefix Tokens: ${PREFIX_TOKENS}
+Prefix Count: ${PREFIX_COUNT}
 Turns: ${TURNS}
-Sample Requests: ${SAMPLE_REQUESTS}
+Max Requests (Sample Requests): ${SAMPLE_REQUESTS}
 Hardware: ${HARDWARE}
 Software: ${SOFTWARE}
 Model: ${MODEL}
 Model Name: ${MODEL_NAME}
 Parameters: ${PARAMETERS}
+Replicas: ${REPLICAS}
+Experiment Name: ${EXPERIMENT_NAME}
 Namespace: ${NAMESPACE}
 Interactive Pod: ${INTERACTIVE_POD}
 PCP Pods: ${PCP_PODS}
@@ -457,16 +482,20 @@ EOF
 
 echo ""
 echo "Running guidellm benchmark..."
-kubectl --kubeconfig="${KUBECONFIG}" exec -n "${NAMESPACE}" "${INTERACTIVE_POD}" -- \
-    guidellm benchmark run \
-    --target="${TARGET}" \
-    --rate-type="${RATE_TYPE}" \
-    --rate="${RATE}" \
-    --max-seconds="${MAX_SECONDS}" \
-    --random-seed="${RANDOM_SEED}" \
-    --data="{\"prompt_tokens\":${PROMPT_TOKENS},\"output_tokens\":${OUTPUT_TOKENS},\"prefix_tokens\":${PREFIX_TOKENS},\"turns\":${TURNS}}" \
-    --sample-requests="${SAMPLE_REQUESTS}" \
-    --outputs=/models/benchmark.json
+
+# Build guidellm command
+GUIDELLM_CMD="guidellm benchmark run \
+    --target=\"${TARGET}\" \
+    --rate-type=\"${RATE_TYPE}\" \
+    --rate=\"${RATE}\" \
+    --max-seconds=\"${MAX_SECONDS}\" \
+    --random-seed=\"${RANDOM_SEED}\" \
+    --data='{\"prompt_tokens\":${PROMPT_TOKENS},\"output_tokens\":${OUTPUT_TOKENS},\"prefix_tokens\":${PREFIX_TOKENS},\"turns\":${TURNS},\"prefix_count\":${PREFIX_COUNT}}' \
+    --sample-requests=\"${SAMPLE_REQUESTS}\" \
+    --outputs=/models/benchmark.json"
+
+# Execute guidellm command
+kubectl --kubeconfig="${KUBECONFIG}" exec -n "${NAMESPACE}" "${INTERACTIVE_POD}" -- sh -c "${GUIDELLM_CMD}"
 
 END_TIME=$(date +%s)
 echo "Benchmark end time: $(date -d @${END_TIME})"
