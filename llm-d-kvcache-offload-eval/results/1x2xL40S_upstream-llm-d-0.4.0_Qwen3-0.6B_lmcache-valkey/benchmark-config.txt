@@ -1,0 +1,27 @@
+Run ID: 1x2xL40S_upstream-llm-d-0.4.0_Qwen3-0.6B_lmcache-valkey
+Date: Wed 18 Feb 2026 13:54:10 AEDT
+Target: http://llm-d-inference-gateway-istio:80
+Rate Type: concurrent
+Rate: 1,50,100,150,300,400,500,650
+Max Seconds: 120
+Random Seed: 889
+Prompt Tokens: 128
+Output Tokens: 128
+Prefix Tokens: 10000
+Turns: 5
+Sample Requests: 0
+Hardware: 1x2xL40S
+Software: upstream-llm-d-0.4.0
+Model: Qwen/Qwen3-0.6B
+Model Name: Qwen3-0.6B
+Parameters: lmcache-valkey
+Namespace: llm-d-pfc-cpu
+Interactive Pod: interactive-pod-6b6bdc56c8-hgptz
+PCP Pods: pcp-7l87j
+PCP Pod Count: 1
+Inference Deployment: llm-d-model-server
+vLLM Extra Args: --kv-transfer-config '{"kv_connector":"LMCacheConnectorV1","kv_role":"kv_both"}' --enable-prefix-caching
+vLLM Env Vars: HOME=/tmp LMCACHE_REMOTE_URL=valkey://valkey.llm-d-pfc-cpu.svc.cluster.local:6379 LMCACHE_USE_EXPERIMENTAL=true PYTHONHASHSEED=123
+EPP Backend: in-memory
+EPP ConfigMap: llm-d-infpool-epp
+EPP Deployment: llm-d-infpool-epp
