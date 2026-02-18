@@ -267,6 +267,22 @@ EOF
             PATCH_OPS="${REMOVE_READINESS_PROBE}"
         fi
     fi
+
+    # Check if livenessProbe exists
+    if kubectl --kubeconfig="${KUBECONFIG}" get deployment "${INFERENCE_DEPLOYMENT}" -n "${NAMESPACE}" -o jsonpath='{.spec.template.spec.containers[0].livenessProbe}' 2>/dev/null | grep -q .; then
+        REMOVE_LIVENESS_PROBE=$(cat <<EOF
+  {
+    "op": "remove",
+    "path": "/spec/template/spec/containers/0/livenessProbe"
+  }
+EOF
+)
+        if [ -n "${PATCH_OPS}" ]; then
+            PATCH_OPS="${PATCH_OPS},${REMOVE_LIVENESS_PROBE}"
+        else
+            PATCH_OPS="${REMOVE_LIVENESS_PROBE}"
+        fi
+    fi
 fi
 
 # Create final JSON patch
