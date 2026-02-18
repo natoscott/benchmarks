@@ -46,32 +46,59 @@ echo "=========================================="
 echo "Preparing for Benchmark Run"
 echo "=========================================="
 
-# Restart Redis/Valkey pods to clear cache state before benchmarks
+# Determine which cache backend(s) to restart by checking both EPP config and LMCache env vars
+CACHE_BACKENDS_TO_RESTART=""
+
+# Check EPP backend configuration (llm-d-redis, llm-d-valkey)
 if [ "${EPP_BACKEND_CONFIG}" = "redis" ] || [ "${EPP_BACKEND_CONFIG}" = "valkey" ]; then
-    echo "Restarting ${EPP_BACKEND_CONFIG} pod to clear cache state..."
+    CACHE_BACKENDS_TO_RESTART="${EPP_BACKEND_CONFIG}"
+fi
 
-    # Determine which deployment to restart
-    CACHE_DEPLOYMENT="${EPP_BACKEND_CONFIG}"
-
-    OLD_CACHE_PODS=$(kubectl --kubeconfig="${KUBECONFIG}" get pods -n "${NAMESPACE}" -l app="${CACHE_DEPLOYMENT}" -o jsonpath='{.items[*].metadata.name}')
-    if [ -n "${OLD_CACHE_PODS}" ]; then
-        for pod in ${OLD_CACHE_PODS}; do
-            echo "  Deleting ${EPP_BACKEND_CONFIG} pod: ${pod}"
-            kubectl --kubeconfig="${KUBECONFIG}" delete pod -n "${NAMESPACE}" "${pod}" --wait=false 2>/dev/null
-        done
-
-        echo "  Waiting for old ${EPP_BACKEND_CONFIG} pod(s) to terminate..."
-        for pod in ${OLD_CACHE_PODS}; do
-            kubectl --kubeconfig="${KUBECONFIG}" wait --for=delete pod/"${pod}" -n "${NAMESPACE}" --timeout=60s 2>/dev/null || true
-        done
-
-        echo "  Waiting for new ${EPP_BACKEND_CONFIG} pod(s) to be ready..."
-        kubectl --kubeconfig="${KUBECONFIG}" wait --for=condition=ready pod -l app="${CACHE_DEPLOYMENT}" -n "${NAMESPACE}" --timeout=120s
-        echo "  ${EPP_BACKEND_CONFIG} pod(s) restarted successfully"
-    else
-        echo "  Warning: No ${EPP_BACKEND_CONFIG} pods found"
+# Check LMCache remote URL configuration (lmcache-redis, lmcache-valkey)
+if echo "${VLLM_ENV_VARS}" | grep -q "LMCACHE_REMOTE_URL=redis://"; then
+    if [ -z "${CACHE_BACKENDS_TO_RESTART}" ]; then
+        CACHE_BACKENDS_TO_RESTART="redis"
+    elif ! echo "${CACHE_BACKENDS_TO_RESTART}" | grep -q "redis"; then
+        CACHE_BACKENDS_TO_RESTART="${CACHE_BACKENDS_TO_RESTART} redis"
     fi
-    echo ""
+fi
+
+if echo "${VLLM_ENV_VARS}" | grep -q "LMCACHE_REMOTE_URL=valkey://"; then
+    if [ -z "${CACHE_BACKENDS_TO_RESTART}" ]; then
+        CACHE_BACKENDS_TO_RESTART="valkey"
+    elif ! echo "${CACHE_BACKENDS_TO_RESTART}" | grep -q "valkey"; then
+        CACHE_BACKENDS_TO_RESTART="${CACHE_BACKENDS_TO_RESTART} valkey"
+    fi
+fi
+
+# Restart identified cache backends to clear cache state before benchmarks
+if [ -n "${CACHE_BACKENDS_TO_RESTART}" ]; then
+    for CACHE_BACKEND in ${CACHE_BACKENDS_TO_RESTART}; do
+        echo "Restarting ${CACHE_BACKEND} pod to clear cache state..."
+
+        # Determine which deployment to restart
+        CACHE_DEPLOYMENT="${CACHE_BACKEND}"
+
+        OLD_CACHE_PODS=$(kubectl --kubeconfig="${KUBECONFIG}" get pods -n "${NAMESPACE}" -l app="${CACHE_DEPLOYMENT}" -o jsonpath='{.items[*].metadata.name}')
+        if [ -n "${OLD_CACHE_PODS}" ]; then
+            for pod in ${OLD_CACHE_PODS}; do
+                echo "  Deleting ${CACHE_BACKEND} pod: ${pod}"
+                kubectl --kubeconfig="${KUBECONFIG}" delete pod -n "${NAMESPACE}" "${pod}" --wait=false 2>/dev/null
+            done
+
+            echo "  Waiting for old ${CACHE_BACKEND} pod(s) to terminate..."
+            for pod in ${OLD_CACHE_PODS}; do
+                kubectl --kubeconfig="${KUBECONFIG}" wait --for=delete pod/"${pod}" -n "${NAMESPACE}" --timeout=60s 2>/dev/null || true
+            done
+
+            echo "  Waiting for new ${CACHE_BACKEND} pod(s) to be ready..."
+            kubectl --kubeconfig="${KUBECONFIG}" wait --for=condition=ready pod -l app="${CACHE_DEPLOYMENT}" -n "${NAMESPACE}" --timeout=120s
+            echo "  ${CACHE_BACKEND} pod(s) restarted successfully"
+        else
+            echo "  Warning: No ${CACHE_BACKEND} pods found"
+        fi
+        echo ""
+    done
 fi
 
 # Restart PCP pod to get fresh pod/directory for this benchmark run
