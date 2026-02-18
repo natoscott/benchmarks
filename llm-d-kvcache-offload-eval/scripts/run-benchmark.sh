@@ -344,8 +344,8 @@ kubectl --kubeconfig="${KUBECONFIG}" rollout status deployment/"${INFERENCE_DEPL
 # Wait for the server to fully initialize
 # LMCache images need extra time without readiness probes
 if [ "${USE_LMCACHE_IMAGE}" = "true" ]; then
-    echo "  Waiting 120 seconds for lmcache server initialization..."
-    sleep 120
+    echo "  Waiting 180 seconds for lmcache server initialization..."
+    sleep 180
 else
     echo "  Waiting 30 seconds for server initialization..."
     sleep 30
