@@ -343,9 +343,16 @@ kubectl --kubeconfig="${KUBECONFIG}" rollout status deployment/"${INFERENCE_DEPL
 
 # Wait for the server to fully initialize
 # LMCache images need extra time without readiness probes
+# Remote backends (redis/valkey) need even more time to establish connections
 if [ "${USE_LMCACHE_IMAGE}" = "true" ]; then
-    echo "  Waiting 240 seconds for lmcache server initialization..."
-    sleep 240
+    # Check if using remote backend (redis or valkey)
+    if echo "${VLLM_ENV_VARS}" | grep -q "LMCACHE_REMOTE_URL="; then
+        echo "  Waiting 300 seconds for lmcache remote backend initialization..."
+        sleep 300
+    else
+        echo "  Waiting 240 seconds for lmcache server initialization..."
+        sleep 240
+    fi
 else
     echo "  Waiting 30 seconds for server initialization..."
     sleep 30
