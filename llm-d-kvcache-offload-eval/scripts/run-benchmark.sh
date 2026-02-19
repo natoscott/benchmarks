@@ -158,6 +158,51 @@ else
     echo "  No existing PCP pods found"
 fi
 
+# Clean up any existing EPP ConfigMap from previous runs
+echo ""
+echo "Cleaning up previous EPP configuration..."
+kubectl --kubeconfig="${KUBECONFIG}" delete configmap "${EPP_CONFIGMAP}" -n "${NAMESPACE}" --ignore-not-found=true
+
+# Configure EPP based on backend type
+echo ""
+echo "Configuring EPP backend..."
+echo "  Backend: ${EPP_BACKEND_CONFIG}"
+
+case "${EPP_BACKEND_CONFIG}" in
+    "in-memory")
+        MANIFEST_FILE="manifests/epp-configmap-in-memory.yaml"
+        ;;
+    "redis")
+        MANIFEST_FILE="manifests/epp-configmap-redis.yaml"
+        ;;
+    "valkey")
+        MANIFEST_FILE="manifests/epp-configmap-valkey.yaml"
+        ;;
+    *)
+        echo "ERROR: Invalid EPP_BACKEND_CONFIG value: ${EPP_BACKEND_CONFIG}"
+        echo "Valid values: in-memory, redis, valkey"
+        exit 1
+        ;;
+esac
+
+# Apply the ConfigMap from manifest
+echo "  Applying ConfigMap from ${MANIFEST_FILE}..."
+kubectl --kubeconfig="${KUBECONFIG}" apply -f "${MANIFEST_FILE}"
+
+# Restart EPP deployment
+echo "  Restarting EPP deployment..."
+kubectl --kubeconfig="${KUBECONFIG}" rollout restart deployment/"${EPP_DEPLOYMENT}" -n "${NAMESPACE}"
+
+# Wait for rollout
+echo "  Waiting for EPP deployment rollout to complete..."
+kubectl --kubeconfig="${KUBECONFIG}" rollout status deployment/"${EPP_DEPLOYMENT}" -n "${NAMESPACE}" --timeout=120s
+
+# Wait for EPP to fully initialize and connect to model server
+echo "  Waiting 90 seconds for EPP initialization..."
+sleep 90
+
+echo "  EPP configured successfully"
+
 # Always restart inference server to ensure correct model and configuration
 echo ""
 echo "Configuring inference server..."
@@ -359,51 +404,6 @@ else
 fi
 
 echo "  Inference server configured successfully"
-
-# Clean up any existing EPP ConfigMap from previous runs
-echo ""
-echo "Cleaning up previous EPP configuration..."
-kubectl --kubeconfig="${KUBECONFIG}" delete configmap "${EPP_CONFIGMAP}" -n "${NAMESPACE}" --ignore-not-found=true
-
-# Configure EPP based on backend type
-echo ""
-echo "Configuring EPP backend..."
-echo "  Backend: ${EPP_BACKEND_CONFIG}"
-
-case "${EPP_BACKEND_CONFIG}" in
-    "in-memory")
-        MANIFEST_FILE="manifests/epp-configmap-in-memory.yaml"
-        ;;
-    "redis")
-        MANIFEST_FILE="manifests/epp-configmap-redis.yaml"
-        ;;
-    "valkey")
-        MANIFEST_FILE="manifests/epp-configmap-valkey.yaml"
-        ;;
-    *)
-        echo "ERROR: Invalid EPP_BACKEND_CONFIG value: ${EPP_BACKEND_CONFIG}"
-        echo "Valid values: in-memory, redis, valkey"
-        exit 1
-        ;;
-esac
-
-# Apply the ConfigMap from manifest
-echo "  Applying ConfigMap from ${MANIFEST_FILE}..."
-kubectl --kubeconfig="${KUBECONFIG}" apply -f "${MANIFEST_FILE}"
-
-# Restart EPP deployment
-echo "  Restarting EPP deployment..."
-kubectl --kubeconfig="${KUBECONFIG}" rollout restart deployment/"${EPP_DEPLOYMENT}" -n "${NAMESPACE}"
-
-# Wait for rollout
-echo "  Waiting for EPP deployment rollout to complete..."
-kubectl --kubeconfig="${KUBECONFIG}" rollout status deployment/"${EPP_DEPLOYMENT}" -n "${NAMESPACE}" --timeout=120s
-
-# Wait for EPP to fully initialize and connect to model server
-echo "  Waiting 90 seconds for EPP initialization..."
-sleep 90
-
-echo "  EPP configured successfully"
 
 echo ""
 echo "=========================================="
