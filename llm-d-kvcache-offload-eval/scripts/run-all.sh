@@ -76,6 +76,7 @@ do
                 export VLLM_ENV_VARS=""
                 export VLLM_INSTALL_LMCACHE=""
                 export EPP_BACKEND_CONFIG="in-memory"
+                export USE_LMCACHE_IMAGE=""
                 ;;
             "native-offload")
                 # vLLM native CPU offloading with OffloadingConnector
@@ -84,6 +85,7 @@ do
                 export VLLM_ENV_VARS=""
                 export VLLM_INSTALL_LMCACHE=""
                 export EPP_BACKEND_CONFIG="in-memory"
+                export USE_LMCACHE_IMAGE=""
                 ;;
             "lmcache-local")
                 # LMCache local CPU offloading (using official lmcache/vllm-openai image)
@@ -137,6 +139,7 @@ do
                 export VLLM_ENV_VARS=""
                 export VLLM_INSTALL_LMCACHE=""
                 export EPP_BACKEND_CONFIG="redis"
+                export USE_LMCACHE_IMAGE=""
                 ;;
             "llm-d-valkey")
                 # llm-d EPP with Valkey index backend for distributed KV-cache-aware routing
@@ -145,6 +148,7 @@ do
                 export VLLM_ENV_VARS=""
                 export VLLM_INSTALL_LMCACHE=""
                 export EPP_BACKEND_CONFIG="valkey"
+                export USE_LMCACHE_IMAGE=""
                 ;;
         esac
 
