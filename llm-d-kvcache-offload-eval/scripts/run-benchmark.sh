@@ -324,18 +324,22 @@ else
         HOME- LMCACHE_MAX_LOCAL_CPU_SIZE- LMCACHE_REMOTE_URL- LMCACHE_USE_EXPERIMENTAL- PYTHONHASHSEED- 2>/dev/null || true
 fi
 
-# Remove health probes for lmcache images (they don't expose /health endpoint)
-# Check if probes exist before trying to remove them
+# Configure health probes for lmcache images
+# LMCache images don't expose /health endpoint, so we use /v1/models instead
 if [ "${USE_LMCACHE_IMAGE}" = "true" ]; then
+    # Replace readiness probe with HTTP GET to /v1/models
+    # This endpoint only returns 200 when vLLM has fully loaded the model
+    SET_READINESS_PROBE=$(jq -c '.[0]' manifests/lmcache-readiness-probe-patch.json)
+    if [ -n "${PATCH_OPS}" ]; then
+        PATCH_OPS="${PATCH_OPS},${SET_READINESS_PROBE}"
+    else
+        PATCH_OPS="${SET_READINESS_PROBE}"
+    fi
+
+    # Remove liveness and startup probes (not needed for lmcache)
     # Check if startupProbe exists
     if kubectl --kubeconfig="${KUBECONFIG}" get deployment "${INFERENCE_DEPLOYMENT}" -n "${NAMESPACE}" -o jsonpath='{.spec.template.spec.containers[0].startupProbe}' 2>/dev/null | grep -q .; then
-        REMOVE_STARTUP_PROBE=$(cat <<EOF
-  {
-    "op": "remove",
-    "path": "/spec/template/spec/containers/0/startupProbe"
-  }
-EOF
-)
+        REMOVE_STARTUP_PROBE=$(jq -c '.[0]' manifests/lmcache-remove-startup-probe-patch.json)
         if [ -n "${PATCH_OPS}" ]; then
             PATCH_OPS="${PATCH_OPS},${REMOVE_STARTUP_PROBE}"
         else
@@ -343,31 +347,9 @@ EOF
         fi
     fi
 
-    # Check if readinessProbe exists
-    if kubectl --kubeconfig="${KUBECONFIG}" get deployment "${INFERENCE_DEPLOYMENT}" -n "${NAMESPACE}" -o jsonpath='{.spec.template.spec.containers[0].readinessProbe}' 2>/dev/null | grep -q .; then
-        REMOVE_READINESS_PROBE=$(cat <<EOF
-  {
-    "op": "remove",
-    "path": "/spec/template/spec/containers/0/readinessProbe"
-  }
-EOF
-)
-        if [ -n "${PATCH_OPS}" ]; then
-            PATCH_OPS="${PATCH_OPS},${REMOVE_READINESS_PROBE}"
-        else
-            PATCH_OPS="${REMOVE_READINESS_PROBE}"
-        fi
-    fi
-
     # Check if livenessProbe exists
     if kubectl --kubeconfig="${KUBECONFIG}" get deployment "${INFERENCE_DEPLOYMENT}" -n "${NAMESPACE}" -o jsonpath='{.spec.template.spec.containers[0].livenessProbe}' 2>/dev/null | grep -q .; then
-        REMOVE_LIVENESS_PROBE=$(cat <<EOF
-  {
-    "op": "remove",
-    "path": "/spec/template/spec/containers/0/livenessProbe"
-  }
-EOF
-)
+        REMOVE_LIVENESS_PROBE=$(jq -c '.[0]' manifests/lmcache-remove-liveness-probe-patch.json)
         if [ -n "${PATCH_OPS}" ]; then
             PATCH_OPS="${PATCH_OPS},${REMOVE_LIVENESS_PROBE}"
         else
@@ -386,21 +368,30 @@ echo "${PATCH_JSON}" | kubectl --kubeconfig="${KUBECONFIG}" patch deployment "${
 echo "  Waiting for inference server rollout to complete..."
 kubectl --kubeconfig="${KUBECONFIG}" rollout status deployment/"${INFERENCE_DEPLOYMENT}" -n "${NAMESPACE}" --timeout=900s
 
-# Wait for the server to fully initialize
-# LMCache images need extra time without readiness probes
-# Remote backends (redis/valkey) need even more time to establish connections
-if [ "${USE_LMCACHE_IMAGE}" = "true" ]; then
-    # Check if using remote backend (redis or valkey)
-    if echo "${VLLM_ENV_VARS}" | grep -q "LMCACHE_REMOTE_URL="; then
-        echo "  Waiting 300 seconds for lmcache remote backend initialization..."
-        sleep 300
-    else
-        echo "  Waiting 240 seconds for lmcache server initialization..."
-        sleep 240
-    fi
+# Wait for pods to be ready using Kubernetes readiness probes
+echo "  Waiting for inference server pods to be ready..."
+kubectl --kubeconfig="${KUBECONFIG}" wait --for=condition=Ready pod -l llm-d.ai/inference-serving=true -n "${NAMESPACE}" --timeout=600s
+
+# Additional validation: ensure the gateway can route to the backend
+# guidellm validates using the /health endpoint, but lmcache doesn't expose this
+# So we need to ensure the gateway can route successfully before guidellm runs
+echo "  Validating gateway routing..."
+INTERACTIVE_POD=$(kubectl --kubeconfig="${KUBECONFIG}" get pods -n "${NAMESPACE}" -l app=interactive-pod --field-selector=status.phase=Running -o jsonpath='{.items[0].metadata.name}')
+if [ -z "${INTERACTIVE_POD}" ]; then
+    echo "  Warning: No interactive pod found for validation, skipping gateway check"
 else
-    echo "  Waiting 30 seconds for server initialization..."
-    sleep 30
+    # Try to reach the target through the gateway (retry for up to 60 seconds)
+    for i in {1..12}; do
+        if kubectl --kubeconfig="${KUBECONFIG}" exec -n "${NAMESPACE}" "${INTERACTIVE_POD}" -- curl -sf "${TARGET}/v1/models" >/dev/null 2>&1; then
+            echo "  Gateway routing validated successfully"
+            break
+        fi
+        if [ $i -eq 12 ]; then
+            echo "  Warning: Gateway routing validation failed after 60 seconds, proceeding anyway"
+        else
+            sleep 5
+        fi
+    done
 fi
 
 echo "  Inference server configured successfully"
