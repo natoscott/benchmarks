@@ -10,7 +10,7 @@ set -e
 
 # Configuration list - can be overridden via environment
 RUNS="${RUNS:-no-offload native-offload lmcache-local lmcache-redis lmcache-valkey llm-d-redis llm-d-valkey}"
-MODELS="${MODELS:-Qwen/Qwen3-0.6B Qwen/Qwen3-8B Qwen/Qwen3-14B Qwen3-32B-AWQ}"
+MODELS="${MODELS:-Qwen/Qwen3-0.6B Qwen/Qwen3-8B Qwen/Qwen3-14B Qwen/Qwen3-32B-AWQ}"
 REPLICAS="${REPLICAS:-1}"
 
 # Export common variables that run-benchmark.sh will use
