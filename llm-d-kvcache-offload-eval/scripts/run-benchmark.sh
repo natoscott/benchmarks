@@ -123,7 +123,7 @@ if [ -n "${OLD_PCP_PODS}" ]; then
     done
 
     echo "  Waiting for new PCP pod(s) to be ready..."
-    kubectl --kubeconfig="${KUBECONFIG}" wait --for=condition=ready pod -l app.kubernetes.io/name=pcp -n "${NAMESPACE}" --timeout=120s
+    kubectl --kubeconfig="${KUBECONFIG}" wait --for=condition=ready pod -l app.kubernetes.io/name=pcp -n "${NAMESPACE}" --timeout=600s
     echo "  PCP pod(s) restarted successfully"
 
     # Install pcp-zeroconf for 10-second default sampling (temporary workaround until upstream PR merges)
