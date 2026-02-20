@@ -1,0 +1,30 @@
+Run ID: 1x2xL40S_upstream-llm-d-0.4.0_Qwen3-0.6B_lmcache-local_replica1_rate650
+Date: Thu 19 Feb 2026 19:53:54 AEDT
+Target: http://llm-d-inference-gateway-istio:80
+Rate Type: concurrent
+Rate (Concurrency): 650
+Max Seconds: 120
+Random Seed: 889
+Prompt Tokens: 128
+Output Tokens: 128
+Prefix Tokens: 10000
+Prefix Count: 1300
+Turns: 5
+Max Requests (Sample Requests): 6500
+Hardware: 1x2xL40S
+Software: upstream-llm-d-0.4.0
+Model: Qwen/Qwen3-0.6B
+Model Name: Qwen3-0.6B
+Parameters: lmcache-local
+Replicas: 1
+Experiment Name: 1x2xL40S_upstream-llm-d-0.4.0_Qwen3-0.6B_lmcache-local_replica1_rate650
+Namespace: llm-d-pfc-cpu
+Interactive Pod: interactive-pod-6b6bdc56c8-hgptz
+PCP Pods: pcp-52t4v
+PCP Pod Count: 1
+Inference Deployment: llm-d-model-server
+vLLM Extra Args: --kv-transfer-config '{"kv_connector":"LMCacheConnectorV1","kv_role":"kv_both"}' --enable-prefix-caching
+vLLM Env Vars: HOME=/tmp LMCACHE_MAX_LOCAL_CPU_SIZE=4.0 PYTHONHASHSEED=123
+EPP Backend: in-memory
+EPP ConfigMap: llm-d-infpool-epp
+EPP Deployment: llm-d-infpool-epp
