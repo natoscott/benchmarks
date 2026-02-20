@@ -1,0 +1,30 @@
+Run ID: 1x2xL40S_upstream-llm-d-0.4.0_Qwen3-8B_native-offload_replica1_rate650
+Date: Fri 20 Feb 2026 18:15:52 AEDT
+Target: http://llm-d-inference-gateway-istio:80
+Rate Type: concurrent
+Rate (Concurrency): 650
+Max Seconds: 120
+Random Seed: 889
+Prompt Tokens: 128
+Output Tokens: 128
+Prefix Tokens: 10000
+Prefix Count: 1300
+Turns: 5
+Max Requests (Sample Requests): 6500
+Hardware: 1x2xL40S
+Software: upstream-llm-d-0.4.0
+Model: Qwen/Qwen3-8B
+Model Name: Qwen3-8B
+Parameters: native-offload
+Replicas: 1
+Experiment Name: 1x2xL40S_upstream-llm-d-0.4.0_Qwen3-8B_native-offload_replica1_rate650
+Namespace: llm-d-pfc-cpu
+Interactive Pod: interactive-pod-6b6bdc56c8-hgptz
+PCP Pods: pcp-rdlbz
+PCP Pod Count: 1
+Inference Deployment: llm-d-model-server
+vLLM Extra Args: --kv-transfer-config '{"kv_connector":"OffloadingConnector","kv_role":"kv_both","kv_connector_extra_config":{"num_cpu_blocks":10000}}'
+vLLM Env Vars: 
+EPP Backend: in-memory
+EPP ConfigMap: llm-d-infpool-epp
+EPP Deployment: llm-d-infpool-epp
