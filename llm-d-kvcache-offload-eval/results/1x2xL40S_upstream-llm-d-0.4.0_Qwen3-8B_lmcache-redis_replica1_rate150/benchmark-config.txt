@@ -1,0 +1,30 @@
+Run ID: 1x2xL40S_upstream-llm-d-0.4.0_Qwen3-8B_lmcache-redis_replica1_rate150
+Date: Fri 20 Feb 2026 19:30:57 AEDT
+Target: http://llm-d-inference-gateway-istio:80
+Rate Type: concurrent
+Rate (Concurrency): 150
+Max Seconds: 120
+Random Seed: 889
+Prompt Tokens: 128
+Output Tokens: 128
+Prefix Tokens: 10000
+Prefix Count: 300
+Turns: 5
+Max Requests (Sample Requests): 1500
+Hardware: 1x2xL40S
+Software: upstream-llm-d-0.4.0
+Model: Qwen/Qwen3-8B
+Model Name: Qwen3-8B
+Parameters: lmcache-redis
+Replicas: 1
+Experiment Name: 1x2xL40S_upstream-llm-d-0.4.0_Qwen3-8B_lmcache-redis_replica1_rate150
+Namespace: llm-d-pfc-cpu
+Interactive Pod: interactive-pod-6b6bdc56c8-hgptz
+PCP Pods: pcp-4xscp
+PCP Pod Count: 1
+Inference Deployment: llm-d-model-server
+vLLM Extra Args: --kv-transfer-config '{"kv_connector":"LMCacheConnectorV1","kv_role":"kv_both"}' --enable-prefix-caching
+vLLM Env Vars: HOME=/tmp LMCACHE_REMOTE_URL=redis://redis.llm-d-pfc-cpu.svc.cluster.local:6379 LMCACHE_USE_EXPERIMENTAL=true PYTHONHASHSEED=123
+EPP Backend: in-memory
+EPP ConfigMap: llm-d-infpool-epp
+EPP Deployment: llm-d-infpool-epp
