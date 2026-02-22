@@ -506,36 +506,30 @@ echo ""
 echo "Collecting guidellm results..."
 RESULT_FILE="/models/benchmark.json"
 
-# Compress the results file with zstd in the pod before downloading to reduce transfer time
-echo "Compressing guidellm results with zstd..."
-kubectl --kubeconfig="${KUBECONFIG}" exec -n "${NAMESPACE}" "${INTERACTIVE_POD}" -- zstd -q -f --rm "${RESULT_FILE}" 2>/dev/null || \
-    echo "Warning: zstd compression failed or already compressed, trying to copy anyway"
-
-# Use kubectl exec with cat instead of kubectl cp for better reliability with large files
-# Try compressed file first, fall back to uncompressed if needed
+# Download uncompressed results and compress locally (like PCP archives)
+# This avoids streaming large compressed files through kubectl which can truncate
+echo "Downloading guidellm results..."
 set +e  # Temporarily disable exit on error
-if kubectl --kubeconfig="${KUBECONFIG}" exec -n "${NAMESPACE}" "${INTERACTIVE_POD}" -- test -f "${RESULT_FILE}.zst" 2>/dev/null; then
-    echo "Downloading compressed results..."
-    kubectl --kubeconfig="${KUBECONFIG}" exec -n "${NAMESPACE}" "${INTERACTIVE_POD}" -- cat "${RESULT_FILE}.zst" > "${OUTPUT_DIR}/guidellm-results.json.zst" 2>/dev/null
-    COPY_RESULT=$?
-else
-    echo "Downloading uncompressed results..."
-    kubectl --kubeconfig="${KUBECONFIG}" exec -n "${NAMESPACE}" "${INTERACTIVE_POD}" -- cat "${RESULT_FILE}" > "${OUTPUT_DIR}/guidellm-results.json" 2>/dev/null
-    COPY_RESULT=$?
-fi
+kubectl --kubeconfig="${KUBECONFIG}" exec -n "${NAMESPACE}" "${INTERACTIVE_POD}" -- cat "${RESULT_FILE}" > "${OUTPUT_DIR}/guidellm-results.json" 2>/dev/null
+COPY_RESULT=$?
 set -e  # Re-enable exit on error
 
 # Check if file was actually copied (non-empty)
-if [ -s "${OUTPUT_DIR}/guidellm-results.json.zst" ]; then
-    echo "Saved to: ${OUTPUT_DIR}/guidellm-results.json.zst"
-    # Clean up compressed file from pod to prevent reuse in next benchmark
-    kubectl --kubeconfig="${KUBECONFIG}" exec -n "${NAMESPACE}" "${INTERACTIVE_POD}" -- rm -f "${RESULT_FILE}.zst" 2>/dev/null || true
-elif [ -s "${OUTPUT_DIR}/guidellm-results.json" ]; then
-    echo "Saved to: ${OUTPUT_DIR}/guidellm-results.json"
-    # Clean up uncompressed file from pod to prevent reuse in next benchmark
+if [ -s "${OUTPUT_DIR}/guidellm-results.json" ]; then
+    echo "Downloaded to: ${OUTPUT_DIR}/guidellm-results.json"
+
+    # Compress locally with zstd (same approach as PCP archives)
+    echo "Compressing guidellm results with zstd..."
+    zstd -q --rm "${OUTPUT_DIR}/guidellm-results.json" || echo "Warning: Failed to compress guidellm results"
+
+    if [ -s "${OUTPUT_DIR}/guidellm-results.json.zst" ]; then
+        echo "Saved to: ${OUTPUT_DIR}/guidellm-results.json.zst"
+    fi
+
+    # Clean up file from pod to prevent reuse in next benchmark
     kubectl --kubeconfig="${KUBECONFIG}" exec -n "${NAMESPACE}" "${INTERACTIVE_POD}" -- rm -f "${RESULT_FILE}" 2>/dev/null || true
 elif [ ${COPY_RESULT} -eq 0 ]; then
-    echo "Saved guidellm results"
+    echo "WARNING: guidellm results file is empty"
 else
     echo "ERROR: Failed to copy guidellm results"
     exit 1
