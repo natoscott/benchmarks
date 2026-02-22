@@ -1,5 +1,5 @@
 Run ID: 1x2xL40S_upstream-llm-d-0.4.0_Qwen3-0.6B_llm-d-valkey_replica1_rate650
-Date: Fri 20 Feb 2026 10:55:27 AEDT
+Date: Sun 22 Feb 2026 13:26:14 AEDT
 Target: http://llm-d-inference-gateway-istio:80
 Rate Type: concurrent
 Rate (Concurrency): 650
@@ -20,7 +20,7 @@ Replicas: 1
 Experiment Name: 1x2xL40S_upstream-llm-d-0.4.0_Qwen3-0.6B_llm-d-valkey_replica1_rate650
 Namespace: llm-d-pfc-cpu
 Interactive Pod: interactive-pod-6b6bdc56c8-hgptz
-PCP Pods: pcp-7wh7l
+PCP Pods: pcp-mrqgm
 PCP Pod Count: 1
 Inference Deployment: llm-d-model-server
 vLLM Extra Args: 

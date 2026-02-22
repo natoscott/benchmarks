@@ -1,5 +1,5 @@
 Run ID: 1x2xL40S_upstream-llm-d-0.4.0_Qwen3-0.6B_lmcache-valkey_replica1_rate650
-Date: Thu 19 Feb 2026 21:35:33 AEDT
+Date: Sat 21 Feb 2026 20:50:30 AEDT
 Target: http://llm-d-inference-gateway-istio:80
 Rate Type: concurrent
 Rate (Concurrency): 650
@@ -20,7 +20,7 @@ Replicas: 1
 Experiment Name: 1x2xL40S_upstream-llm-d-0.4.0_Qwen3-0.6B_lmcache-valkey_replica1_rate650
 Namespace: llm-d-pfc-cpu
 Interactive Pod: interactive-pod-6b6bdc56c8-hgptz
-PCP Pods: pcp-qvw2l
+PCP Pods: pcp-qsvcq
 PCP Pod Count: 1
 Inference Deployment: llm-d-model-server
 vLLM Extra Args: --kv-transfer-config '{"kv_connector":"LMCacheConnectorV1","kv_role":"kv_both"}' --enable-prefix-caching
