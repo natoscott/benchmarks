@@ -390,14 +390,6 @@ This evaluation demonstrates that llm-d's distributed KV-block indexing introduc
 
 6. **Minimal overhead confirmed**: The minimal performance impact of llm-d's distributed KV-block indexing (<1.2% in all cases) validates the architectural approach for cache-aware routing in multi-pod deployments.
 
-### Recommendations
-
-- **For single-pod deployments**: Use no-offload baseline for maximum performance
-- **For multi-pod deployments**: Use llm-d with Redis or Valkey for cache-aware routing with no performance penalty (<1.2% overhead)
-- **For 14B+ models**: Enable tensor parallelism (TP=2+) for significant throughput improvements (~80% for 14B)
-- **For large models with limited VRAM**: Consider AWQ quantization to run larger models (e.g., 32B-AWQ achieves 53% of 14B throughput)
-- **CPU offload**: Reconsider native-offload unless memory constraints are critical, as performance degradation (1.8-7.0%) may outweigh benefits
-
 ---
 
 ## Appendix: Detailed Metrics
