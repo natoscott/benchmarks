@@ -98,9 +98,9 @@ PCP archives were processed using:
 - **pcp2arrow**: Convert time-series to Parquet format for pandas analysis
 - **pmval**: Extract individual metric time series
 - **pminfo**: Query metric metadata and availability
-- **Python script** (`extract_pcp_metrics.py`): Automated extraction and visualization
-  - Output: `analysis/pcp_metrics_summary.csv`
-  - Graphs: KV-cache utilization, prefix cache hit rates, memory usage, request queues
+- **Python script** (`scripts/extract-pcp-metrics.py`): Automated extraction and visualization
+  - Output: `analysis/pcp_metrics.csv`
+  - Extracts: KV-cache utilization, GPU metrics, CPU usage, memory, request queues
 
 ## Archive Organization
 
