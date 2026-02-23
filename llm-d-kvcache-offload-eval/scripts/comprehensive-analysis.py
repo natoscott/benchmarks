@@ -81,22 +81,26 @@ def extract_guidellm_metrics(result_dir):
 
     benchmark = data['benchmarks'][0]
 
+    # Get metrics object (new guidellm format)
+    metrics = benchmark.get('metrics', {})
+
     # Extract throughput metrics (tokens per second)
-    output_tps_stats = benchmark.get('output_tokens_per_second', {}).get('successful', {})
+    output_tps_stats = metrics.get('output_tokens_per_second', {}).get('successful', {})
     output_tps_mean = output_tps_stats.get('mean')
     output_tps_median = output_tps_stats.get('median')
 
     # Extract latency metrics (milliseconds)
-    ttft_stats = benchmark.get('time_to_first_token_ms', {}).get('successful', {})
+    ttft_stats = metrics.get('time_to_first_token_ms', {}).get('successful', {})
     ttft_mean = ttft_stats.get('mean')
     ttft_median = ttft_stats.get('median')
 
-    tpot_stats = benchmark.get('time_per_output_token_ms', {}).get('successful', {})
+    tpot_stats = metrics.get('time_per_output_token_ms', {}).get('successful', {})
     tpot_mean = tpot_stats.get('mean')
     tpot_median = tpot_stats.get('median')
 
     # Extract request metrics
-    completed = benchmark.get('completed_request_count', 0)
+    request_totals = metrics.get('request_totals', {})
+    completed = request_totals.get('successful', 0)
 
     return {
         'model': model,
@@ -235,7 +239,10 @@ def main():
     print()
 
     # Find peak throughput for each model-scenario
-    peak_results = df.loc[df.groupby(['model', 'scenario'])['output_tps_mean'].idxmax()]
+    # Filter out rows with NaN throughput values first
+    df_valid = df[df['output_tps_mean'].notna()].copy()
+
+    peak_results = df_valid.loc[df_valid.groupby(['model', 'scenario'])['output_tps_mean'].idxmax()]
     peak_results.to_csv('analysis/peak_throughput_all.csv', index=False)
 
     # ANALYSIS AREA 1: llm-d EPP KV-block indexing overhead
@@ -424,7 +431,11 @@ def create_visualizations(df, peak_df):
     plt.close()
 
     # 5. CPU vs GPU utilization comparison (if PCP metrics available)
-    cpu_data = peak_df[peak_df['cpu_util_mean'].notna()]
+    if 'cpu_util_mean' in peak_df.columns:
+        cpu_data = peak_df[peak_df['cpu_util_mean'].notna()]
+    else:
+        cpu_data = []
+
     if len(cpu_data) > 0:
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
 
