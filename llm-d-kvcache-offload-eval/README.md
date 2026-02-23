@@ -19,8 +19,12 @@ This repository contains automation scripts and Kubernetes manifests for benchma
 ```
 llm-d-kvcache-offload-eval/
 ├── scripts/
-│   ├── run-benchmark.sh    # Main benchmark automation script
-│   └── run-all.sh          # Wrapper to run all test configurations
+│   ├── run-benchmark.sh              # Main benchmark automation script
+│   ├── run-all.sh                    # Run all baseline configurations
+│   ├── run-increased-cpu-memory.sh   # Specialized benchmark for increased CPU offload capacity
+│   ├── comprehensive-analysis.py     # Primary analysis script with visualizations
+│   ├── extract-pcp-metrics.py        # PCP archive metrics extraction
+│   └── analyze-all-results.py        # Helper analysis utilities
 ├── manifests/
 │   ├── valkey-deployment.yaml
 │   ├── llm-d-model-cache-pvc.yaml
@@ -37,7 +41,10 @@ llm-d-kvcache-offload-eval/
 │       ├── istio           # PCP pmlogconf for Istio metrics
 │       └── dcgm            # PCP pmlogconf for DCGM GPU metrics
 ├── results/                # Benchmark results (gitignored)
-└── docs/                   # Additional documentation
+├── analysis/               # Generated analysis outputs (CSV, PNG)
+├── archive/                # Archived obsolete scripts
+├── REPORT.md               # Comprehensive benchmark evaluation report
+└── PCPLOGS.md              # PCP archive documentation
 ```
 
 ## Prerequisites
@@ -93,9 +100,10 @@ export NAMESPACE=llm-d-pfc-cpu
 bash run-all.sh
 ```
 
-This will run 21 benchmarks (7 configurations × 3 models):
+This will run benchmarks across multiple configurations and models:
 - Configurations: no-offload, native-offload, lmcache-local, lmcache-redis, lmcache-valkey, llm-d-redis, llm-d-valkey
-- Models: Qwen3-0.6B, Qwen3-7B, Qwen3-14B
+- Models: Qwen3-0.6B, Qwen3-8B, Qwen3-14B, Qwen3-32B-AWQ
+- Concurrency levels: 1, 50, 100, 150, 300, 400, 500, 650
 
 ## Configuration Parameters
 
@@ -160,16 +168,54 @@ Configure pmlogconf files in `manifests/pcp-pmlogconf/` to force metric collecti
 
 ## Benchmark Outputs
 
-Benchmarks generate:
-1. **guidellm JSON reports**: Detailed benchmark results with request/response stats
-2. **PCP archives**: Compressed system and application metrics (`.xz` format)
+Each benchmark run generates:
+1. **guidellm JSON reports**: Detailed benchmark results with throughput, latency, and request/response statistics
+2. **PCP archives**: Compressed system and application metrics from Performance Co-Pilot
 
-Both are saved with timestamps in the results directory:
+Results are organized by experiment name:
 ```
-results/
-├── benchmark_YYYYMMDD_HHMMSS_<parameters>_guidellm.json
-└── benchmark_YYYYMMDD_HHMMSS_<parameters>_pcp.tar.xz
+results/<experiment-name>/
+├── guidellm-results.json.zst    # Compressed benchmark results
+├── benchmark-config.txt          # Run configuration parameters
+└── pcp-archives/                 # Compressed PCP metric archives
+    └── <node-name>/
+        ├── YYYYMMDD.HH.MM.SS.0.zst
+        ├── YYYYMMDD.HH.MM.SS.index.zst
+        └── YYYYMMDD.HH.MM.SS.meta.zst
 ```
+
+## Analysis
+
+After completing benchmark runs, use the analysis scripts to generate insights:
+
+### Comprehensive Analysis
+
+```bash
+# Extract metrics from all benchmark runs and generate visualizations
+python3 scripts/comprehensive-analysis.py
+```
+
+This generates:
+- `analysis/complete_metrics.csv` - All extracted metrics
+- `analysis/peak_throughput_all.csv` - Peak performance summary
+- `analysis/peak_throughput_all_scenarios.png` - Bar chart comparison
+- `analysis/performance_delta_heatmap_all.png` - Performance delta heatmap
+- `analysis/throughput_curve_*.png` - Throughput vs concurrency curves
+- `analysis/latency_comparison_all.png` - TTFT and TPOT comparison
+
+### PCP Metrics Extraction
+
+```bash
+# Extract detailed system metrics from PCP archives
+python3 scripts/extract-pcp-metrics.py
+```
+
+This generates:
+- `analysis/pcp_metrics.csv` - System-level metrics (CPU, GPU, memory, KV-cache)
+
+### Results Report
+
+See [REPORT.md](REPORT.md) for a comprehensive evaluation of KV-cache management strategies with detailed analysis, visualizations, and insights.
 
 ## Model Cache PVC
 
