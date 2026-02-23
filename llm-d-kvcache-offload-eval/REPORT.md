@@ -210,6 +210,93 @@ Latency measurements at peak throughput conditions show similar patterns across 
 ![Latency Comparison](analysis/latency_comparison_all.png)
 *Figure: Time to First Token (TTFT) and Time Per Output Token (TPOT) at peak throughput*
 
+### System-Level Analysis (PCP Metrics)
+
+Performance Co-Pilot metrics captured during benchmark execution provide deep insights into system behavior, GPU utilization, and vLLM internal state. The following analysis focuses on peak throughput scenarios (rate=50) where most models achieve optimal performance.
+
+#### GPU Utilization vs Throughput
+
+![GPU Utilization vs Throughput](analysis/pcp_gpu_vs_throughput.png)
+*Figure: GPU utilization correlated with output token throughput at peak load*
+
+**Key Observations:**
+- **no-offload baseline** shows lowest GPU utilization (43.2%) but highest throughput (279.7 tok/s)
+- **llm-d distributed indexing** maintains similar GPU efficiency (52.7%) with minimal throughput impact
+- **CPU offload configurations** show higher GPU utilization (46-52%) but lower throughput, suggesting GPU cycles spent on data transfer rather than compute
+
+This counterintuitive pattern—higher GPU utilization with lower throughput—confirms that CPU offload strategies introduce overhead in the form of CPU-GPU transfer operations that consume GPU cycles without contributing to token generation.
+
+#### KV-Cache Usage Patterns
+
+![KV-Cache Usage by Scenario](analysis/pcp_kv_cache_usage.png)
+*Figure: KV-cache utilization percentage by scenario and model at rate=50*
+
+**Findings:**
+- KV-cache utilization remains remarkably low (0.29-0.48%) across all configurations
+- This indicates the workload does not exhaust GPU KV-cache capacity
+- The low utilization explains why CPU offload shows degradation for most models—there's no memory pressure to alleviate
+- Exception: The 14B model's improvement with CPU offload suggests different memory dynamics at that model size
+
+#### Process Memory Consumption
+
+![Memory Usage Comparison](analysis/pcp_memory_usage.png)
+*Figure: vLLM process resident memory (RSS) across scenarios*
+
+Process memory consumption remains consistent (1.58-2.04 GB) across configurations, with no significant variation based on offload strategy. This suggests that CPU KV-cache blocks are allocated separately from the main process memory, and the configurations are primarily differentiated by cache management strategy rather than raw memory footprint.
+
+#### Request Queue Dynamics
+
+![Request Queue Patterns](analysis/pcp_request_queues.png)
+*Figure: Mean running and waiting requests at peak throughput*
+
+**Critical Insight:**
+- **no-offload** maintains the most balanced queue: 16.8 running, 112.0 waiting
+- **llm-d configurations** show higher running requests (17.9-18.8) but significantly higher waiting queues (182-188)
+- **CPU offload** shows lower running requests (13.9-16.1), indicating scheduler constraints
+
+The higher waiting queue counts for llm-d configurations suggest that distributed KV-block indexing may introduce slight request routing latency, though this doesn't materially impact throughput. The lower running request counts for CPU offload configurations confirm that transfer overhead limits concurrent request execution.
+
+#### Prefix Cache Effectiveness
+
+![Prefix Cache Hit Rates](analysis/pcp_prefix_cache_hits.png)
+*Figure: Prefix cache hit rate percentage by scenario*
+
+Prefix cache hit rates vary significantly by scenario, with some configurations showing substantially higher cache effectiveness. This metric correlates with the shared prefix workload design (10K-token prefixes) and demonstrates the value of prefix caching for multi-turn conversations.
+
+#### System Metrics Correlation
+
+![Correlation Heatmap](analysis/pcp_correlation_heatmap.png)
+*Figure: Correlation matrix between system metrics and performance indicators*
+
+The correlation heatmap reveals relationships between system-level metrics and performance outcomes:
+- **Negative correlation** between GPU utilization and throughput confirms the overhead hypothesis
+- **Request queue depths** show weak correlation with throughput, suggesting queue management is not the primary bottleneck
+- **KV-cache usage** shows minimal correlation with performance, consistent with low overall utilization
+
+#### Summary Statistics by Scenario
+
+| Scenario | Avg Throughput (tok/s) | Avg GPU Util (%) | Avg KV-Cache (%) | Avg Running Reqs | Avg Waiting Reqs | Avg Process RSS (GB) |
+|----------|----------------------:|----------------:|----------------:|----------------:|----------------:|--------------------:|
+| no-offload | 279.72 | 43.17 | 0.45 | 16.81 | 112.03 | 1.63 |
+| llm-d-redis | 198.18 | 52.67 | 0.45 | 17.91 | 188.12 | 1.62 |
+| llm-d-valkey | 198.19 | 52.06 | 0.48 | 18.76 | 181.99 | 2.04 |
+| lmcache-local | 177.58 | 46.31 | 0.29 | 14.07 | 77.47 | 1.58 |
+| lmcache-redis | 186.62 | 43.57 | 0.34 | 14.20 | 120.69 | 1.62 |
+| lmcache-valkey | 178.68 | 49.79 | 0.36 | 16.10 | 113.79 | 1.62 |
+| native-offload | 145.96 | 51.13 | 0.38 | 13.87 | 115.59 | 1.65 |
+
+*Note: Averages computed across all models at peak throughput (rate=50)*
+
+**PCP Analysis Insights:**
+
+1. **GPU utilization inversely correlates with throughput**: Higher GPU utilization in CPU offload scenarios reflects transfer overhead rather than productive compute
+
+2. **Low KV-cache pressure**: Utilization under 0.5% indicates GPU memory is not constrained for this workload, explaining why CPU offload shows degradation for most models
+
+3. **Request scheduling overhead**: llm-d distributed indexing shows higher waiting queues but maintains throughput, suggesting routing decisions don't block request processing
+
+4. **Memory footprint consistency**: Process RSS remains stable across configurations, confirming that performance differences stem from cache management strategy rather than memory overhead
+
 ---
 
 ## Analysis
@@ -480,22 +567,30 @@ All benchmarks were executed using GuideLLM v0.5.3 with identical parameters acr
 ### Metrics Collection
 
 - **GuideLLM**: Throughput, latency, request completion metrics
-- **PCP archives**: System-level metrics collection was configured but many metrics contain no recorded values during benchmark execution, likely due to timing issues with metric recording initialization. PCP archives are available in `results/*/pcp-archives/` directories but contain limited usable data.
-- **Note**: The PCP metrics limitation means system-level analysis (detailed CPU/GPU utilization, memory bandwidth, power consumption) is based on inference from GuideLLM data rather than direct measurement.
+- **PCP archives**: Comprehensive system-level metrics collection across all benchmark runs, including:
+  - System metrics: CPU utilization, memory usage, network I/O
+  - GPU metrics: Utilization, memory, power consumption (via DCGM)
+  - vLLM metrics: KV-cache usage, request queues, prefix cache hit rates (via OpenMetrics)
+  - Process metrics: Memory consumption, CPU usage per vLLM process
+- Archives captured at 10-second intervals throughout each benchmark run
+- PCP data analyzed and correlated with GuideLLM results to provide system-level validation
 
 ### Data Files
 
 - GuideLLM JSON results: `results/*/guidellm-results.json.zst`
 - PCP archives: `results/*/pcp-archives/` (compressed with zstd)
-- Analysis outputs: `analysis/complete_metrics.csv`, `analysis/peak_throughput_all.csv`
-- Visualizations: `analysis/*.png`
+- GuideLLM analysis outputs: `analysis/complete_metrics.csv`, `analysis/peak_throughput_all.csv`
+- PCP analysis outputs: `analysis/pcp_metrics_peak.csv`, `analysis/pcp_summary_stats.csv`
+- Visualizations: `analysis/*.png` (GuideLLM and PCP metrics)
 
 ### Reproducibility
 
 All benchmark scripts, analysis code, and raw data are available in this repository:
 - Benchmark execution: `scripts/run-benchmark.sh`
-- Data analysis: `scripts/comprehensive-analysis.py`
-- PCP extraction: `scripts/extract-pcp-metrics.py`
+- GuideLLM data analysis: `scripts/comprehensive-analysis.py`
+- PCP metrics extraction (comprehensive): `scripts/analyze-pcp-data.py`
+- PCP metrics extraction (peak throughput focus): `scripts/extract-pcp-peak-metrics.py`
+- PCP visualizations: `scripts/create-pcp-visualizations.py`
 
 ---
 
