@@ -9,7 +9,7 @@ The evaluation addresses two areas:
 1. **llm-d EPP distributed KV-block indexing overhead**: Comparing baseline GPU-only operation against Redis and Valkey-backed distributed indexing for cache-aware request routing
 2. **CPU KV-cache offload strategies**: Comparing vLLM native offloading against LMCache (local CPU and distributed Redis/Valkey backends)
 
-**Key Findings:**
+**Findings:**
 
 - **llm-d EPP distributed indexing achieves performance parity** with baseline (within ±2% for most models)
 - **14B model optimization**: The 14B model shows +10-13% throughput improvement with CPU offload (both native and LMCache), while all other models show degradation
@@ -210,21 +210,21 @@ Latency measurements at peak throughput conditions show similar patterns across 
 ![Latency Comparison](analysis/latency_comparison_all.png)
 *Figure: Time to First Token (TTFT) and Time Per Output Token (TPOT) at peak throughput*
 
-### System-Level Analysis (PCP Metrics)
+### System-Level Analysis
 
-Performance Co-Pilot metrics captured during benchmark execution provide deep insights into system behavior, GPU utilization, and vLLM internal state. The following analysis focuses on peak throughput scenarios (rate=50) where most models achieve optimal performance.
+Performance Co-Pilot metrics captured during benchmark execution provide insights into system behavior, GPU utilization, and vLLM internal state. The following analysis focuses on peak throughput scenarios (rate=50) where most models achieve optimal performance.
 
 #### GPU Utilization vs Throughput
 
 ![GPU Utilization vs Throughput](analysis/pcp_gpu_vs_throughput.png)
 *Figure: GPU utilization correlated with output token throughput at peak load*
 
-**Key Observations:**
+**Observations:**
 - **no-offload baseline** shows lowest GPU utilization (43.2%) but highest throughput (279.7 tok/s)
 - **llm-d distributed indexing** maintains similar GPU efficiency (52.7%) with minimal throughput impact
 - **CPU offload configurations** show higher GPU utilization (46-52%) but lower throughput, suggesting GPU cycles spent on data transfer rather than compute
 
-This counterintuitive pattern—higher GPU utilization with lower throughput—confirms that CPU offload strategies introduce overhead in the form of CPU-GPU transfer operations that consume GPU cycles without contributing to token generation.
+This counterintuitive pattern — higher GPU utilization with lower throughput — suggests that CPU offload strategies introduce overhead in the form of CPU-GPU transfer operations that consume GPU cycles without contributing to token generation.
 
 #### KV-Cache Usage Patterns
 
@@ -249,7 +249,7 @@ Process memory consumption remains consistent (1.58-2.04 GB) across configuratio
 ![Request Queue Patterns](analysis/pcp_request_queues.png)
 *Figure: Mean running and waiting requests at peak throughput*
 
-**Critical Insight:**
+**Insight:**
 - **no-offload** maintains the most balanced queue: 16.8 running, 112.0 waiting
 - **llm-d configurations** show higher running requests (17.9-18.8) but significantly higher waiting queues (182-188)
 - **CPU offload** shows lower running requests (13.9-16.1), indicating scheduler constraints
@@ -287,7 +287,7 @@ The correlation heatmap reveals relationships between system-level metrics and p
 
 *Note: Averages computed across all models at peak throughput (rate=50)*
 
-**PCP Analysis Insights:**
+**Insights:**
 
 1. **GPU utilization inversely correlates with throughput**: Higher GPU utilization in CPU offload scenarios reflects transfer overhead rather than productive compute
 
@@ -312,7 +312,7 @@ The llm-d EPP (Endpoint Provisioning Proxy) provides distributed KV-block indexi
 - **Qwen3-14B**: +3.4% to +10.0% (substantial improvement over baseline)
 - **Qwen3-32B-AWQ**: -0.1% (within measurement variance)
 
-**Key Insight**: The llm-d distributed KV-block indexing introduces **negligible overhead** for most models, with the interesting result that the 14B model shows consistent improvement (+3-10%) across both Redis and Valkey backends. This suggests that cache-aware routing provides measurable benefits for mid-size models where request scheduling optimization has greater impact.
+**Insight**: The llm-d distributed KV-block indexing introduces **negligible overhead** for most models, with the interesting result that the 14B model shows consistent improvement (+3-10%) across both Redis and Valkey backends. This suggests that cache-aware routing provides measurable benefits for mid-size models where request scheduling optimization has greater impact.
 
 **Redis vs Valkey**: Both backends perform identically (within ±1-2%), confirming that backend choice has no measurable performance impact and can be based on operational preferences (licensing, ecosystem compatibility, feature requirements).
 
