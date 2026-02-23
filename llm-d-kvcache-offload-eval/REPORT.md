@@ -12,7 +12,7 @@ The evaluation addresses two critical areas:
 **Key Findings:**
 
 - **llm-d EPP distributed indexing achieves performance parity** with baseline (within ±2% for most models)
-- **Surprising 14B model optimization**: The 14B model shows +10-13% throughput improvement with CPU offload (both native and LMCache), while all other models show degradation
+- **14B model optimization**: The 14B model shows +10-13% throughput improvement with CPU offload (both native and LMCache), while all other models show degradation
 - **vLLM native offloading shows severe degradation** for small models (-29% to -36% for 0.6B/8B)
 - **LMCache distributed caching** performs competitively for the 14B model but shows degradation for other sizes
 - **Redis vs Valkey backends perform identically** across all configurations, providing deployment flexibility
@@ -20,7 +20,7 @@ The evaluation addresses two critical areas:
 
 The llm-d EPP distributed KV-block indexing demonstrates negligible overhead for cache-aware request routing in multi-pod deployments. However, CPU offload strategies show highly model-dependent performance characteristics, with the 14B model representing an optimal size where offload benefits outweigh overhead.
 
-**Important**: These results are specific to the test hardware configuration (2x NVIDIA L40S GPUs, 32 vCPUs, limited CPU memory for offload). Different GPU types, CPU memory capacity, and memory bandwidth characteristics will significantly impact offload effectiveness. The 14B model's performance improvement with CPU offload may shift to different model sizes with alternative hardware configurations.
+**Important**: These results are specific to the test hardware configuration (2x NVIDIA L40S GPUs, 32 vCPUs, limited CPU memory for offload). Different GPU types, CPU memory capacity, and memory bandwidth characteristics will significantly impact offload effectiveness. The 14B model's performance improvement with CPU offload is expected to also occur with different model sizes and alternative hardware configurations.
 
 ---
 
@@ -222,10 +222,10 @@ The llm-d EPP (Endpoint Provisioning Proxy) provides distributed KV-block indexi
 
 - **Qwen3-0.6B**: -0.7% to -1.5% (within measurement variance)
 - **Qwen3-8B**: -0.1% to +0.4% (effectively zero overhead)
-- **Qwen3-14B**: +3.4% to +10.0% (**improvement over baseline**)
+- **Qwen3-14B**: +3.4% to +10.0% (substantial improvement over baseline)
 - **Qwen3-32B-AWQ**: -0.1% (within measurement variance)
 
-**Key Insight**: The llm-d distributed KV-block indexing introduces **negligible overhead** for most models, with the surprising result that the 14B model shows consistent improvement (+3-10%) across both Redis and Valkey backends. This suggests that cache-aware routing provides measurable benefits for mid-size models where request scheduling optimization has greater impact.
+**Key Insight**: The llm-d distributed KV-block indexing introduces **negligible overhead** for most models, with the interesting result that the 14B model shows consistent improvement (+3-10%) across both Redis and Valkey backends. This suggests that cache-aware routing provides measurable benefits for mid-size models where request scheduling optimization has greater impact.
 
 **Redis vs Valkey**: Both backends perform identically (within ±1-2%), confirming that backend choice has no measurable performance impact and can be based on operational preferences (licensing, ecosystem compatibility, feature requirements).
 
