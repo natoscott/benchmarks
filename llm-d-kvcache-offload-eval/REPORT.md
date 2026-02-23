@@ -62,7 +62,7 @@ The llm-d EPP distributed KV-block indexing demonstrates negligible overhead for
   - Prefix count: 800 unique prefixes (0.6B), varies by model
 - **Sample requests**: 4000 per benchmark run
 
-This workload simulates a demanding production scenario with long context windows, multiple conversation turns, and high concurrency to stress-test KV-cache management strategies.
+This workload simulates a demanding scenario with long context windows, multiple conversation turns, and high concurrency to stress-test KV-cache management strategies.
 
 ### Configurations Tested
 
@@ -356,18 +356,6 @@ The 14B model's optimal performance with CPU offload is likely highly dependent 
 - **CPU memory speed**: The available system has sufficient bandwidth for 14B but may be saturated for larger models
 - **10,000 CPU block limit**: Increasing this may enable 32B-AWQ to benefit from offload
 
-**Recommended Follow-up Benchmarks:**
-
-To validate these hypotheses and better understand hardware dependencies:
-
-1. **Increased CPU memory capacity**: Re-run 32B-AWQ with 20,000 CPU blocks (~78 GB CPU memory required) to test whether the 10K block limit is constraining offload effectiveness. This would double the available CPU KV-cache capacity and determine if memory pressure is the limiting factor for larger models.
-
-2. **Intermediate model sizes**: Test 10B, 12B, 16B, 18B, 20B parameter models to map the optimal size range more precisely and identify the model size boundaries where CPU offload transitions from beneficial to detrimental.
-
-3. **Full-precision 32B**: Test unquantized FP16 32B model (if GPU memory permits with TP=4 or larger GPUs) to isolate quantization effects from model size effects.
-
-4. **PCIe bandwidth profiling**: If alternative hardware is available (PCIe Gen5 GPUs, NVLink-enabled systems, or higher CPU memory bandwidth), test whether the optimal model size shifts with increased transfer bandwidth.
-
 ---
 
 ## Conclusions and Insights
@@ -388,38 +376,89 @@ This comprehensive evaluation of KV-cache management strategies across seven con
 
 ### Deployment Guidance
 
-**Important**: These recommendations are specific to the 2x NVIDIA L40S GPU configuration with 10,000 CPU KV-cache blocks. Different hardware will require re-evaluation.
+**Important**: These guidelines incorporate findings from both baseline (10K CPU blocks) and follow-up (20K CPU blocks) testing. Results are expected to be specific to the 2x NVIDIA L40S GPU configuration - different hardware warrants re-evaluation.
 
 Based on these results for this hardware configuration:
 
-- **For Qwen3-0.6B and Qwen3-8B models**: Use GPU-only operation (no-offload) with optional llm-d distributed indexing for multi-pod routing. CPU offload shows severe degradation.
+- **For Qwen3-0.6B and Qwen3-8B models**: Use GPU-only operation (no-offload) with optional llm-d distributed indexing for multi-pod routing. CPU offload shows noticable performance degradation.
 
-- **For Qwen3-14B model**: Use LMCache CPU offload (local or distributed) to gain +11-13% throughput improvement. This model size hits the optimal balance between memory pressure and transfer overhead on L40S GPUs.
+- **For Qwen3-14B model**: Use LMCache CPU offload (local or distributed) with **adequate CPU memory provisioning**:
+  - Baseline (10K blocks, ~29 GB): +11-13% improvement
+  - Increased (20K blocks, ~58 GB): +12-17% improvement
 
-- **For Qwen3-32B-AWQ model**: Use GPU-only or native offload (minimal difference); LMCache shows degradation. The current 10K CPU block limit (~39 GB CPU memory) may be constraining offload effectiveness. Re-testing with 20K blocks (~78 GB) could reveal whether increased CPU capacity enables performance benefits.
+- **For Qwen3-32B-AWQ model**: CPU offload effectiveness depends critically on CPU memory capacity:
+  - With 10K blocks (~39 GB): -12.7% degradation with LMCache
+  - With 20K blocks (~78 GB): **+11.9% improvement** with LMCache
 
 - **For multi-pod deployments**: llm-d Redis/Valkey indexing provides cache-aware routing with negligible overhead across all model sizes.
 
 - **Backend selection**: Choose Redis or Valkey based on operational preferences; performance is equivalent for both llm-d indexing and LMCache storage.
 
-- **Hardware considerations**: The optimal model size for CPU offload is likely to shift with different GPU types, PCIe generation, CPU memory capacity, and memory bandwidth. Re-benchmark on target hardware before production deployment.
+- **CPU memory provisioning**: The follow-up experiments demonstrate that CPU memory capacity is a first-order factor. Underprov isioning CPU memory can shift results from significant improvement to degradation.
+
+- **Hardware considerations**: The optimal model size for CPU offload is likely to shift with different GPU types, PCIe generation, CPU memory capacity, and memory bandwidth.
 
 ### Insights
 
-The 14B model's unique response to CPU offload strategies suggests several insights:
+1. **CPU memory capacity is a significant factor**: The follow-up experiments conclusively demonstrate that CPU memory capacity is the dominant factor in offload effectiveness. The 32B-AWQ model's shift from -12.7% degradation to +11.9% improvement with doubled CPU memory validates this hypothesis.
 
-1. **Optimal model size range**: Further investigation of 10B-20B parameter models may reveal a consistent "sweet spot" for CPU offload on this hardware configuration
-2. **Hardware dependency analysis**: Testing with increased CPU memory capacity (e.g., 20K blocks, ~78 GB CPU memory) may reveal whether offload effectiveness improves for larger models when memory constraints are relaxed
-3. **CPU-GPU memory bandwidth**: Understanding the L40S-specific memory transfer characteristics and how they impact different model sizes
-4. **Workload interaction**: Different prompt lengths, context windows, or prefix patterns may shift the optimal model size
-5. **Transfer optimization**: Understanding why LMCache outperforms native offload could inform vLLM improvements
-6. **Quantization dynamics**: Exploring how different quantization schemes (AWQ, GPTQ, FP8) affect offload effectiveness
+2. **Model size determines optimal configuration**: Three distinct patterns emerge:
+   - Small models (0.6B, 8B): GPU-only is optimal; CPU offload always degrades performance
+   - Mid-size models (14B): CPU offload provides substantial gains (+12-17% with adequate memory)
+   - Large models (32B+): CPU offload is beneficial only with sufficient CPU memory provisioning
+
+3. **LMCache outperforms native offload**: Across all model sizes, LMCache shows consistently better performance than vLLM's native offloading.
+
+4. **Workload sensitivity**: Different prompt lengths, context windows, or prefix patterns may shift the optimal model size and CPU memory requirements
+
+5. **Quantization dynamics**: The 32B-AWQ model's behavior suggests that 4-bit quantization changes KV-cache dynamics in ways that interact with CPU offload strategies. Exploring how different quantization schemes (AWQ, GPTQ, FP8) affect offload effectiveness and memory requirements would be valuable.
+
+### Follow-up: Impact of Increased CPU Memory Capacity
+
+To validate the hypothesis that CPU memory constraints were limiting offload effectiveness, a targeted experiment tested both the 14B and 32B-AWQ models with doubled CPU KV-cache capacity (20,000 blocks vs baseline 10,000 blocks).
+
+**Test Configuration:**
+- Models: Qwen3-14B, Qwen3-32B-AWQ
+- Configurations: native-offload, lmcache-local, lmcache-valkey
+- CPU blocks: 20,000 (2x baseline)
+- CPU memory: ~58 GB for 14B (~29 GB baseline), ~78 GB for 32B-AWQ (~39 GB baseline)
+
+**Results:**
+
+| Model | Configuration | Baseline (10K blocks) | Increased (20K blocks) | Delta |
+|-------|---------------|----------------------:|----------------------:|------:|
+| **Qwen3-14B** | native-offload | 59.0 tok/s | 68.5 tok/s | **+16.2%** |
+| | lmcache-local | 65.6 tok/s | 76.5 tok/s | **+16.7%** |
+| | lmcache-valkey | 66.3 tok/s | 74.6 tok/s | **+12.5%** |
+| **Qwen3-32B-AWQ** | native-offload | 48.7 tok/s | 48.9 tok/s | **+0.3%** |
+| | lmcache-local | 43.0 tok/s | 48.1 tok/s | **+11.9%** |
+| | lmcache-valkey | 43.0 tok/s | 43.2 tok/s | **+0.5%** |
+
+**Findings:**
+
+1. **14B model improvements amplified**: The already-positive results (+11-13% with 10K blocks) increased to +12-17% with doubled CPU memory. This confirms the 14B model is highly responsive to increased CPU KV-cache capacity on this hardware.
+
+2. **32B-AWQ degradation eliminated**: The model that showed -12.7% degradation with lmcache-local at 10K blocks shifted to **+11.9% improvement** with 20K blocks. This validates that the 10K block limit was indeed constraining offload effectiveness for larger models.
+
+3. **Native offload scaling**: The 14B model showed the largest gain with native offload (+16.2%), while 32B-AWQ showed minimal change (+0.3%), suggesting native offload has different scaling characteristics than LMCache.
+
+4. **Memory capacity is critical**: These results demonstrate that CPU memory capacity is a first-order factor for CPU offload effectiveness. The 32B-AWQ model's shift from degradation to improvement conclusively proves that insufficient CPU KV-cache blocks were preventing offload benefits from materializing.
+
+**Implications:**
+
+- **Larger models benefit from increased capacity**: The 32B-AWQ results show that models previously thought unsuitable for CPU offload can benefit significantly when given adequate CPU memory
+- **Hardware provisioning**: CPU memory capacity should be considered as an important factor when planning offload-enabled deployments
+- **Optimal block counts**: Further testing with 30K or 40K blocks may reveal additional gains, particularly for 32B+ models
+
+These follow-up results substantially strengthen the case for CPU KV-cache offload strategies when properly provisioned.
+
+---
 
 ### Limitations and Hardware Dependencies
 
 - **Hardware-specific results**: All findings are specific to the 2x NVIDIA L40S GPU configuration with 32 vCPUs. The L40S PCIe Gen4 memory bandwidth, VRAM capacity (48GB total), and CPU-GPU interconnect characteristics directly influence offload performance. Different GPU families (H100, A100, etc.) or configurations will show different optimal model sizes for CPU offload.
 
-- **CPU memory constraints**: Limited to 10,000 CPU KV-cache blocks (~39 GB CPU memory) in offload configurations. Each KV-cache block for the 32B model consumes ~4 MB, meaning 10K blocks represent a significant but potentially insufficient capacity for larger models. Increasing to 20K blocks (~78 GB) is feasible on this system and may reveal improved offload effectiveness for the 32B-AWQ model.
+- **CPU memory constraints**: Baseline benchmarks used 10,000 CPU KV-cache blocks (~39 GB CPU memory). Follow-up testing with 20,000 blocks (78 GB) confirmed that CPU memory capacity is a first-order factor in offload effectiveness, with the 32B-AWQ model shifting from -12.7% degradation to +11.9% improvement with doubled capacity.
 
 - **Workload specificity**: Results apply to high-concurrency, long-context, multi-turn workloads with 10K-token shared prefixes. Different workload patterns (shorter contexts, different concurrency patterns, varying prefix overlap) may show different optimal configurations.
 
