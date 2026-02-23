@@ -351,6 +351,9 @@ def create_visualizations(df, peak_df):
     # 2. Performance delta heatmap vs baseline
     fig, ax = plt.subplots(figsize=(12, 6))
 
+    # Exclude 'no-offload' from heatmap (all zeros, comparing baseline to itself)
+    scenarios_for_heatmap = [s for s in SCENARIOS if s != 'no-offload']
+
     delta_data = []
     for model in MODEL_ORDER:
         model_peak = peak_df[peak_df['model'] == model]
@@ -362,7 +365,7 @@ def create_visualizations(df, peak_df):
         baseline_tps = baseline['output_tps_mean'].values[0]
 
         row = []
-        for scenario in SCENARIOS:
+        for scenario in scenarios_for_heatmap:
             scenario_data = model_peak[model_peak['scenario'] == scenario]
             if len(scenario_data) > 0:
                 tps = scenario_data['output_tps_mean'].values[0]
@@ -372,7 +375,7 @@ def create_visualizations(df, peak_df):
                 row.append(np.nan)
         delta_data.append(row)
 
-    delta_df = pd.DataFrame(delta_data, index=MODEL_ORDER, columns=SCENARIOS)
+    delta_df = pd.DataFrame(delta_data, index=MODEL_ORDER, columns=scenarios_for_heatmap)
 
     sns.heatmap(delta_df, annot=True, fmt='.1f', cmap='RdYlGn', center=0,
                 cbar_kws={'label': '% Change vs Baseline'},
