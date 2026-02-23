@@ -1,6 +1,6 @@
 # llm-d KV-Cache Management Evaluation
 
-## Executive Summary
+## Summary
 
 This report presents a comprehensive performance evaluation of KV-cache management strategies in the llm-d inference serving system. Seven configurations were tested across four model sizes (Qwen3-0.6B, Qwen3-8B, Qwen3-14B, Qwen3-32B-AWQ) using high-concurrency workloads with tensor parallelism across 2x NVIDIA L40S GPUs.
 
@@ -16,7 +16,7 @@ The evaluation addresses two critical areas:
 - **vLLM native offloading shows severe degradation** for small models (-29% to -36% for 0.6B/8B)
 - **LMCache distributed caching** performs competitively for the 14B model but shows degradation for other sizes
 - **Redis vs Valkey backends perform identically** across all configurations, providing deployment flexibility
-- **Model size significantly impacts offload effectiveness**: Different models show dramatically different responses to CPU offload strategies
+- **Model size impacts offload effectiveness**: Different models show significantly different responses to CPU offload strategies
 
 The llm-d EPP distributed KV-block indexing demonstrates negligible overhead for cache-aware request routing in multi-pod deployments. However, CPU offload strategies show highly model-dependent performance characteristics, with the 14B model representing an optimal size where offload benefits outweigh overhead.
 
@@ -243,7 +243,7 @@ This evaluation compares three CPU offload approaches against the GPU-only basel
 - **LMCache local**: -13.6% (moderate degradation)
 - **LMCache distributed**: -6.0% to -13.0% (moderate degradation)
 
-The small model shows consistent degradation across all CPU offload strategies, with native offloading showing the worst performance. CPU-GPU transfer overhead dominates for this model size.
+The small model shows consistent degradation across all CPU offload strategies, with native offloading showing the lowest performance. CPU-GPU transfer overhead dominates for this model size.
 
 #### Qwen3-14B (Optimal Size for Offload)
 - **Native offload**: +0.6% (performance parity)
@@ -256,7 +256,7 @@ The small model shows consistent degradation across all CPU offload strategies, 
 - Request scheduling benefits from additional KV-cache capacity
 
 #### Qwen3-8B (Mid-Size Model)
-- **Native offload**: -36.5% (**worst performance observed**)
+- **Native offload**: -36.5% (lowest performance observed)
 - **LMCache local**: -5.6% (moderate degradation)
 - **LMCache distributed**: -6.5% to -10.0% (moderate degradation)
 
@@ -276,7 +276,7 @@ The large quantized model shows near-parity with native offload but degradation 
 
 ### Model Size and Offload Effectiveness
 
-The dramatically different responses to CPU offload strategies reveal a **model size dependency**:
+The different responses to CPU offload strategies reveal a **model size dependency**:
 
 | Model Size | Native Offload | LMCache Local | Optimal Strategy |
 |-----------|----------------|---------------|------------------|
@@ -317,7 +317,7 @@ This workload represents a **worst-case scenario** for cache management, making 
 
 The 14B model's +11-13% throughput improvement with CPU offload (LMCache) stands in stark contrast to all other models showing degradation. This warrants deeper investigation to understand the underlying mechanisms.
 
-**Hypothesis: Memory Pressure Sweet Spot**
+**Memory Pressure Sweet Spot**
 
 The 14B model with TP=2 across 2x L40S GPUs (24GB VRAM each) operates in a region where:
 
@@ -342,7 +342,7 @@ The increased request completion rate directly correlates with throughput improv
 
 **LMCache vs Native Offload Performance Gap:**
 
-The dramatic performance difference between LMCache and native offload (especially for 8B: -5.6% vs -36.5%) suggests:
+The performance difference between LMCache and native offload (especially for 8B: -5.6% vs -36.5%) suggests:
 
 1. **Implementation differences**: LMCache likely has more efficient CPU-GPU transfer mechanisms or better scheduling integration
 2. **Block management**: Different strategies for deciding which KV-cache blocks to offload and when
