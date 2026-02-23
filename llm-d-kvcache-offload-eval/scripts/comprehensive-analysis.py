@@ -32,6 +32,9 @@ MODELS = [
     'Qwen3-32B-AWQ'
 ]
 
+# Model ordering for plots (already in correct order)
+MODEL_ORDER = MODELS
+
 # Set plotting style
 sns.set_theme(style="whitegrid")
 plt.rcParams['figure.figsize'] = (12, 6)
@@ -330,7 +333,9 @@ def create_visualizations(df, peak_df):
     fig, ax = plt.subplots(figsize=(14, 8))
 
     pivot = peak_df.pivot(index='model', columns='scenario', values='output_tps_mean')
-    pivot = pivot[SCENARIOS]  # Reorder columns
+    # Reorder rows (models) and columns (scenarios)
+    pivot = pivot.reindex(MODEL_ORDER)
+    pivot = pivot[SCENARIOS]
 
     pivot.plot(kind='bar', ax=ax)
     ax.set_title('Peak Throughput Comparison Across All Scenarios', fontsize=14, fontweight='bold')
@@ -347,7 +352,7 @@ def create_visualizations(df, peak_df):
     fig, ax = plt.subplots(figsize=(12, 6))
 
     delta_data = []
-    for model in MODELS:
+    for model in MODEL_ORDER:
         model_peak = peak_df[peak_df['model'] == model]
         baseline = model_peak[model_peak['scenario'] == 'no-offload']
 
@@ -367,7 +372,7 @@ def create_visualizations(df, peak_df):
                 row.append(np.nan)
         delta_data.append(row)
 
-    delta_df = pd.DataFrame(delta_data, index=MODELS, columns=SCENARIOS)
+    delta_df = pd.DataFrame(delta_data, index=MODEL_ORDER, columns=SCENARIOS)
 
     sns.heatmap(delta_df, annot=True, fmt='.1f', cmap='RdYlGn', center=0,
                 cbar_kws={'label': '% Change vs Baseline'},
@@ -380,7 +385,7 @@ def create_visualizations(df, peak_df):
     plt.close()
 
     # 3. Throughput vs concurrency curves for each model
-    for model in MODELS:
+    for model in MODEL_ORDER:
         fig, ax = plt.subplots(figsize=(14, 8))
 
         model_data = df[df['model'] == model]
@@ -406,6 +411,7 @@ def create_visualizations(df, peak_df):
 
     # TTFT
     ttft_pivot = peak_df.pivot(index='model', columns='scenario', values='ttft_mean_ms')
+    ttft_pivot = ttft_pivot.reindex(MODEL_ORDER)
     ttft_pivot = ttft_pivot[SCENARIOS]
     ttft_pivot.plot(kind='bar', ax=ax1)
     ax1.set_title('Time to First Token (TTFT) at Peak Throughput', fontsize=12, fontweight='bold')
@@ -417,6 +423,7 @@ def create_visualizations(df, peak_df):
 
     # TPOT
     tpot_pivot = peak_df.pivot(index='model', columns='scenario', values='tpot_mean_ms')
+    tpot_pivot = tpot_pivot.reindex(MODEL_ORDER)
     tpot_pivot = tpot_pivot[SCENARIOS]
     tpot_pivot.plot(kind='bar', ax=ax2)
     ax2.set_title('Time Per Output Token (TPOT) at Peak Throughput', fontsize=12, fontweight='bold')
@@ -440,6 +447,7 @@ def create_visualizations(df, peak_df):
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
 
         cpu_pivot = peak_df.pivot(index='model', columns='scenario', values='cpu_util_mean')
+        cpu_pivot = cpu_pivot.reindex(MODEL_ORDER)
         cpu_pivot = cpu_pivot[[s for s in SCENARIOS if s in cpu_pivot.columns]]
         cpu_pivot.plot(kind='bar', ax=ax1)
         ax1.set_title('CPU Utilization at Peak Throughput', fontsize=12, fontweight='bold')
@@ -450,6 +458,7 @@ def create_visualizations(df, peak_df):
         ax1.tick_params(axis='x', rotation=0)
 
         gpu_pivot = peak_df.pivot(index='model', columns='scenario', values='gpu_util_mean')
+        gpu_pivot = gpu_pivot.reindex(MODEL_ORDER)
         gpu_pivot = gpu_pivot[[s for s in SCENARIOS if s in gpu_pivot.columns]]
         gpu_pivot.plot(kind='bar', ax=ax2)
         ax2.set_title('GPU Utilization at Peak Throughput', fontsize=12, fontweight='bold')
