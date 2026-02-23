@@ -130,12 +130,30 @@ def main():
             'rate': rate
         }
 
-        # Extract key metrics
+        # Extract key metrics using openmetrics namespace
         # GPU utilization (DCGM)
-        gpu_util = extract_pcp_metric(pcp_dir, 'dcgm.gpu_utilization')
+        gpu_util = extract_pcp_metric(pcp_dir, 'openmetrics.dcgm.DCGM_FI_DEV_GPU_UTIL')
         if gpu_util:
             metrics['gpu_util_mean'] = gpu_util['mean']
             metrics['gpu_util_max'] = gpu_util['max']
+
+        # GPU memory copy utilization
+        gpu_mem_copy = extract_pcp_metric(pcp_dir, 'openmetrics.dcgm.DCGM_FI_DEV_MEM_COPY_UTIL')
+        if gpu_mem_copy:
+            metrics['gpu_mem_copy_util_mean'] = gpu_mem_copy['mean']
+            metrics['gpu_mem_copy_util_max'] = gpu_mem_copy['max']
+
+        # GPU memory used
+        gpu_mem_used = extract_pcp_metric(pcp_dir, 'openmetrics.dcgm.DCGM_FI_DEV_FB_USED')
+        if gpu_mem_used:
+            metrics['gpu_mem_used_mean_mb'] = gpu_mem_used['mean']
+            metrics['gpu_mem_used_max_mb'] = gpu_mem_used['max']
+
+        # GPU power usage
+        gpu_power = extract_pcp_metric(pcp_dir, 'openmetrics.dcgm.DCGM_FI_DEV_POWER_USAGE')
+        if gpu_power:
+            metrics['gpu_power_mean_watts'] = gpu_power['mean']
+            metrics['gpu_power_max_watts'] = gpu_power['max']
 
         # CPU utilization (kernel)
         cpu_idle = extract_pcp_metric(pcp_dir, 'kernel.all.cpu.idle')
@@ -144,41 +162,27 @@ def main():
             metrics['cpu_util_max'] = 100.0 - cpu_idle['min']
 
         # vLLM KV-cache usage
-        kv_cache = extract_pcp_metric(pcp_dir, 'vllm.gpu_cache_usage_perc')
+        kv_cache = extract_pcp_metric(pcp_dir, 'openmetrics.vllm.vllm.kv_cache_usage_perc')
         if kv_cache:
             metrics['kv_cache_usage_mean'] = kv_cache['mean']
             metrics['kv_cache_usage_max'] = kv_cache['max']
 
-        # vLLM prefix cache hit rate
-        hit_rate = extract_pcp_metric(pcp_dir, 'vllm.cache_config_prefix_cache_hit_rate')
-        if hit_rate:
-            metrics['prefix_cache_hit_rate'] = hit_rate['mean']
-
         # vLLM request queue depths
-        running = extract_pcp_metric(pcp_dir, 'vllm.num_requests_running')
+        running = extract_pcp_metric(pcp_dir, 'openmetrics.vllm.vllm.num_requests_running')
         if running:
             metrics['requests_running_mean'] = running['mean']
             metrics['requests_running_max'] = running['max']
 
-        waiting = extract_pcp_metric(pcp_dir, 'vllm.num_requests_waiting')
+        waiting = extract_pcp_metric(pcp_dir, 'openmetrics.vllm.vllm.num_requests_waiting')
         if waiting:
             metrics['requests_waiting_mean'] = waiting['mean']
             metrics['requests_waiting_max'] = waiting['max']
 
-        # GPU memory utilization
-        gpu_mem = extract_pcp_metric(pcp_dir, 'dcgm.memory_utilization')
-        if gpu_mem:
-            metrics['gpu_mem_util_mean'] = gpu_mem['mean']
-            metrics['gpu_mem_util_max'] = gpu_mem['max']
-
-        # Network metrics (if available)
-        net_rx = extract_pcp_metric(pcp_dir, 'network.interface.in.bytes', instance='eth0')
-        if net_rx:
-            metrics['net_rx_mean_mbps'] = (net_rx['mean'] * 8) / 1_000_000  # Convert to Mbps
-
-        net_tx = extract_pcp_metric(pcp_dir, 'network.interface.out.bytes', instance='eth0')
-        if net_tx:
-            metrics['net_tx_mean_mbps'] = (net_tx['mean'] * 8) / 1_000_000
+        # vLLM memory usage
+        vllm_mem = extract_pcp_metric(pcp_dir, 'openmetrics.vllm.process_resident_memory_bytes')
+        if vllm_mem:
+            metrics['vllm_mem_mean_gb'] = vllm_mem['mean'] / (1024**3)
+            metrics['vllm_mem_max_gb'] = vllm_mem['max'] / (1024**3)
 
         all_metrics.append(metrics)
         processed += 1
@@ -213,15 +217,25 @@ def main():
             # Get peak throughput row (highest rate with data)
             peak_row = scenario_data.loc[scenario_data['rate'].idxmax()]
 
-            print(f"\n  {scenario}:")
+            print(f"\n  {scenario} (rate={peak_row['rate']}):")
             if 'cpu_util_mean' in peak_row and not pd.isna(peak_row['cpu_util_mean']):
-                print(f"    CPU util:      {peak_row['cpu_util_mean']:6.1f}%")
+                print(f"    CPU util:          {peak_row['cpu_util_mean']:6.1f}%")
             if 'gpu_util_mean' in peak_row and not pd.isna(peak_row['gpu_util_mean']):
-                print(f"    GPU util:      {peak_row['gpu_util_mean']:6.1f}%")
+                print(f"    GPU util:          {peak_row['gpu_util_mean']:6.1f}%")
+            if 'gpu_mem_copy_util_mean' in peak_row and not pd.isna(peak_row['gpu_mem_copy_util_mean']):
+                print(f"    GPU mem copy util: {peak_row['gpu_mem_copy_util_mean']:6.1f}%")
+            if 'gpu_mem_used_mean_mb' in peak_row and not pd.isna(peak_row['gpu_mem_used_mean_mb']):
+                print(f"    GPU mem used:      {peak_row['gpu_mem_used_mean_mb']:6.0f} MB")
+            if 'gpu_power_mean_watts' in peak_row and not pd.isna(peak_row['gpu_power_mean_watts']):
+                print(f"    GPU power:         {peak_row['gpu_power_mean_watts']:6.1f} W")
             if 'kv_cache_usage_mean' in peak_row and not pd.isna(peak_row['kv_cache_usage_mean']):
-                print(f"    KV-cache:      {peak_row['kv_cache_usage_mean']:6.1f}%")
-            if 'prefix_cache_hit_rate' in peak_row and not pd.isna(peak_row['prefix_cache_hit_rate']):
-                print(f"    Cache hits:    {peak_row['prefix_cache_hit_rate']:6.2f}%")
+                print(f"    KV-cache usage:    {peak_row['kv_cache_usage_mean']:6.1f}%")
+            if 'requests_running_mean' in peak_row and not pd.isna(peak_row['requests_running_mean']):
+                print(f"    Requests running:  {peak_row['requests_running_mean']:6.1f}")
+            if 'requests_waiting_mean' in peak_row and not pd.isna(peak_row['requests_waiting_mean']):
+                print(f"    Requests waiting:  {peak_row['requests_waiting_mean']:6.1f}")
+            if 'vllm_mem_mean_gb' in peak_row and not pd.isna(peak_row['vllm_mem_mean_gb']):
+                print(f"    vLLM memory:       {peak_row['vllm_mem_mean_gb']:6.2f} GB")
 
 if __name__ == '__main__':
     main()
