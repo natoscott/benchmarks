@@ -260,7 +260,12 @@ def generate_summary_stats(df):
         'requests_running_mean': 'mean',
         'requests_waiting_mean': 'mean',
         'process_rss_gb_mean': 'mean',
-    }).round(2)
+    })
+
+    # Convert KV-cache from fraction to percentage
+    summary['kv_cache_pct_mean'] = summary['kv_cache_pct_mean'] * 100
+
+    summary = summary.round(2)
 
     summary.columns = [
         'Avg Throughput (tok/s)',
