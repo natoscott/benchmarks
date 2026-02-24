@@ -331,15 +331,9 @@ All scenarios show individual CPUs hitting >95% utilization during benchmark exe
 *Figure: Comprehensive view of CPU saturation patterns - llm-d-valkey shows highest severity across all metrics, while lmcache-local shows most saturated CPUs*
 
 **System Pressure Metrics:**
-The test system (RHEL 9.6, kernel 5.14) supports Pressure Stall Information (PSI) metrics, but no pressure events were recorded during benchmark execution:
-- Memory pressure: No stalls detected
-- CPU pressure: No stalls detected
-- I/O pressure: No stalls detected
+The test system (RHEL 9.6, kernel 5.14) supports Pressure Stall Information (PSI) metrics, but no pressure events were observed (neither memory, CPU nor I/O)) during benchmark execution. The absence of PSI pressure stalls alongside widespread per-CPU saturation (9-14 CPUs >80%) is not contradictory. PSI measures time that processes spend stalled and waiting for resources, not just resource utilization. With 48 vCPUs available, having 14 saturated CPUs still leaves 34 CPUs available for work. The saturated CPUs are actively executing work rather than blocking processes, so no pressure stalls occur. This indicates the system has sufficient CPU capacity overall, though load distribution across CPUs may be uneven.
 
-**Reconciling PSI and Per-CPU Saturation:**
-The absence of PSI pressure stalls alongside widespread per-CPU saturation (9-14 CPUs >80%) is not contradictory. PSI measures time that processes spend stalled and waiting for resources, not just resource utilization. With 48 vCPUs available, having 14 saturated CPUs still leaves 34 CPUs available for work. The saturated CPUs are actively executing work rather than blocking processes, so no pressure stalls occur. This indicates the system has sufficient CPU capacity overall, though load distribution across CPUs may be uneven.
-
-The absence of pressure stalls confirms that the system was not resource-constrained during testing. Performance differences are therefore attributable to software overhead in cache management strategies rather than hardware resource exhaustion.
+The absence of pressure stalls confirms that the system was not resource-constrained during testing. Performance differences are this likely attributable to software overhead in cache management strategies rather than hardware resource exhaustion.
 
 #### Prefix Cache Effectiveness
 
@@ -354,15 +348,20 @@ Prefix cache hit rates vary substantially by workload concurrency and model size
 - **lmcache-valkey**: 30.4% hit rate
 - **lmcache-redis**: 28.9% hit rate
 - **lmcache-local**: 25.1% hit rate
+- **llm-d-valkey**: 24.8% hit rate (some runs show 0%)
 - **llm-d-redis**: 21.6% hit rate (some runs show 0%)
 
 The 14B model shows lower cache hit rates than the 0.6B model, suggesting different caching dynamics for larger models. The variability in hit rates (0-30%) indicates that prefix caching effectiveness is highly dependent on request patterns and concurrency levels.
 
 **32B-AWQ Model - Prefix Cache Hit Rates:**
-- **lmcache-local-20kcpu**: 31-52% hit rates
+- **lmcache-valkey**: 35.8% hit rate (baseline 10K blocks)
+- **lmcache-valkey-20kcpu**: 36-40% hit rates (increased capacity)
 - **lmcache-redis**: 43% hit rate
+- **lmcache-local-20kcpu**: 31-52% hit rates
+- **llm-d-valkey**: 13.9% hit rate
+- **llm-d-redis**: (data not available at rate=50)
 
-The quantized model shows moderate cache effectiveness, with variability suggesting workload-dependent behavior.
+The quantized model shows moderate cache effectiveness, with variability suggesting workload-dependent behavior. LMCache scenarios achieve higher hit rates than llm-d distributed indexing for this model size.
 
 **External Prefix Cache (llm-d EPP):**
 The `external_prefix_cache_*` metrics show minimal activity in single-replica deployments:
