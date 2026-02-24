@@ -339,6 +339,9 @@ The test system (RHEL 9.6, kernel 5.14) supports Pressure Stall Information (PSI
 - CPU pressure: No stalls detected
 - I/O pressure: No stalls detected
 
+**Reconciling PSI and Per-CPU Saturation:**
+The absence of PSI pressure stalls alongside widespread per-CPU saturation (9-14 CPUs >80%) is not contradictory. PSI measures time that processes spend stalled and waiting for resources, not just resource utilization. With 48 vCPUs available, having 14 saturated CPUs still leaves 34 CPUs available for work. The saturated CPUs are actively executing work rather than blocking processes, so no pressure stalls occur. This indicates the system has sufficient CPU capacity overall, though load distribution across CPUs may be uneven.
+
 The absence of pressure stalls confirms that the system was not resource-constrained during testing. Performance differences are therefore attributable to software overhead in cache management strategies rather than hardware resource exhaustion.
 
 #### Prefix Cache Effectiveness
