@@ -5,9 +5,9 @@ set -e
 # This tests llm-d's request routing and distributed KV-block indexing
 # with 2 replicas @ TP=1 vs baseline 1 replica @ TP=2
 
-# Model to test - 14B is the sweet spot for CPU offload
-MODEL="${MODEL:-Qwen/Qwen3-14B}"
-MODEL_NAME="${MODEL##*/}"
+# Model to test - 14B is the sweet spot for CPU offload (2x L40S)
+export MODEL="${MODEL:-Qwen/Qwen3-14B}"
+export MODEL_NAME="${MODEL##*/}"
 
 # Test configurations
 # Focus on the configurations that showed best results for 14B:
