@@ -9,11 +9,16 @@ import seaborn as sns
 from pathlib import Path
 import numpy as np
 
-# Set style
+# Set style per visualization-palette skill
 sns.set_style("whitegrid")
+sns.set_palette("muted")  # Qualitative palette for categorical data
 plt.rcParams['figure.figsize'] = (14, 8)
+plt.rcParams['font.size'] = 11
 
 ANALYSIS_DIR = Path('analysis')
+
+# Model ordering
+MODEL_ORDER = ['Qwen3-0.6B', 'Qwen3-8B', 'Qwen3-14B', 'Qwen3-32B-AWQ']
 
 def load_data():
     """Load PCP metrics and GuideLLM complete metrics."""
@@ -76,6 +81,10 @@ def plot_kv_cache_usage_by_scenario(df):
         aggfunc='mean'
     )
 
+    # Reorder columns by model order
+    pivot = pivot[[col for col in MODEL_ORDER if col in pivot.columns]]
+
+    # Plot with custom colors
     pivot.plot(kind='bar', ax=ax, width=0.8)
 
     ax.set_xlabel('Scenario', fontsize=12)
@@ -102,6 +111,10 @@ def plot_memory_usage_comparison(df):
         aggfunc='mean'
     )
 
+    # Reorder columns by model order
+    pivot = pivot[[col for col in MODEL_ORDER if col in pivot.columns]]
+
+    # Plot with custom colors
     pivot.plot(kind='bar', ax=ax, width=0.8)
 
     ax.set_xlabel('Scenario', fontsize=12)
@@ -128,6 +141,10 @@ def plot_request_queue_patterns(df):
         aggfunc='mean'
     )
 
+    # Reorder columns by model order
+    pivot_running = pivot_running[[col for col in MODEL_ORDER if col in pivot_running.columns]]
+
+    # Plot with custom colors
     pivot_running.plot(kind='bar', ax=ax1, width=0.8)
     ax1.set_xlabel('Scenario', fontsize=12)
     ax1.set_ylabel('Running Requests', fontsize=12)
@@ -144,6 +161,10 @@ def plot_request_queue_patterns(df):
         aggfunc='mean'
     )
 
+    # Reorder columns by model order
+    pivot_waiting = pivot_waiting[[col for col in MODEL_ORDER if col in pivot_waiting.columns]]
+
+    # Plot with custom colors
     pivot_waiting.plot(kind='bar', ax=ax2, width=0.8)
     ax2.set_xlabel('Scenario', fontsize=12)
     ax2.set_ylabel('Waiting Requests', fontsize=12)
@@ -172,6 +193,10 @@ def plot_prefix_cache_effectiveness(df):
         aggfunc='mean'
     )
 
+    # Reorder columns by model order
+    pivot = pivot[[col for col in MODEL_ORDER if col in pivot.columns]]
+
+    # Plot with custom colors
     pivot.plot(kind='bar', ax=ax, width=0.8)
 
     ax.set_xlabel('Scenario', fontsize=12)
@@ -270,7 +295,6 @@ def main():
     plot_memory_usage_comparison(df)
     plot_request_queue_patterns(df)
     plot_prefix_cache_effectiveness(df)
-    create_correlation_heatmap(df)
 
     # Generate summary stats
     print("\nGenerating summary statistics...")

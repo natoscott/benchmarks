@@ -9,9 +9,11 @@ import seaborn as sns
 from pathlib import Path
 import numpy as np
 
-# Set style
+# Set style per visualization-palette skill
 sns.set_style("whitegrid")
+sns.set_palette("muted")  # Qualitative palette for categorical data
 plt.rcParams['figure.figsize'] = (14, 8)
+plt.rcParams['font.size'] = 11
 
 ANALYSIS_DIR = Path('analysis')
 
@@ -93,19 +95,17 @@ def plot_avg_vs_max_cpu(df):
     """Scatter plot showing average CPU vs max CPU utilization."""
     fig, ax = plt.subplots(figsize=(12, 8))
 
-    # Group by scenario for colors
-    scenarios = df['scenario'].unique()
-    colors = sns.color_palette("husl", len(scenarios))
+    # Group by scenario
+    scenarios = sorted(df['scenario'].unique())
 
-    for scenario, color in zip(scenarios, colors):
+    for scenario in scenarios:
         scenario_df = df[df['scenario'] == scenario]
         ax.scatter(
             scenario_df['global_mean_user'],
             scenario_df['max_cpu_mean_user'],
             label=scenario,
             alpha=0.7,
-            s=100,
-            color=color
+            s=100
         )
 
     # Add diagonal reference line (where avg = max)
