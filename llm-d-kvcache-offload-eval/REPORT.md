@@ -297,6 +297,90 @@ The correlation heatmap reveals relationships between system-level metrics and p
 
 4. **Memory footprint consistency**: Process RSS remains stable across configurations, confirming that performance differences stem from cache management strategy rather than memory overhead
 
+#### CPU Utilization and System Pressure
+
+Analysis of CPU utilization reveals significant CPU saturation hidden by averaging across 48 vCPUs:
+
+**Aggregate CPU Utilization by Scenario (at peak throughput):**
+- **no-offload baseline**: 4.4-10.0% average CPU utilization
+- **lmcache-local-20kcpu**: 4.4-5.6% average CPU utilization
+- **llm-d distributed**: 9.2-10.5% average CPU utilization
+- **native-offload**: 8.3-10.0% average CPU utilization
+
+However, per-CPU analysis reveals a different picture:
+
+**Per-CPU Utilization Analysis:**
+- **llm-d-valkey**: 9.9 saturated CPUs (>80%), max CPU 752% average utilization
+- **llm-d-redis**: 10.4 saturated CPUs, max CPU 514% average utilization
+- **lmcache-local**: 14.2 saturated CPUs, max CPU 353% average utilization
+- **native-offload**: 11.2 saturated CPUs, max CPU 447% average utilization
+- **no-offload**: 9.5 saturated CPUs, max CPU 457% average utilization
+
+All scenarios show individual CPUs hitting >95% utilization during benchmark execution, with high variance in CPU load distribution (standard deviation 64-136%). The CPU load range (max CPU - min CPU) spans 270-877%, indicating severe hotspotting where some CPUs remain relatively idle while others saturate.
+
+**Findings:**
+1. **CPU saturation is widespread**: All scenarios show 9-14 CPUs averaging >80% utilization, contradicting the low aggregate average
+2. **Uneven load distribution**: High standard deviation indicates poor load balancing across CPUs
+3. **CPU offload increases saturation**: Offload scenarios show more saturated CPUs (11-14) compared to no-offload (9.5), consistent with CPU-GPU transfer overhead
+4. **Thread affinity or scheduling constraints**: The concentration of load on specific CPUs suggests either thread pinning or scheduler limitations
+
+![CPU Saturation by Scenario](analysis/percpu_saturation_by_scenario.png)
+*Figure: Number of saturated CPUs vs expected from average CPU utilization - shows how averaging hides saturation*
+
+![CPU Load Distribution](analysis/percpu_load_distribution.png)
+*Figure: CPU load variance and range showing severe hotspotting across all scenarios*
+
+![CPU Offload Impact on Saturation](analysis/percpu_offload_impact.png)
+*Figure: CPU saturation comparison - offload scenarios show higher CPU saturation than baseline*
+
+**System Pressure Metrics:**
+The test system (RHEL 9.6, kernel 5.14) supports Pressure Stall Information (PSI) metrics, but no pressure events were recorded during benchmark execution:
+- Memory pressure: No stalls detected
+- CPU pressure: No stalls detected
+- I/O pressure: No stalls detected
+
+The absence of pressure stalls confirms that the system was not resource-constrained during testing. Performance differences are therefore attributable to software overhead in cache management strategies rather than hardware resource exhaustion.
+
+#### Prefix Cache Effectiveness
+
+Prefix cache hit rates vary substantially by workload concurrency and model size:
+
+**0.6B Model - Prefix Cache Hit Rates:**
+- **High concurrency (rate=50)**: 57-61% hit rates across most scenarios
+- **Low concurrency (rate=1)**: 2-8% hit rates
+- **Pattern**: Cache effectiveness increases dramatically with concurrency
+
+**14B Model - Prefix Cache Hit Rates:**
+- **lmcache-valkey**: 30.4% hit rate
+- **lmcache-redis**: 28.9% hit rate
+- **lmcache-local**: 25.1% hit rate
+- **llm-d-redis**: 21.6% hit rate (some runs show 0%)
+
+The 14B model shows lower cache hit rates than the 0.6B model, suggesting different caching dynamics for larger models. The variability in hit rates (0-30%) indicates that prefix caching effectiveness is highly dependent on request patterns and concurrency levels.
+
+**32B-AWQ Model - Prefix Cache Hit Rates:**
+- **lmcache-local-20kcpu**: 31-52% hit rates
+- **lmcache-redis**: 43% hit rate
+
+The quantized model shows moderate cache effectiveness, with variability suggesting workload-dependent behavior.
+
+**External Prefix Cache (llm-d EPP):**
+The `external_prefix_cache_*` metrics show minimal activity in single-replica deployments:
+- Most scenarios: 0% external cache hit rate
+- native-offload-20kcpu: 4.7% external hit rate
+
+This is expected for single-replica tests where distributed prefix caching provides no benefit. Multi-replica deployments should demonstrate EPP's distributed caching capabilities.
+
+**Findings:**
+
+1. **Workload dependency**: Prefix cache hit rates range from 2% to 61%, demonstrating strong sensitivity to concurrency levels and request patterns
+
+2. **Model size impact**: Smaller models (0.6B) achieve higher cache hit rates (60%) compared to larger models (14B: 25-30%, 32B-AWQ: 30-52%)
+
+3. **Concurrency scaling**: Cache effectiveness increases substantially with higher concurrency, as more requests share common prefixes
+
+4. **Distributed caching unused**: Single-replica deployments show minimal external prefix cache activity, validating that distributed caching requires multi-replica scenarios
+
 ---
 
 ## Analysis
