@@ -209,10 +209,10 @@ The following graphs show output token throughput as a function of concurrency l
 
 ### Latency Analysis
 
-Latency measurements at peak throughput conditions show similar patterns across configurations, with native-offload generally showing higher latency variance.
+Latency measurements show patterns that correlate strongly with concurrency level. The 32B-AWQ model achieves peak throughput at concurrency=1, while smaller models peak at concurrency=50, creating an apples-to-oranges comparison when viewing latency at peak throughput conditions.
 
 ![Latency Comparison](analysis/latency_comparison_all.png)
-*Figure: Time to First Token (TTFT) and Time Per Output Token (TPOT) at peak throughput*
+*Figure: Time to First Token (TTFT) and Time Per Output Token (TPOT) at variable and fixed concurrency. Top row shows latency at peak throughput (32B-AWQ at rate=1, others at rate=50), revealing the misleading effect of different optimal concurrency levels. Bottom row shows all models at rate=50 for apples-to-apples comparison, where 32B-AWQ latencies (24-31s TTFT, 686-787ms TPOT) align with other models, confirming that the top-row differences primarily reflect queueing behavior rather than model characteristics.*
 
 ### System-Level Analysis
 
