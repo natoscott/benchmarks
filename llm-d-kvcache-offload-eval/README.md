@@ -1,6 +1,6 @@
 # LLM-D KV-Cache Offload Evaluation
 
-Benchmark suite for evaluating KV-cache offloading and distributed caching strategies in llm-d deployments.
+Benchmark suite for evaluating KV-cache offloading and distributed caching strategies in llm-d deployments. See [REPORT.md](REPORT.md) for comprehensive evaluation results and analysis.
 
 ## Overview
 
@@ -19,12 +19,16 @@ This repository contains automation scripts and Kubernetes manifests for benchma
 ```
 llm-d-kvcache-offload-eval/
 ├── scripts/
-│   ├── run-benchmark.sh              # Main benchmark automation script
-│   ├── run-all.sh                    # Run all baseline configurations
-│   ├── run-increased-cpu-memory.sh   # Specialized benchmark for increased CPU offload capacity
-│   ├── comprehensive-analysis.py     # Primary analysis script with visualizations
-│   ├── extract-pcp-metrics.py        # PCP archive metrics extraction
-│   └── analyze-all-results.py        # Helper analysis utilities
+│   ├── run-benchmark.sh                      # Main benchmark automation script
+│   ├── run-all.sh                            # Run all baseline configurations
+│   ├── run-increased-cpu-memory.sh           # Benchmark for increased CPU offload capacity
+│   ├── run-multi-replica.sh                  # Multi-replica distributed cache testing
+│   ├── comprehensive-analysis.py             # Primary GuideLLM analysis with visualizations
+│   ├── extract-pcp-peak-metrics.py           # Extract PCP metrics at peak throughput
+│   ├── create-pcp-visualizations.py          # Generate PCP metric visualizations
+│   ├── extract-pcp-cpu-memory-analysis.py    # CPU utilization and memory pressure analysis
+│   ├── analyze-per-cpu-utilization.py        # Per-CPU saturation detection
+│   └── visualize-percpu-saturation.py        # Per-CPU saturation visualizations
 ├── manifests/
 │   ├── valkey-deployment.yaml
 │   ├── llm-d-model-cache-pvc.yaml
@@ -203,15 +207,36 @@ This generates:
 - `analysis/throughput_curve_*.png` - Throughput vs concurrency curves
 - `analysis/latency_comparison_all.png` - TTFT and TPOT comparison
 
-### PCP Metrics Extraction
+### PCP Metrics Analysis
 
 ```bash
-# Extract detailed system metrics from PCP archives
-python3 scripts/extract-pcp-metrics.py
+# Extract PCP metrics at peak throughput (rate=50)
+python3 scripts/extract-pcp-peak-metrics.py
+
+# Create PCP visualizations
+python3 scripts/create-pcp-visualizations.py
+
+# Deep dive into CPU and memory pressure
+python3 scripts/extract-pcp-cpu-memory-analysis.py
+
+# Analyze per-CPU utilization patterns
+python3 scripts/analyze-per-cpu-utilization.py
+
+# Create per-CPU saturation visualizations
+python3 scripts/visualize-percpu-saturation.py
 ```
 
 This generates:
-- `analysis/pcp_metrics.csv` - System-level metrics (CPU, GPU, memory, KV-cache)
+- `analysis/pcp_metrics_peak.csv` - PCP metrics at peak throughput
+- `analysis/pcp_cpu_memory_analysis.csv` - CPU utilization and pressure stall metrics
+- `analysis/percpu_analysis.csv` - Per-CPU saturation analysis
+- `analysis/pcp_gpu_vs_throughput.png` - GPU utilization correlation
+- `analysis/pcp_kv_cache_usage.png` - KV-cache utilization patterns
+- `analysis/pcp_memory_usage.png` - Process memory consumption
+- `analysis/pcp_request_queues.png` - Request queue dynamics
+- `analysis/pcp_prefix_cache_hits.png` - Prefix cache effectiveness
+- `analysis/pcp_correlation_heatmap.png` - Metric correlation matrix
+- `analysis/percpu_saturation_*.png` - Per-CPU saturation visualizations
 
 ### Results Report
 
