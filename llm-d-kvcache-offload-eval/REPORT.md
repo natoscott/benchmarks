@@ -2,25 +2,29 @@
 
 ## Summary
 
-This report presents a comprehensive performance evaluation of KV-cache management strategies in the llm-d inference serving system. Seven configurations were tested across four model sizes (Qwen3-0.6B, Qwen3-8B, Qwen3-14B, Qwen3-32B-AWQ) using high-concurrency workloads with tensor parallelism across 2x NVIDIA L40S GPUs.
+This report presents a comprehensive performance evaluation of KV-cache management strategies in the llm-d inference serving system. Seven configurations were tested across four model sizes (Qwen3-0.6B, Qwen3-8B, Qwen3-14B, Qwen3-32B-AWQ) using high-concurrency workloads with tensor parallelism across 2x NVIDIA L40S GPUs. Performance Co-Pilot (PCP) metrics provide system-level validation of throughput results.
 
 The evaluation addresses two areas:
 
 1. **llm-d EPP distributed KV-block indexing overhead**: Comparing baseline GPU-only operation against Redis and Valkey-backed distributed indexing for cache-aware request routing
 2. **CPU KV-cache offload strategies**: Comparing vLLM native offloading against LMCache (local CPU and distributed Redis/Valkey backends)
 
-**Findings:**
+**Primary Findings:**
 
 - **llm-d EPP distributed indexing achieves performance parity** with baseline (within ±2% for most models)
-- **14B model optimization**: The 14B model shows +10-13% throughput improvement with CPU offload (both native and LMCache), while all other models show degradation
-- **vLLM native offloading shows clear degradation** for small models (-29% to -36% for 0.6B/8B)
-- **LMCache distributed caching** performs competitively for the 14B model but shows degradation for other sizes
-- **Redis vs Valkey backends perform identically** across all configurations, providing deployment flexibility
-- **Model size impacts offload effectiveness**: Different models show significantly different responses to CPU offload strategies
+- **CPU memory capacity is the dominant factor** in offload effectiveness: 32B-AWQ model shifted from -12.7% degradation to +11.9% improvement when CPU blocks doubled from 10K to 20K
+- **Model size determines optimal configuration**: larger models (14B/32B-AWQ) benefit from CPU offload (+12-17% with adequate memory), while smaller models (0.6B/8B) show degradation
+- **vLLM native offloading underperforms LMCache** across all model sizes, showing -29% to -36% degradation for small models
 
-The llm-d EPP distributed KV-block indexing demonstrates negligible overhead for cache-aware request routing in multi-pod deployments. However, CPU offload strategies show highly model-dependent performance characteristics, with the 14B model representing an optimal size where offload benefits outweigh overhead.
+**System-Level Insights:**
 
-**Important**: These results are specific to the test hardware configuration (2x NVIDIA L40S GPUs, 32 vCPUs, limited CPU memory for offload). Different GPU types, CPU memory capacity, and memory bandwidth characteristics will impact offload effectiveness. The 14B model's performance improvement with CPU offload is expected to also occur with different model sizes and alternative hardware configurations.
+- **Per-CPU analysis reveals hidden saturation**: Despite 4-10% average CPU utilization, 9-14 individual CPUs averaged >80% saturation across scenarios, with severe load hotspotting
+- **CPU offload increases CPU saturation**: Offload scenarios show 11-14 saturated CPUs vs 9.5 for baseline, consistent with CPU-GPU transfer overhead
+- **Prefix cache effectiveness varies widely**: Hit rates range from 2-61% depending on concurrency and model size, with effectiveness increasing substantially at higher concurrency
+
+The llm-d EPP distributed KV-block indexing demonstrates negligible overhead for cache-aware request routing in multi-pod deployments. CPU offload strategies show highly model-dependent and memory-capacity-dependent performance characteristics, with proper CPU memory provisioning being critical for realizing offload benefits.
+
+**Note**: These results are specific to the test hardware configuration (2x NVIDIA L40S GPUs, 48 vCPUs, variable CPU memory for offload). Different GPU types, CPU memory capacity, and memory bandwidth characteristics will significantly impact offload effectiveness. The optimal model size for CPU offload is expected to shift with alternative hardware configurations.
 
 ---
 
@@ -322,6 +326,9 @@ All scenarios show individual CPUs hitting >95% utilization during benchmark exe
 
 ![CPU Offload Impact on Saturation](analysis/percpu_offload_impact.png)
 *Figure: CPU saturation comparison - offload scenarios show higher CPU saturation than baseline*
+
+![CPU Saturation Heatmap](analysis/percpu_saturation_heatmap.png)
+*Figure: Comprehensive view of CPU saturation patterns - llm-d-valkey shows highest severity across all metrics, while lmcache-local shows most saturated CPUs*
 
 **System Pressure Metrics:**
 The test system (RHEL 9.6, kernel 5.14) supports Pressure Stall Information (PSI) metrics, but no pressure events were recorded during benchmark execution:
@@ -638,7 +645,6 @@ All benchmarks were executed using GuideLLM v0.5.3 with identical parameters acr
 - Profile: concurrent
 - Duration: 120 seconds per concurrency level
 - Sample requests: 4000
-- Random seed: 889 (for reproducibility)
 - Prefer response metrics: true
 
 ### Metrics Collection

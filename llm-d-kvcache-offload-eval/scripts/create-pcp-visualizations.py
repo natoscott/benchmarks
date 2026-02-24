@@ -20,6 +20,17 @@ ANALYSIS_DIR = Path('analysis')
 # Model ordering
 MODEL_ORDER = ['Qwen3-0.6B', 'Qwen3-8B', 'Qwen3-14B', 'Qwen3-32B-AWQ']
 
+# Scenario ordering (consistent with comprehensive-analysis.py)
+SCENARIO_ORDER = [
+    'no-offload',
+    'native-offload',
+    'lmcache-local',
+    'lmcache-redis',
+    'lmcache-valkey',
+    'llm-d-redis',
+    'llm-d-valkey'
+]
+
 def load_data():
     """Load PCP metrics and GuideLLM complete metrics."""
     pcp = pd.read_csv(ANALYSIS_DIR / 'pcp_metrics_peak.csv')
@@ -43,9 +54,9 @@ def plot_gpu_util_vs_throughput(df):
     """Plot GPU utilization vs output token throughput."""
     fig, ax = plt.subplots(figsize=(12, 7))
 
-    # Group by scenario for coloring
-    scenarios = df['scenario'].unique()
-    colors = sns.color_palette("husl", len(scenarios))
+    # Use consistent scenario ordering
+    scenarios = [s for s in SCENARIO_ORDER if s in df['scenario'].values]
+    colors = sns.color_palette("muted", len(scenarios))
 
     for scenario, color in zip(scenarios, colors):
         scenario_df = df[df['scenario'] == scenario]
@@ -81,7 +92,8 @@ def plot_kv_cache_usage_by_scenario(df):
         aggfunc='mean'
     )
 
-    # Reorder columns by model order
+    # Reorder rows by scenario order and columns by model order
+    pivot = pivot.reindex([s for s in SCENARIO_ORDER if s in pivot.index])
     pivot = pivot[[col for col in MODEL_ORDER if col in pivot.columns]]
 
     # Plot with custom colors
@@ -111,7 +123,8 @@ def plot_memory_usage_comparison(df):
         aggfunc='mean'
     )
 
-    # Reorder columns by model order
+    # Reorder rows by scenario order and columns by model order
+    pivot = pivot.reindex([s for s in SCENARIO_ORDER if s in pivot.index])
     pivot = pivot[[col for col in MODEL_ORDER if col in pivot.columns]]
 
     # Plot with custom colors
@@ -141,7 +154,8 @@ def plot_request_queue_patterns(df):
         aggfunc='mean'
     )
 
-    # Reorder columns by model order
+    # Reorder rows by scenario order and columns by model order
+    pivot_running = pivot_running.reindex([s for s in SCENARIO_ORDER if s in pivot_running.index])
     pivot_running = pivot_running[[col for col in MODEL_ORDER if col in pivot_running.columns]]
 
     # Plot with custom colors
@@ -161,7 +175,8 @@ def plot_request_queue_patterns(df):
         aggfunc='mean'
     )
 
-    # Reorder columns by model order
+    # Reorder rows by scenario order and columns by model order
+    pivot_waiting = pivot_waiting.reindex([s for s in SCENARIO_ORDER if s in pivot_waiting.index])
     pivot_waiting = pivot_waiting[[col for col in MODEL_ORDER if col in pivot_waiting.columns]]
 
     # Plot with custom colors
@@ -193,7 +208,8 @@ def plot_prefix_cache_effectiveness(df):
         aggfunc='mean'
     )
 
-    # Reorder columns by model order
+    # Reorder rows by scenario order and columns by model order
+    pivot = pivot.reindex([s for s in SCENARIO_ORDER if s in pivot.index])
     pivot = pivot[[col for col in MODEL_ORDER if col in pivot.columns]]
 
     # Plot with custom colors
