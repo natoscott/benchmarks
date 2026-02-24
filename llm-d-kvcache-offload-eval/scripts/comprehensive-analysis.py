@@ -388,10 +388,11 @@ def create_visualizations(df, peak_df):
     plt.savefig('analysis/performance_delta_heatmap_all.png', dpi=300, bbox_inches='tight')
     plt.close()
 
-    # 3. Throughput vs concurrency curves for each model
-    for model in MODEL_ORDER:
-        fig, ax = plt.subplots(figsize=(14, 8))
+    # 3. Throughput vs concurrency curves - 4-panel (one per model)
+    fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(18, 12))
+    axes = [ax1, ax2, ax3, ax4]
 
+    for idx, (model, ax) in enumerate(zip(MODEL_ORDER, axes)):
         model_data = df[df['model'] == model]
 
         for scenario in SCENARIOS:
@@ -399,43 +400,75 @@ def create_visualizations(df, peak_df):
             if len(scenario_data) > 0:
                 scenario_data = scenario_data.sort_values('rate')
                 ax.plot(scenario_data['rate'], scenario_data['output_tps_mean'],
-                       marker='o', label=scenario, linewidth=2)
+                       marker='o', label=scenario, linewidth=2, markersize=5)
 
-        ax.set_title(f'{model} - Throughput vs Concurrency', fontsize=14, fontweight='bold')
-        ax.set_xlabel('Concurrency (Rate)', fontsize=12)
-        ax.set_ylabel('Output Tokens/Second', fontsize=12)
-        ax.legend(title='Scenario')
+        ax.set_title(f'{model}', fontsize=12, fontweight='bold')
+        ax.set_xlabel('Concurrency (Rate)', fontsize=10)
+        ax.set_ylabel('Output Tokens/Second', fontsize=10)
         ax.grid(alpha=0.3)
-        plt.tight_layout()
-        plt.savefig(f'analysis/throughput_curve_{model}_all.png', dpi=300, bbox_inches='tight')
-        plt.close()
 
-    # 4. Latency comparison - TTFT and TPOT
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
+        # Only show legend on the last panel
+        if idx == 3:
+            ax.legend(title='Scenario', bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=9)
+        else:
+            ax.legend().set_visible(False)
 
-    # TTFT
+    plt.suptitle('Throughput vs Concurrency - All Models', fontsize=14, fontweight='bold', y=0.995)
+    plt.tight_layout()
+    plt.savefig('analysis/throughput_vs_concurrency_all.png', dpi=300, bbox_inches='tight')
+    plt.close()
+
+    # 4. Latency comparison - 4-panel: peak throughput + fixed rate=50
+    fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(16, 12))
+
+    # Top row: Latency at peak throughput (variable concurrency)
+    # TTFT at peak
     ttft_pivot = peak_df.pivot(index='model', columns='scenario', values='ttft_mean_ms')
     ttft_pivot = ttft_pivot.reindex(MODEL_ORDER)
     ttft_pivot = ttft_pivot[SCENARIOS]
-    ttft_pivot.plot(kind='bar', ax=ax1)
-    ax1.set_title('Time to First Token (TTFT) at Peak Throughput', fontsize=12, fontweight='bold')
+    ttft_pivot.plot(kind='bar', ax=ax1, legend=False)
+    ax1.set_title('TTFT at Peak Throughput (variable concurrency)', fontsize=11, fontweight='bold')
     ax1.set_xlabel('Model', fontsize=10)
     ax1.set_ylabel('TTFT (milliseconds)', fontsize=10)
-    ax1.legend(title='Scenario', bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=8)
     ax1.grid(axis='y', alpha=0.3)
     ax1.tick_params(axis='x', rotation=0)
 
-    # TPOT
+    # TPOT at peak
     tpot_pivot = peak_df.pivot(index='model', columns='scenario', values='tpot_mean_ms')
     tpot_pivot = tpot_pivot.reindex(MODEL_ORDER)
     tpot_pivot = tpot_pivot[SCENARIOS]
     tpot_pivot.plot(kind='bar', ax=ax2)
-    ax2.set_title('Time Per Output Token (TPOT) at Peak Throughput', fontsize=12, fontweight='bold')
+    ax2.set_title('TPOT at Peak Throughput (variable concurrency)', fontsize=11, fontweight='bold')
     ax2.set_xlabel('Model', fontsize=10)
     ax2.set_ylabel('TPOT (milliseconds)', fontsize=10)
     ax2.legend(title='Scenario', bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=8)
     ax2.grid(axis='y', alpha=0.3)
     ax2.tick_params(axis='x', rotation=0)
+
+    # Bottom row: Latency at rate=50 (fixed concurrency for comparison)
+    rate50_df = df[df['rate'] == 50].copy()
+
+    # TTFT at rate=50
+    ttft_rate50_pivot = rate50_df.pivot(index='model', columns='scenario', values='ttft_mean_ms')
+    ttft_rate50_pivot = ttft_rate50_pivot.reindex(MODEL_ORDER)
+    ttft_rate50_pivot = ttft_rate50_pivot[SCENARIOS]
+    ttft_rate50_pivot.plot(kind='bar', ax=ax3, legend=False)
+    ax3.set_title('TTFT at Rate=50 (fixed concurrency)', fontsize=11, fontweight='bold')
+    ax3.set_xlabel('Model', fontsize=10)
+    ax3.set_ylabel('TTFT (milliseconds)', fontsize=10)
+    ax3.grid(axis='y', alpha=0.3)
+    ax3.tick_params(axis='x', rotation=0)
+
+    # TPOT at rate=50
+    tpot_rate50_pivot = rate50_df.pivot(index='model', columns='scenario', values='tpot_mean_ms')
+    tpot_rate50_pivot = tpot_rate50_pivot.reindex(MODEL_ORDER)
+    tpot_rate50_pivot = tpot_rate50_pivot[SCENARIOS]
+    tpot_rate50_pivot.plot(kind='bar', ax=ax4, legend=False)
+    ax4.set_title('TPOT at Rate=50 (fixed concurrency)', fontsize=11, fontweight='bold')
+    ax4.set_xlabel('Model', fontsize=10)
+    ax4.set_ylabel('TPOT (milliseconds)', fontsize=10)
+    ax4.grid(axis='y', alpha=0.3)
+    ax4.tick_params(axis='x', rotation=0)
 
     plt.tight_layout()
     plt.savefig('analysis/latency_comparison_all.png', dpi=300, bbox_inches='tight')
