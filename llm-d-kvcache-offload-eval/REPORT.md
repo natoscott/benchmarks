@@ -479,7 +479,7 @@ This workload represents a **worst-case scenario** for cache management, making 
 
 ### Understanding the 14B Model Performance
 
-The 14B model's +11-13% throughput improvement with CPU offload (LMCache) stands in stark contrast to all other models showing degradation. This warrants deeper investigation to understand the underlying mechanisms.
+The 14B model's +11-13% throughput improvement with CPU offload (LMCache) stands in contrast to all other models showing degradation. This warrants deeper investigation to understand the underlying mechanisms.
 
 **Memory Pressure Sweet Spot**
 

@@ -45,3 +45,19 @@ explaining the results of the benchmarks.  At the end of each session in
 which a report is created, always consider what might have been done to
 improve the process for the human analyst - suggest new tools, additional
 metrics, and alternative benchmarking strategies to support the goal.
+
+## Project Standards
+
+This repository has established standards documented in `.claude/skills/`:
+
+- **visualization-palette**: All visualizations must use seaborn's "muted" palette for categorical data, "magma" for heatmaps, and standard figure sizes (14x8, font size 11). Consult `.claude/skills/visualization-palette/SKILL.md` when creating any matplotlib/seaborn visualizations.
+
+- **technical-report-writing**: Guidelines for professional, measured technical writing. Consult `.claude/skills/technical-report-writing/SKILL.md` when writing or updating reports.
+
+- **pcp-benchmark-analysis**: Best practices for analyzing PCP archives and correlating system metrics with benchmark results. Consult `.claude/skills/pcp-benchmark-analysis/SKILL.md` when working with Performance Co-Pilot data.
+
+- **data-validation-checklist**: Validation steps to ensure data quality and consistency. Consult `.claude/skills/data-validation-checklist/SKILL.md` before finalizing analysis.
+
+- **repo-cleanliness**: Standards for maintaining clean repository structure. Consult `.claude/skills/repo-cleanliness/SKILL.md` when creating new files or organizing results.
+
+Always review the relevant skill documentation before starting work in these areas.

@@ -35,10 +35,11 @@ MODELS = [
 # Model ordering for plots (already in correct order)
 MODEL_ORDER = MODELS
 
-# Set plotting style
-sns.set_theme(style="whitegrid")
-plt.rcParams['figure.figsize'] = (12, 6)
-plt.rcParams['font.size'] = 10
+# Set plotting style per visualization-palette skill
+sns.set_style("whitegrid")
+sns.set_palette("muted")  # Qualitative palette for categorical data
+plt.rcParams['figure.figsize'] = (14, 8)
+plt.rcParams['font.size'] = 11
 
 def decompress_zstd(file_path):
     """Decompress zstd file and return JSON data."""
