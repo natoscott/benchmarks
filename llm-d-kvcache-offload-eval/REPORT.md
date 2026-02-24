@@ -263,16 +263,6 @@ The higher waiting queue counts for llm-d configurations suggest that distribute
 
 Prefix cache hit rates vary significantly by scenario, with some configurations showing substantially higher cache effectiveness. This metric correlates with the shared prefix workload design (10K-token prefixes) and demonstrates the value of prefix caching for multi-turn conversations.
 
-#### System Metrics Correlation
-
-![Correlation Heatmap](analysis/pcp_correlation_heatmap.png)
-*Figure: Correlation matrix between system metrics and performance indicators*
-
-The correlation heatmap reveals relationships between system-level metrics and performance outcomes:
-- **Negative correlation** between GPU utilization and throughput confirms the overhead hypothesis
-- **Request queue depths** show weak correlation with throughput, suggesting queue management is not the primary bottleneck
-- **KV-cache usage** shows minimal correlation with performance, consistent with low overall utilization
-
 #### Summary Statistics by Scenario
 
 | Scenario | Avg Throughput (tok/s) | Avg GPU Util (%) | Avg KV-Cache (%) | Avg Running Reqs | Avg Waiting Reqs | Avg Process RSS (GB) |
