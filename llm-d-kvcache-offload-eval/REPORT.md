@@ -195,24 +195,15 @@ Results show peak output token throughput achieved at optimal concurrency for ea
 
 The following graphs show output token throughput as a function of concurrency level for each model and configuration.
 
-![Throughput vs Concurrency - All Models](analysis/throughput_curve_Qwen3-0.6B_all.png)
-*Figure: Qwen3-0.6B throughput curves across all 7 configurations*
-
-![Throughput vs Concurrency - All Models](analysis/throughput_curve_Qwen3-8B_all.png)
-*Figure: Qwen3-8B throughput curves across all 7 configurations*
-
-![Throughput vs Concurrency - All Models](analysis/throughput_curve_Qwen3-14B_all.png)
-*Figure: Qwen3-14B throughput curves across all 7 configurations*
-
-![Throughput vs Concurrency - All Models](analysis/throughput_curve_Qwen3-32B-AWQ_all.png)
-*Figure: Qwen3-32B-AWQ throughput curves across all 7 configurations*
+![Throughput vs Concurrency - All Models](analysis/throughput_vs_concurrency_all.png)
+*Figure: Output token throughput vs concurrency level for all four models across seven KV-cache management configurations. Each panel shows one model size, with all scenarios plotted for comparison. Models exhibit different optimal concurrency levels: 0.6B/8B/14B peak at rate=50, while 32B-AWQ peaks at rate=1.*
 
 ### Latency Analysis
 
-Latency measurements at peak throughput conditions show similar patterns across configurations, with native-offload generally showing higher latency variance.
+Latency measurements show patterns that correlate strongly with concurrency level. The 32B-AWQ model achieves peak throughput at concurrency=1, while smaller models peak at concurrency=50, creating an apples-to-oranges comparison when viewing latency at peak throughput conditions.
 
 ![Latency Comparison](analysis/latency_comparison_all.png)
-*Figure: Time to First Token (TTFT) and Time Per Output Token (TPOT) at peak throughput*
+*Figure: Time to First Token (TTFT) and Time Per Output Token (TPOT) at variable and fixed concurrency. Top row shows latency at peak throughput (32B-AWQ at rate=1, others at rate=50), revealing the misleading effect of different optimal concurrency levels. Bottom row shows all models at rate=50 for apples-to-apples comparison, where 32B-AWQ latencies (24-31s TTFT, 686-787ms TPOT) align with other models, confirming that the top-row differences primarily reflect queueing behavior rather than model characteristics.*
 
 ### System-Level Analysis
 
