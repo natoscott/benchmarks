@@ -448,17 +448,18 @@ The larger quantized model shows near-parity with native offload but degradation
 
 The different responses to CPU offload strategies reveal a **model size dependency**:
 
-| Model Size | Native Offload | LMCache Local | Optimal Strategy |
-|-----------|----------------|---------------|------------------|
-| Tiny (0.6B) | ⛔ Severe degradation | ⚠️  Moderate degradation | **GPU-only** |
-| Small (8B) | ⛔ Severe degradation | ⚠️  Moderate degradation | **GPU-only** |
-| Medium (14B) | ⚪ Parity | ✅ **+11.8% improvement** | **LMCache CPU offload** |
-| Large quantized (32B-AWQ) | ⚪ Parity | ⚠️  Moderate degradation | **GPU-only or native** |
+| Model Size | Native Offload (10K blocks) | LMCache Local (10K blocks) | LMCache Local (20K blocks) | Optimal Strategy |
+|-----------|---------------------------|---------------------------|---------------------------|------------------|
+| Tiny (0.6B) | ⛔ Severe degradation | ⚠️  Moderate degradation | (not tested) | **GPU-only** |
+| Small (8B) | ⛔ Severe degradation | ⚠️  Moderate degradation | (not tested) | **GPU-only** |
+| Medium (14B) | ⚪ Parity (+0.6%) | ✅ **+11.8% improvement** | ✅ **+16.7% improvement** | **LMCache CPU offload** |
+| Large quantized (32B-AWQ) | ⚪ Parity (-1.0%) | ⚠️  Degradation (-12.7%) | ✅ **+11.9% improvement** | **LMCache with adequate CPU memory** |
 
 This pattern suggests:
 1. **Tiny models** suffer from CPU-GPU transfer overhead without compensating benefits
-2. **14B represents an optimal size** where KV-cache capacity gains outweigh transfer costs
-3. **Quantized large models** have reduced KV-cache pressure, eliminating offload benefits
+2. **Medium models (14B)** benefit from CPU offload even with baseline CPU memory, with gains amplified by increased capacity
+3. **Larger models (32B+)** require adequate CPU memory provisioning to realize offload benefits - underprovision causes degradation, adequate provision yields substantial gains
+4. **CPU memory capacity is the dominant factor**: The 32B-AWQ model's shift from -12.7% degradation to +11.9% improvement demonstrates that offload effectiveness depends critically on CPU memory allocation
 
 ### LMCache Backend Comparison (Redis vs Valkey)
 
