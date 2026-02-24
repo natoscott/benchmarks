@@ -232,13 +232,6 @@ This counterintuitive pattern — higher GPU utilization with lower throughput �
 - This moderate utilization level suggests memory pressure exists but isn't severe for most model sizes
 - Exception: The 14B model's improvement with CPU offload suggests it operates near a memory pressure threshold where offload provides measurable benefits
 
-#### Process Memory Consumption
-
-![Memory Usage Comparison](analysis/pcp_memory_usage.png)
-*Figure: vLLM process resident memory (RSS) across scenarios*
-
-Process memory consumption remains consistent (1.58-2.04 GB) across configurations, with no significant variation based on offload strategy. This suggests that CPU KV-cache blocks are allocated separately from the main process memory, and the configurations are primarily differentiated by cache management strategy rather than raw memory footprint.
-
 #### Request Queue Dynamics
 
 ![Request Queue Patterns](analysis/pcp_request_queues.png)
@@ -260,15 +253,15 @@ Prefix cache hit rates vary significantly by scenario, with some configurations 
 
 #### Summary Statistics by Scenario
 
-| Scenario | Avg Throughput (tok/s) | Avg GPU Util (%) | Avg KV-Cache (%) | Avg Running Reqs | Avg Waiting Reqs | Avg Process RSS (GB) |
-|----------|----------------------:|----------------:|----------------:|----------------:|----------------:|--------------------:|
-| no-offload | 279.72 | 43.17 | 44.81 | 16.81 | 112.03 | 1.63 |
-| llm-d-redis | 198.18 | 52.67 | 44.74 | 17.91 | 188.12 | 1.62 |
-| llm-d-valkey | 198.19 | 52.06 | 48.28 | 18.76 | 181.99 | 2.04 |
-| lmcache-local | 177.58 | 46.31 | 29.08 | 14.07 | 77.47 | 1.58 |
-| lmcache-redis | 186.62 | 43.57 | 33.94 | 14.20 | 120.69 | 1.62 |
-| lmcache-valkey | 178.68 | 49.79 | 35.62 | 16.10 | 113.79 | 1.62 |
-| native-offload | 145.96 | 51.13 | 38.02 | 13.87 | 115.59 | 1.65 |
+| Scenario | Avg Throughput (tok/s) | Avg GPU Util (%) | Avg KV-Cache (%) | Avg Running Reqs | Avg Waiting Reqs |
+|----------|----------------------:|----------------:|----------------:|----------------:|----------------:|
+| no-offload | 279.72 | 43.17 | 44.81 | 16.81 | 112.03 |
+| llm-d-redis | 198.18 | 52.67 | 44.74 | 17.91 | 188.12 |
+| llm-d-valkey | 198.19 | 52.06 | 48.28 | 18.76 | 181.99 |
+| lmcache-local | 177.58 | 46.31 | 29.08 | 14.07 | 77.47 |
+| lmcache-redis | 186.62 | 43.57 | 33.94 | 14.20 | 120.69 |
+| lmcache-valkey | 178.68 | 49.79 | 35.62 | 16.10 | 113.79 |
+| native-offload | 145.96 | 51.13 | 38.02 | 13.87 | 115.59 |
 
 *Note: Averages computed across all models at peak throughput (rate=50)*
 
@@ -279,8 +272,6 @@ Prefix cache hit rates vary significantly by scenario, with some configurations 
 2. **Moderate KV-cache utilization**: Utilization ranges from 29-48% across scenarios, indicating the workload uses a substantial portion of GPU KV-cache capacity without completely exhausting it
 
 3. **Request scheduling overhead**: llm-d distributed indexing shows higher waiting queues but maintains throughput, suggesting routing decisions don't block request processing
-
-4. **Memory footprint consistency**: Process RSS remains stable across configurations, confirming that performance differences stem from cache management strategy rather than memory overhead
 
 #### CPU Utilization and System Pressure
 
@@ -444,14 +435,13 @@ The different responses to CPU offload strategies reveal a **model size dependen
 | Tiny (0.6B) | ⛔ Severe degradation | ⚠️  Moderate degradation | (not tested) | **GPU-only** |
 | Small (8B) | ⛔ Severe degradation | ⚠️  Moderate degradation | (not tested) | **GPU-only** |
 | Medium (14B) | ⚪ Parity (+0.6%) | ✅ **+11.8% improvement** | ✅ **+16.7% improvement** | **LMCache CPU offload** |
-| Large quantized (32B-AWQ) | ⚪ Parity (-1.0%) | ⚠️  Degradation (-12.7%) | ✅ **+11.9% improvement** | **LMCache with adequate CPU memory** |
+| Larger (32B-AWQ) | ⚪ Parity (-1.0%) | ⚠️  Degradation (-12.7%) | ✅ **+11.9% improvement** | **LMCache with adequate CPU memory** |
 
 This pattern suggests:
-1. **Tiny models** suffer from CPU-GPU transfer overhead without compensating benefits
-2. **Medium models (14B)** benefit from CPU offload even with baseline CPU memory, with gains amplified by increased capacity
-3. **Larger models (32B+)** require adequate CPU memory provisioning to realize offload benefits - underprovision causes degradation, adequate provision yields substantial gains
-4. **CPU memory capacity is the dominant factor**: The 32B-AWQ model's shift from -12.7% degradation to +11.9% improvement demonstrates that offload effectiveness depends critically on CPU memory allocation
-
+1. **Smaller models** suffer from CPU-GPU transfer overhead without compensating benefits
+2. **Larger models** benefit from CPU offload with gains amplified by increased capacity, noting that underprovision also causes degradation
+3. **CPU memory capacity is the dominant factor**: The 32B-AWQ model's shift from -12.7% degradation to +11.9% improvement demonstrates that offload effectiveness depends critically on CPU memory allocation
+r
 ### LMCache Backend Comparison (Redis vs Valkey)
 
 LMCache performance with Redis vs Valkey backends shows near-identical results:
