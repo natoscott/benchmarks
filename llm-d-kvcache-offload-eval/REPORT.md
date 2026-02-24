@@ -452,8 +452,8 @@ The different responses to CPU offload strategies reveal a **model size dependen
 |-----------|----------------|---------------|------------------|
 | Tiny (0.6B) | ⛔ Severe degradation | ⚠️  Moderate degradation | **GPU-only** |
 | Small (8B) | ⛔ Severe degradation | ⚠️  Moderate degradation | **GPU-only** |
-| Medium (14B) | ✅ Parity | ✅ **+11.8% improvement** | **LMCache CPU offload** |
-| Large quantized (32B-AWQ) | ✅ Parity | ⚠️  Moderate degradation | **GPU-only or native** |
+| Medium (14B) | ⚪ Parity | ✅ **+11.8% improvement** | **LMCache CPU offload** |
+| Large quantized (32B-AWQ) | ⚪ Parity | ⚠️  Moderate degradation | **GPU-only or native** |
 
 This pattern suggests:
 1. **Tiny models** suffer from CPU-GPU transfer overhead without compensating benefits
