@@ -235,7 +235,6 @@ This generates:
 - `analysis/pcp_memory_usage.png` - Process memory consumption
 - `analysis/pcp_request_queues.png` - Request queue dynamics
 - `analysis/pcp_prefix_cache_hits.png` - Prefix cache effectiveness
-- `analysis/pcp_correlation_heatmap.png` - Metric correlation matrix
 - `analysis/percpu_saturation_*.png` - Per-CPU saturation visualizations
 
 ### Results Report
