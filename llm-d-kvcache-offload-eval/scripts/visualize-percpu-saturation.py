@@ -17,6 +17,17 @@ plt.rcParams['font.size'] = 11
 
 ANALYSIS_DIR = Path('analysis')
 
+# Scenario ordering (consistent with comprehensive-analysis.py)
+SCENARIO_ORDER = [
+    'no-offload',
+    'native-offload',
+    'lmcache-local',
+    'lmcache-redis',
+    'lmcache-valkey',
+    'llm-d-redis',
+    'llm-d-valkey'
+]
+
 def load_data():
     """Load per-CPU analysis data."""
     return pd.read_csv(ANALYSIS_DIR / 'percpu_analysis.csv')
@@ -29,7 +40,10 @@ def plot_saturated_cpus_by_scenario(df):
     scenario_summary = df.groupby('scenario').agg({
         'saturated_cpus_user': 'mean',
         'global_mean_user': 'mean'
-    }).sort_values('saturated_cpus_user', ascending=False)
+    })
+
+    # Reorder by consistent scenario ordering
+    scenario_summary = scenario_summary.reindex([s for s in SCENARIO_ORDER if s in scenario_summary.index])
 
     x = np.arange(len(scenario_summary))
     width = 0.35
@@ -57,8 +71,8 @@ def plot_cpu_load_distribution(df):
     """Box plot showing CPU load distribution (std dev and range)."""
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 7))
 
-    # Group by scenario
-    scenario_order = df.groupby('scenario')['cpu_stdev'].mean().sort_values(ascending=False).index
+    # Use consistent scenario ordering
+    scenario_order = [s for s in SCENARIO_ORDER if s in df['scenario'].values]
 
     # Standard deviation
     data_stdev = [df[df['scenario'] == s]['cpu_stdev'].values for s in scenario_order]
@@ -95,17 +109,19 @@ def plot_avg_vs_max_cpu(df):
     """Scatter plot showing average CPU vs max CPU utilization."""
     fig, ax = plt.subplots(figsize=(12, 8))
 
-    # Group by scenario
-    scenarios = sorted(df['scenario'].unique())
+    # Use consistent scenario ordering
+    scenarios = [s for s in SCENARIO_ORDER if s in df['scenario'].values]
+    colors = sns.color_palette("muted", len(scenarios))
 
-    for scenario in scenarios:
+    for scenario, color in zip(scenarios, colors):
         scenario_df = df[df['scenario'] == scenario]
         ax.scatter(
             scenario_df['global_mean_user'],
             scenario_df['max_cpu_mean_user'],
             label=scenario,
             alpha=0.7,
-            s=100
+            s=100,
+            color=color
         )
 
     # Add diagonal reference line (where avg = max)
@@ -134,6 +150,9 @@ def plot_saturation_heatmap(df):
     metric_labels = ['Saturated CPUs', 'Max CPU %', 'Load Std Dev', 'Load Range']
 
     summary = df.groupby('scenario')[metrics].mean()
+
+    # Reorder by consistent scenario ordering
+    summary = summary.reindex([s for s in SCENARIO_ORDER if s in summary.index])
 
     # Normalize for heatmap (scale each metric to 0-1)
     summary_norm = summary.copy()
