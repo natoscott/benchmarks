@@ -6,6 +6,11 @@
 *.tmp
 *.log
 
+# Uncompressed archives
+*.0
+*.meta
+*.index
+
 # Kubernetes configs with secrets
 *kubeconfig*
 *.key
