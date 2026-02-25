@@ -44,6 +44,8 @@ The llm-d EPP distributed KV-block indexing demonstrates negligible overhead for
 - **llm-d**: v0.4.0
 - **vLLM**: v0.11.2 (bundled with llm-d v0.4.0)
 - **LMCache**: v0.3.7 (3rd party distributed KV-cache library)
+- **Redis**: v7.4.7 (KV-block index backend for llm-d EPP and LMCache storage)
+- **Valkey**: v8.1.5 (KV-block index backend for llm-d EPP and LMCache storage)
 - **OpenShift**: v4.22.0 (container orchestration platform)
 - **PCP**: v7.0.3 (Performance Co-Pilot metrics collection)
 - **GuideLLM**: v0.5.3 (benchmark orchestration framework)
