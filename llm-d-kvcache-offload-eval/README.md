@@ -28,7 +28,11 @@ llm-d-kvcache-offload-eval/
 │   ├── create-pcp-visualizations.py          # Generate PCP metric visualizations
 │   ├── extract-pcp-cpu-memory-analysis.py    # CPU utilization and memory pressure analysis
 │   ├── analyze-per-cpu-utilization.py        # Per-CPU saturation detection
-│   └── visualize-percpu-saturation.py        # Per-CPU saturation visualizations
+│   ├── visualize-percpu-saturation.py        # Per-CPU saturation visualizations
+│   ├── capture-kvcache-logs.sh               # Capture vLLM startup logs for KV-cache analysis
+│   ├── capture-one-config.sh                 # Capture single configuration startup log
+│   ├── extract-kvcache-data.py               # Parse startup logs for GPU/CPU memory allocation
+│   └── visualize-kvcache-allocation.py       # Create KV-cache memory visualizations
 ├── manifests/
 │   ├── valkey-deployment.yaml
 │   ├── llm-d-model-cache-pvc.yaml
@@ -46,6 +50,7 @@ llm-d-kvcache-offload-eval/
 │       └── dcgm            # PCP pmlogconf for DCGM GPU metrics
 ├── results/                # Benchmark results (gitignored)
 ├── analysis/               # Generated analysis outputs (CSV, PNG)
+├── vllm-startup-logs/      # Compressed vLLM startup logs for KV-cache analysis
 ├── archive/                # Archived obsolete scripts
 ├── REPORT.md               # Comprehensive benchmark evaluation report
 └── PCPLOGS.md              # PCP archive documentation
@@ -236,6 +241,39 @@ This generates:
 - `analysis/pcp_request_queues.png` - Request queue dynamics
 - `analysis/pcp_prefix_cache_hits.png` - Prefix cache effectiveness
 - `analysis/percpu_saturation_*.png` - Per-CPU saturation visualizations
+
+### KV-Cache Memory Analysis
+
+Capture vLLM startup logs to extract actual GPU and CPU memory allocation:
+
+```bash
+# Capture logs for all model/config combinations
+bash scripts/capture-kvcache-logs.sh
+
+# Or capture a single configuration
+bash scripts/capture-one-config.sh "Qwen/Qwen3-14B" "native-offload-10k" \
+  "--kv-transfer-config '{\"kv_connector\":\"OffloadingConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"num_cpu_blocks\":10000}}'"
+
+# Extract GPU/CPU memory allocation data
+python3 scripts/extract-kvcache-data.py
+
+# Create memory allocation visualizations
+python3 scripts/visualize-kvcache-allocation.py
+```
+
+This generates:
+- `analysis/kvcache_allocations_actual.csv` - GPU/CPU memory allocation data
+- `vllm-startup-logs/*.log.zst` - Compressed vLLM startup logs
+- `analysis/kvcache_memory_capacity.png` - GPU memory and token capacity by model
+- `analysis/kvcache_memory_pressure_summary.png` - Memory pressure vs performance correlation
+- `analysis/kvcache_configured_vs_actual.png` - Configured vs actual CPU block allocation
+- `analysis/kvcache_memory_vs_performance.png` - Memory availability impact on offload effectiveness
+
+The captured logs contain:
+- GPU KV-cache memory availability after model loading (20.58-33.92 GiB)
+- Token capacity (208K-635K tokens)
+- Maximum concurrency limits
+- Actual CPU block allocation vs configured values
 
 ### Results Report
 

@@ -23,7 +23,7 @@ The evaluation addresses two areas:
 - **CPU offload increases CPU saturation**: Offload scenarios show 11-14 saturated CPUs vs 9.5 for baseline, consistent with CPU-GPU transfer overhead
 - **Prefix cache effectiveness varies widely**: Hit rates range from 2-61% depending on concurrency and model size, with effectiveness increasing substantially at higher concurrency
 
-The llm-d EPP distributed KV-block indexing demonstrates negligible overhead for cache-aware request routing in multi-pod deployments. CPU offload strategies show highly model-dependent and memory-capacity-dependent performance characteristics, with proper CPU memory provisioning being critical for realizing offload benefits.
+The llm-d EPP distributed KV-block indexing demonstrates negligible overhead for cache-aware request routing in multi-pod deployments. CPU offload strategies show highly model-dependent and memory-capacity-dependent performance characteristics, with proper CPU memory provisioning required to realize offload benefits.
 
 **Note**: These results are specific to the test hardware configuration (2x NVIDIA L40S GPUs, 48 vCPUs, variable CPU memory for offload). Different GPU types, CPU memory capacity, and memory bandwidth characteristics will significantly impact offload effectiveness. The optimal model size for CPU offload is expected to shift with alternative hardware configurations.
 
@@ -157,7 +157,7 @@ vllm serve <model> --tensor-parallel-size 2 --port 8000 --max-num-seq 1024
 
 ## KV-Cache Memory Allocation
 
-Understanding actual GPU and CPU memory allocation for KV-cache storage is critical for interpreting performance results. vLLM allocates KV-cache memory based on available GPU VRAM after model weights are loaded, and this varies significantly by model size.
+Understanding actual GPU and CPU memory allocation for KV-cache storage is necessary for interpreting performance results. vLLM allocates KV-cache memory based on available GPU memory after model weights are loaded, and this varies significantly by model size.
 
 ### GPU KV-Cache Memory Availability
 
@@ -168,11 +168,10 @@ Understanding actual GPU and CPU memory allocation for KV-cache storage is criti
 | Qwen3-8B | 26.83 | 390,704 | 9.54x | Moderate |
 | Qwen3-0.6B | 33.92 | 635,200 | 15.51x | **Lowest** |
 
-*Note: Measured with TP=2 across 2x NVIDIA L40S GPUs (48GB total VRAM)*
-
-**Critical Finding**: The 14B model has **39% less GPU KV-cache memory** than the 0.6B model (20.58 GiB vs 33.92 GiB) and **58% less token capacity** (269K vs 635K tokens). This memory pressure explains why the 14B model benefits substantially from CPU offload (+12-17%) while smaller models with abundant GPU memory show degradation.
-
-The 32B-AWQ model, despite being larger, has **more available GPU KV-cache memory than the 14B model** (25.40 GiB vs 20.58 GiB) due to 4-bit quantization reducing model weight size. This explains its different offload behavior.
+**Notes**:
+- Measured with TP=2 across 2x NVIDIA L40S GPUs (48GB total VRAM)
+- The 14B model has **39% less GPU KV-cache memory** than the 0.6B model (20.58 GiB vs 33.92 GiB) and **58% less token capacity** (269K vs 635K tokens).
+- The 32B-AWQ model, despite being larger, has **more available GPU KV-cache memory than the 14B model** (25.40 GiB vs 20.58 GiB) due to 4-bit quantization reducing model weight size.
 
 ![KV-Cache Memory Capacity](analysis/kvcache_memory_capacity.png)
 *Figure: GPU memory availability, token capacity, and max concurrency by model. The 14B model shows the least available memory and lowest concurrency, creating memory pressure that benefits from CPU offload.*
@@ -493,7 +492,7 @@ The different responses to CPU offload strategies reveal a **GPU memory availabi
 | **14B** | **20.58** | **270K** | ⚪ +0.6% | ✅ **+11.8%** | ✅ **+16.7%** | **LMCache CPU offload** |
 | 32B-AWQ | 25.40 | 208K | ⚪ -1.0% | ⚠️ -12.7% | ✅ **+11.9%** | **LMCache with adequate CPU** |
 
-**Critical Insight**: The 14B model benefits from offload not because it's "medium-sized" but because it has the **least available GPU memory** (20.58 GiB). Model weight size in VRAM determines remaining capacity for KV-cache, not parameter count alone.
+**Critical Insight**: The 14B model benefits from offload not because it's "medium-sized" but because it has the **least available GPU memory** (20.58 GiB). Model weight size determines remaining capacity for KV-cache, not parameter count alone.
 
 This pattern demonstrates:
 1. **GPU memory abundance eliminates offload benefit**: Models with >26 GiB available (0.6B, 8B) show degradation due to transfer overhead without memory pressure relief
@@ -633,16 +632,16 @@ This comprehensive evaluation of KV-cache management strategies across seven con
 
 ### Insights
 
-1. **GPU memory availability, not model size, predicts offload benefit**: The traditional assumption that "larger models benefit from offload" is incomplete. Actual GPU KV-cache memory availability after model loading is the critical factor. The 14B FP16 model (20.58 GiB available) benefits more than the 32B-AWQ model (25.40 GiB available) because quantization reduces weight size, freeing more VRAM for KV-cache.
+1. **GPU memory availability, not model size, predicts offload benefit**: The assumption that "larger models benefit from offload" is incomplete - actual GPU KV-cache memory availability after model loading is an important factor. The 14B FP16 model (20.58 GiB available) benefits more than the 32B-AWQ model (25.40 GiB available) because quantization reduces weight size, freeing more memory for KV-cache.
 
 2. **Memory pressure threshold determines offload crossover**: Three zones emerge based on GPU KV-cache memory:
    - **Abundant (>26 GiB)**: 0.6B and 8B models - CPU offload is pure overhead (-5% to -36%)
    - **Constrained (20-26 GiB)**: 14B and 32B-AWQ models - CPU offload provides benefits when adequately provisioned (+12-17%)
    - **Threshold**: ~26 GiB appears to be the crossover point where memory pressure becomes significant enough to justify offload overhead
 
-3. **CPU memory must match or exceed GPU KV-cache capacity**: vLLM allocates CPU blocks based on GPU memory availability. The 14B model with 20.58 GiB GPU memory allocated 16.8K actual CPU blocks regardless of 10K or 20K configuration. Adequate CPU provisioning requires understanding actual GPU memory constraints, not just choosing arbitrary block counts.
+3. **CPU memory must match or exceed GPU KV-cache capacity**: vLLM allocates CPU blocks based on GPU memory availability. The 14B model with 20.58 GiB GPU memory allocated 16.8K actual CPU blocks regardless of 10K or 20K configuration.
 
-4. **LMCache outperforms native offload across all memory configurations**: Even in memory-constrained scenarios where offload helps (14B model), LMCache shows +11.8% vs native offload's +0.6%. Implementation efficiency matters alongside memory provisioning.
+4. **LMCache outperforms native offload across all memory configurations**: Even in memory-constrained scenarios where offload helps (14B model), LMCache shows +11.8% vs native offload's +0.6%.
 
 5. **Workload and model characteristics interact**: Different prompt lengths, context windows, or prefix patterns will shift memory pressure patterns. The 10K-token prefix workload creates high memory pressure; shorter contexts would reduce pressure and shift the optimal model size upward.
 
@@ -688,9 +687,9 @@ These follow-up results substantially strengthen the case for CPU KV-cache offlo
 
 ### Limitations and Hardware Dependencies
 
-- **GPU VRAM capacity determines KV-cache availability**: All findings are specific to the 2x NVIDIA L40S GPU configuration (24GB VRAM per GPU, 48GB total). Measured GPU KV-cache memory after model loading ranges from 20.58 GiB (14B FP16) to 33.92 GiB (0.6B), creating the memory pressure gradient that determines offload effectiveness. Different GPUs with more VRAM (H100: 80GB, A100: 40GB/80GB) will shift the optimal model size for offload, as larger models would fit with more KV-cache headroom.
+- **GPU memory capacity determines KV-cache availability**: All findings are specific to the 2x NVIDIA L40S GPU configuration (24GB VRAM per GPU, 48GB total). Measured GPU KV-cache memory after model loading ranges from 20.58 GiB (14B FP16) to 33.92 GiB (0.6B), creating the memory pressure gradient that determines offload effectiveness. Different GPUs with more memory (H100: 80GB, A100: 40GB/80GB) will shift the optimal model size for offload, as larger models would fit with more KV-cache headroom.
 
-- **Model precision affects memory pressure**: FP16 models consume more VRAM than quantized models. The 14B FP16 model has less GPU KV-cache memory (20.58 GiB) than the 32B-AWQ 4-bit model (25.40 GiB) despite fewer parameters. Different precision choices (FP8, INT8, INT4) will shift memory pressure patterns and optimal offload configurations.
+- **Model precision affects memory pressure**: FP16 models consume more memory than quantized models. The 14B FP16 model has less GPU KV-cache memory (20.58 GiB) than the 32B-AWQ 4-bit model (25.40 GiB) despite fewer parameters. Different precision choices (FP8, INT8, INT4) will shift memory pressure patterns and optimal offload configurations.
 
 - **CPU memory must match GPU KV-cache constraints**: vLLM allocates CPU blocks based on GPU memory availability. The 14B model allocated 16.8K actual CPU blocks regardless of 10K or 20K configuration. Adequate CPU provisioning requires profiling actual GPU memory constraints (via vLLM startup logs), not assuming arbitrary block counts. Under-provisioning CPU memory (32B-AWQ with 10K blocks) eliminated offload benefits (-12.7%), while adequate provisioning (20K blocks) enabled gains (+11.9%).
 
@@ -726,27 +725,22 @@ All benchmarks were executed using GuideLLM v0.5.3 with identical parameters acr
 - Archives captured at 10-second intervals throughout each benchmark run
 - PCP data analyzed and correlated with GuideLLM results to provide system-level validation
 
-### Data Files
+### Data Files and Reproducibility
 
+Benchmark data, analysis scripts, and visualization code are organized as follows:
+
+**Raw Data:**
 - GuideLLM JSON results: `results/*/guidellm-results.json.zst`
 - PCP archives: `results/*/pcp-archives/` (compressed with zstd)
-- vLLM startup logs: `vllm-startup-logs/*.log` (10 configurations across 4 models)
-- GuideLLM analysis outputs: `analysis/complete_metrics.csv`, `analysis/peak_throughput_all.csv`
-- PCP analysis outputs: `analysis/pcp_metrics_peak.csv`, `analysis/pcp_summary_stats.csv`
-- KV-cache analysis: `analysis/kvcache_allocations_actual.csv`
-- Visualizations: `analysis/*.png` (GuideLLM, PCP metrics, and KV-cache allocation)
+- vLLM startup logs: `vllm-startup-logs/*.log.zst` (10 configurations, 4 models)
 
-### Reproducibility
+**Generated Analysis:**
+- GuideLLM metrics: `analysis/complete_metrics.csv`, `analysis/peak_throughput_all.csv`
+- PCP metrics: `analysis/pcp_metrics_peak.csv`, `analysis/pcp_summary_stats.csv`
+- KV-cache allocations: `analysis/kvcache_allocations_actual.csv`
+- Visualizations: `analysis/*.png` (40+ charts and graphs)
 
-All benchmark scripts, analysis code, and raw data are available in this repository:
-- Benchmark execution: `scripts/run-benchmark.sh`
-- GuideLLM data analysis: `scripts/comprehensive-analysis.py`
-- PCP metrics extraction (comprehensive): `scripts/analyze-pcp-data.py`
-- PCP metrics extraction (peak throughput focus): `scripts/extract-pcp-peak-metrics.py`
-- PCP visualizations: `scripts/create-pcp-visualizations.py`
-- KV-cache log capture: `scripts/capture-kvcache-logs.sh`, `scripts/capture-one-config.sh`
-- KV-cache data extraction: `scripts/extract-kvcache-data.py`
-- KV-cache visualizations: `scripts/visualize-kvcache-allocation.py`
+See [README.md](README.md) for complete documentation of analysis scripts and usage instructions.
 
 ---
 
