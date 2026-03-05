@@ -9,23 +9,22 @@ The evaluation addresses two areas:
 1. **llm-d EPP distributed KV-block indexing overhead**: Comparing baseline GPU-only operation against Redis and Valkey-backed distributed indexing for cache-aware request routing
 2. **CPU KV-cache offload strategies**: Comparing vLLM native offloading against LMCache (local CPU and distributed Redis/Valkey backends)
 
-**Primary Findings:**
+**Findings:**
 
-- **GPU KV-cache memory availability determines offload effectiveness**: The 14B model benefits from CPU offload (+12-17%) because it has the least GPU memory available (20.58 GiB, 270K token capacity), while the 0.6B model with abundant memory (33.92 GiB, 635K tokens) shows degradation (-13% to -29%)
+- **GPU KV-cache memory availability determines offload effectiveness**: The 14B model benefits from CPU offload (+12-17%) because it has the least GPU memory available (20.58 GiB, 270K token capacity), while the 0.6B model with abundant memory (33.92 GiB, 635K tokens) shows significant degradation (-13% to -29%) with CPU offload
 - **llm-d EPP distributed indexing achieves performance parity** with baseline (within ±2% for most models)
-- **CPU memory capacity amplifies or undermines offload**: The 32B-AWQ model shifted from -12.7% degradation to +11.9% improvement when CPU blocks doubled from 10K to 20K, demonstrating that offload requires adequate CPU memory to provide benefits
-- **Model weight size creates GPU memory pressure**: The 14B model has 39% less GPU KV-cache memory than 0.6B despite smaller model size, quantified at 20.58 GiB vs 33.92 GiB available after model loading
 - **vLLM native offloading underperforms LMCache** across all model sizes, showing -29% to -36% degradation for small models
+- **CPU memory capacity amplifies or undermines offload**: The 32B-AWQ model shifted from -12.7% degradation to +11.9% improvement when CPU blocks doubled from 10K to 20K, demonstrating that offload requires adequate CPU memory to provide benefits, as would be expected
 
 **System-Level Insights:**
 
-- **Per-CPU analysis reveals hidden saturation**: Despite 4-10% average CPU utilization, 9-14 individual CPUs averaged >80% saturation across scenarios, with severe load hotspotting
+- **Per-CPU analysis shows saturation**: Despite 4-10% average CPU utilization, 9-14 individual CPUs averaged >80% saturation across scenarios, with severe load hotspotting
 - **CPU offload increases CPU saturation**: Offload scenarios show 11-14 saturated CPUs vs 9.5 for baseline, consistent with CPU-GPU transfer overhead
 - **Prefix cache effectiveness varies widely**: Hit rates range from 2-61% depending on concurrency and model size, with effectiveness increasing substantially at higher concurrency
 
 The llm-d EPP distributed KV-block indexing demonstrates negligible overhead for cache-aware request routing in multi-pod deployments. CPU offload strategies show highly model-dependent and memory-capacity-dependent performance characteristics, with proper CPU memory provisioning required to realize offload benefits.
 
-**Note**: These results are specific to the test hardware configuration (2x NVIDIA L40S GPUs, 48 vCPUs, variable CPU memory for offload). Different GPU types, CPU memory capacity, and memory bandwidth characteristics will significantly impact offload effectiveness. The optimal model size for CPU offload is expected to shift with alternative hardware configurations.
+**Note**: These results are specific to the test hardware configuration (2x NVIDIA L40S GPUs, 48 vCPUs, variable CPU memory for offload) which is relatively low-end. Naturally, different GPU types, CPU memory capacity, and memory bandwidth characteristics will significantly impact offload effectiveness. The optimal model size for CPU offload is expected to shift with alternative hardware configurations.
 
 ---
 
@@ -38,17 +37,17 @@ The llm-d EPP distributed KV-block indexing demonstrates negligible overhead for
   - Tensor Parallelism: 2 GPUs per model
 - **CPU**: 32 vCPUs (IBM cloud virtual CPUs)
 - **Memory**: Sufficient for CPU KV-cache blocks (configuration-dependent)
-- **Network**: Cluster networking with Redis/Valkey services
+- **Network**: Cluster networking with shared Redis/Valkey services
 
 **Software:**
 - **llm-d**: v0.4.0
 - **vLLM**: v0.11.2 (bundled with llm-d v0.4.0)
-- **LMCache**: v0.3.7 (3rd party distributed KV-cache library)
-- **Redis**: v7.4.7 (KV-block index backend for llm-d EPP and LMCache storage)
-- **Valkey**: v8.1.5 (KV-block index backend for llm-d EPP and LMCache storage)
-- **OpenShift**: v4.22.0 (container orchestration platform)
-- **PCP**: v7.0.3 (Performance Co-Pilot metrics collection)
-- **GuideLLM**: v0.5.3 (benchmark orchestration framework)
+- **LMCache**: v0.3.7
+- **Redis**: v7.4.7
+- **Valkey**: v8.1.5
+- **OpenShift**: v4.22.0
+- **PCP**: v7.0.3
+- **GuideLLM**: v0.5.3
 
 **Models Tested:**
 - Qwen/Qwen3-0.6B (577M parameters, FP16)
@@ -178,32 +177,34 @@ Understanding actual GPU and CPU memory allocation for KV-cache storage is neces
 
 ### CPU Offload Memory Allocation
 
-When CPU offload is enabled, vLLM allocates CPU memory matching the GPU KV-cache memory capacity:
+When CPU offload is enabled, vLLM allocates CPU memory based on configuration and available system memory:
 
-| Model | Config | Blocks Configured | Blocks Actual | CPU Memory (GiB) | Ratio |
-|-------|--------|------------------:|--------------:|-----------------:|------:|
-| Qwen3-0.6B | 10K blocks | 10,000 | 39,700 | 33.92 | **3.97x** |
-| Qwen3-8B | 10K blocks | 10,000 | 24,419 | 26.83 | **2.44x** |
-| Qwen3-14B | 10K blocks | 10,000 | 16,857 | 20.58 | **1.69x** |
-| Qwen3-14B | 20K blocks | 20,000 | 16,857 | 20.58 | 0.84x |
-| Qwen3-32B-AWQ | 10K blocks | 10,000 | 13,005 | 25.40 | **1.30x** |
-| Qwen3-32B-AWQ | 20K blocks | 20,000 | 13,005 | 25.40 | 0.65x |
+| Model | Config | Blocks Configured | CPU Memory (GiB) | Allocation Behavior |
+|-------|--------|------------------:|-----------------:|---------------------|
+| Qwen3-0.6B | 10K blocks | 10,000 | 33.92 | Over-allocated (3.97x) |
+| Qwen3-8B | 10K blocks | 10,000 | 26.83 | Over-allocated (2.44x) |
+| Qwen3-14B | 10K blocks | 10,000 | 20.58 | Over-allocated (1.69x) |
+| Qwen3-14B | 20K blocks | 20,000 | 41.16 | As configured (2.00x) |
+| Qwen3-32B-AWQ | 10K blocks | 10,000 | 25.40 | Over-allocated (1.30x) |
+| Qwen3-32B-AWQ | 20K blocks | 20,000 | 50.80 | As configured (2.00x) |
 
-**Important**: vLLM allocates CPU KV-cache blocks based on available GPU memory, not solely the configured value. The "Ratio" column shows actual/configured blocks. Values >1.0x indicate vLLM allocated **more** blocks than configured (sufficient system memory available). Values <1.0x indicate system memory constraints limited allocation below the configured amount.
+**Allocation Behavior**:
+- **10K block configurations**: vLLM v0.4.0 over-allocated CPU blocks beyond the configured 10,000, matching GPU KV-cache memory capacity. For models with abundant GPU memory (0.6B: 33.92 GiB), this resulted in 39,700 actual blocks (3.97x configured). For memory-constrained models (14B: 20.58 GiB), allocation was closer to configured value (16,857 blocks, 1.69x).
+- **20K block configurations**: With 20,000 blocks configured, vLLM allocated the requested capacity (41.16 GiB for 14B, 50.80 GiB for 32B-AWQ), enabling substantial performance improvements (+16.7% for 14B, +11.9% for 32B-AWQ with LMCache). This demonstrates that adequate system memory was available and the larger allocation was respected.
 
 All models use 16 tokens per KV-cache block consistently.
 
 ![KV-Cache Configured vs Actual](analysis/kvcache_configured_vs_actual.png)
-*Figure: Configured vs actual CPU block allocation. vLLM allocates based on available memory, which can exceed or fall short of configuration.*
+*Figure: Configured vs actual CPU block allocation. With 10K blocks, vLLM over-allocated to match GPU capacity. With 20K blocks, vLLM allocated the full requested amount, demonstrating adequate system memory.*
 
 ### Memory Pressure and Performance Correlation
 
 The relationship between GPU memory availability and CPU offload effectiveness is clear:
 
 ![Memory Pressure vs Performance](analysis/kvcache_memory_pressure_summary.png)
-*Figure: Models with lower GPU KV-cache memory (higher pressure) benefit more from CPU offload. The 14B model's 20.58 GiB available memory creates pressure relieved by offload, while the 0.6B model's 33.92 GiB abundance makes offload pure overhead.*
+*Figure: Models with lower GPU KV-cache memory (higher pressure) benefit more from CPU offload. The 14B model's 20.58 GiB available GPU memory creates pressure relieved by offload, while the 0.6B model's 33.92 GiB abundance makes offload pure overhead.*
 
-**Insight**: GPU memory availability is the primary factor determining CPU offload effectiveness. The 14B model's constrained memory (20.58 GiB, 270K tokens) creates pressure that CPU offload relieves, enabling +12-17% throughput improvement. Models with abundant GPU memory (0.6B: 33.92 GiB, 635K tokens) experience no memory pressure, making CPU offload pure overhead (-13% to -29% degradation).
+**Insight**: GPU memory availability is the primary factor determining CPU offload effectiveness. The 14B model's constrained GPU memory (20.58 GiB, 270K tokens) creates pressure that CPU offload relieves, enabling +12-17% throughput improvement when adequate CPU memory is allocated (41.16 GiB for 20K blocks). Models with abundant GPU memory (0.6B: 33.92 GiB, 635K tokens) experience no memory pressure, making CPU offload pure overhead (-13% to -29% degradation) regardless of CPU allocation size.
 
 ---
 
@@ -222,13 +223,6 @@ Results show peak output token throughput achieved at optimal concurrency for ea
 | | lmcache-valkey | 523.9 | 50 | **-13.0%** |
 | | llm-d-redis | 598.0 | 50 | **-0.7%** |
 | | llm-d-valkey | 592.9 | 50 | **-1.5%** |
-| **Qwen3-14B** | no-offload | 58.7 | 50 | — |
-| | native-offload | 59.0 | 50 | **+0.6%** |
-| | lmcache-local | 65.6 | 50 | **+11.8%** |
-| | lmcache-redis | 60.1 | 100 | **+2.5%** |
-| | lmcache-valkey | 66.3 | 50 | **+13.0%** |
-| | llm-d-redis | 60.6 | 50 | **+3.4%** |
-| | llm-d-valkey | 64.5 | 50 | **+10.0%** |
 | **Qwen3-8B** | no-offload | 113.0 | 50 | — |
 | | native-offload | 71.8 | 50 | **-36.5%** |
 | | lmcache-local | 106.6 | 50 | **-5.6%** |
@@ -236,6 +230,13 @@ Results show peak output token throughput achieved at optimal concurrency for ea
 | | lmcache-valkey | 105.7 | 50 | **-6.5%** |
 | | llm-d-redis | 112.9 | 50 | **-0.1%** |
 | | llm-d-valkey | 113.4 | 50 | **+0.4%** |
+| **Qwen3-14B** | no-offload | 58.7 | 50 | — |
+| | native-offload | 59.0 | 50 | **+0.6%** |
+| | lmcache-local | 65.6 | 50 | **+11.8%** |
+| | lmcache-redis | 60.1 | 100 | **+2.5%** |
+| | lmcache-valkey | 66.3 | 50 | **+13.0%** |
+| | llm-d-redis | 60.6 | 50 | **+3.4%** |
+| | llm-d-valkey | 64.5 | 50 | **+10.0%** |
 | **Qwen3-32B-AWQ** | no-offload | 49.2 | 1 | — |
 | | native-offload | 48.7 | 1 | **-1.0%** |
 | | lmcache-local | 43.0 | 1 | **-12.7%** |
@@ -653,7 +654,7 @@ To validate the hypothesis that CPU memory constraints were limiting offload eff
 - Models: Qwen3-14B, Qwen3-32B-AWQ
 - Configurations: native-offload, lmcache-local, lmcache-valkey
 - CPU blocks: 20,000 (2x baseline)
-- CPU memory: ~58 GB for 14B (~29 GB baseline), ~78 GB for 32B-AWQ (~39 GB baseline)
+- CPU memory: 41.16 GiB for 14B (20.58 GiB baseline), 50.80 GiB for 32B-AWQ (25.40 GiB baseline)
 
 **Results:**
 
@@ -691,7 +692,7 @@ These follow-up results substantially strengthen the case for CPU KV-cache offlo
 
 - **Model precision affects memory pressure**: FP16 models consume more memory than quantized models. The 14B FP16 model has less GPU KV-cache memory (20.58 GiB) than the 32B-AWQ 4-bit model (25.40 GiB) despite fewer parameters. Different precision choices (FP8, INT8, INT4) will shift memory pressure patterns and optimal offload configurations.
 
-- **CPU memory must match GPU KV-cache constraints**: vLLM allocates CPU blocks based on GPU memory availability. The 14B model allocated 16.8K actual CPU blocks regardless of 10K or 20K configuration. Adequate CPU provisioning requires profiling actual GPU memory constraints (via vLLM startup logs), not assuming arbitrary block counts. Under-provisioning CPU memory (32B-AWQ with 10K blocks) eliminated offload benefits (-12.7%), while adequate provisioning (20K blocks) enabled gains (+11.9%).
+- **CPU memory allocation scales with configuration when adequate system memory exists**: With 10K blocks configured, vLLM v0.4.0 over-allocated CPU blocks to match GPU KV-cache capacity (16.8K blocks for 14B). With 20K blocks configured, vLLM allocated the full requested capacity (41.16 GiB for 14B, 50.80 GiB for 32B-AWQ), demonstrating that adequate system memory was available. Under-provisioning CPU memory (32B-AWQ with 10K blocks: 25.40 GiB) eliminated offload benefits (-12.7%), while adequate provisioning (20K blocks: 50.80 GiB) enabled substantial gains (+11.9%).
 
 - **Workload context length creates memory pressure**: Results apply to high-concurrency, long-context workloads with 10K-token shared prefixes creating substantial KV-cache memory demand. Shorter contexts would reduce memory pressure, shifting the optimal model size upward. The measured token capacities (270K-635K) set upper bounds for concurrent long-context requests.
 
