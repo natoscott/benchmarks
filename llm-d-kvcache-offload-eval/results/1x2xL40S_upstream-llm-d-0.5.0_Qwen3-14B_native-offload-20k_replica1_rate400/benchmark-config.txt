@@ -1,5 +1,5 @@
 Run ID: 1x2xL40S_upstream-llm-d-0.5.0_Qwen3-14B_native-offload-20k_replica1_rate400
-Date: Sat 07 Mar 2026 13:19:12 AEDT
+Date: Sun 08 Mar 2026 13:35:07 AEDT
 Target: http://llm-d-inference-gateway-istio:80
 Rate Type: concurrent
 Rate (Concurrency): 400
@@ -20,7 +20,7 @@ Replicas: 1
 Experiment Name: 
 Namespace: llm-d-pfc-cpu
 Interactive Pod: interactive-pod-6b6bdc56c8-hgptz
-PCP Pods: pcp-wdk9n
+PCP Pods: pcp-fkc2t
 PCP Pod Count: 1
 Inference Deployment: llm-d-model-server
 vLLM Extra Args: --kv-transfer-config '{"kv_connector":"OffloadingConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":44195213475}}'
