@@ -35,7 +35,7 @@ The llm-d EPP distributed KV-block indexing demonstrates negligible overhead for
 **System:** OpenShift cluster on IBM Cloud
 - **GPUs**: 2x NVIDIA L40S (48GB total VRAM)
   - Tensor Parallelism: 2 GPUs per model
-- **CPU**: 32 vCPUs (IBM cloud virtual CPUs)
+- **CPU**: 48 vCPUs (IBM cloud virtual CPUs)
 - **Memory**: Sufficient for CPU KV-cache blocks (configuration-dependent)
 - **Network**: Cluster networking with shared Redis/Valkey services
 
@@ -397,7 +397,7 @@ The 14B model shows lower cache hit rates than the 0.6B model, suggesting differ
 - **lmcache-redis**: 43% hit rate
 - **lmcache-local-20kcpu**: 31-52% hit rates
 - **llm-d-valkey**: 13.9% hit rate
-- **llm-d-redis**: (data not available at rate=50)
+- **llm-d-redis**: 7.4% hit rate
 
 The quantized model shows moderate cache effectiveness, with variability suggesting workload-dependent behavior. LMCache scenarios achieve higher hit rates than llm-d distributed indexing for this model size.
 
@@ -493,7 +493,7 @@ The different responses to CPU offload strategies reveal a **GPU memory availabi
 | **14B** | **20.58** | **270K** | ⚪ +0.6% | ✅ **+11.8%** | ✅ **+16.7%** | **LMCache CPU offload** |
 | 32B-AWQ | 25.40 | 208K | ⚪ -1.0% | ⚠️ -12.7% | ✅ **+11.9%** | **LMCache with adequate CPU** |
 
-**Critical Insight**: The 14B model benefits from offload not because it's "medium-sized" but because it has the **least available GPU memory** (20.58 GiB). Model weight size determines remaining capacity for KV-cache, not parameter count alone.
+The 14B model benefits from offload not because it's "medium-sized" but because it has the least available GPU memory (20.58 GiB). Model weight size determines remaining capacity for KV-cache, not parameter count alone.
 
 This pattern demonstrates:
 1. **GPU memory abundance eliminates offload benefit**: Models with >26 GiB available (0.6B, 8B) show degradation due to transfer overhead without memory pressure relief
@@ -610,6 +610,81 @@ GPU power consumption was measured using DCGM metrics (`openmetrics.dcgm.DCGM_FI
 3. **Power savings do not correlate with throughput gains**: While CPU offload provides **+12-17% throughput improvement** for the 14B model, power consumption decreases by only **~2%**.
 
 4. **Native offload increases power consumption**: The native-offload-20kcpu configuration shows a **+2.7% increase** in power consumption (+13.4W) despite providing throughput improvements, suggesting implementation-specific overhead.
+
+---
+
+## vLLM 0.14.1 Native CPU Offload Performance (llm-d v0.5.0)
+
+To evaluate whether vLLM 0.14.1 resolved the native CPU offload performance issues observed in v0.11.2, we conducted comprehensive benchmarking using llm-d v0.5.0 (vLLM 0.14.1) across four model sizes with corrected workload parameters for apples-to-apples comparison.
+
+### Test Configuration
+
+**Software Versions:**
+- llm-d v0.5.0 (vLLM 0.14.1, GuideLLM v0.5.3)
+- llm-d v0.4.0 baseline (vLLM 0.11.2, LMCache v0.3.7) for comparison
+
+**Benchmark Parameters:**
+- Models: Qwen3-0.6B, Qwen3-8B, Qwen3-14B, Qwen3-32B-AWQ
+- Configurations: no-offload (baseline), native-offload-10k, native-offload-20k
+- Concurrency levels: 1, 50, 100, 150, 300, 400, 500, 650
+- Request pattern: 128 prompt tokens, 128 output tokens, 10,000 prefix tokens, 5 turns
+- **Prefix count**: rate × 2 (apples-to-apples with v0.4.0)
+- Duration: 120 seconds per concurrency level
+
+### Results
+
+**Peak Throughput Performance (v0.5.0 with corrected PREFIX_COUNT):**
+
+| Model | Configuration | Peak Throughput (tok/s) | Optimal Concurrency | vs Baseline |
+|-------|---------------|------------------------:|--------------------:|------------:|
+| **Qwen3-0.6B** | no-offload | 634.7 | 50 | — |
+| | native-offload-10k | 615.5 | 50 | **-3.0%** |
+| | native-offload-20k | 632.5 | 50 | **-0.3%** |
+| **Qwen3-8B** | no-offload | 114.1 | 50 | — |
+| | native-offload-10k | 85.3 | 50 | **-25.2%** |
+| | native-offload-20k | 84.3 | 50 | **-26.1%** |
+| **Qwen3-14B** | no-offload | 66.1 | 50 | — |
+| | native-offload-10k | 60.8 | 50 | **-8.1%** |
+| | native-offload-20k | 65.1 | 50 | **-1.6%** |
+| **Qwen3-32B-AWQ** | no-offload | 51.2 | 1 | — |
+| | native-offload-10k | 22.4 | 100 | **-56.2%** |
+| | native-offload-20k | 21.3 | 50 | **-58.4%** |
+
+**Comparison with v0.4.0 LMCache Performance Impact:**
+
+| Model | v0.4.0 Native (10K) | v0.4.0 LMCache (10K) | v0.5.0 Native (10K) | Improvement vs v0.4.0 Native |
+|-------|--------------------:|---------------------:|--------------------:|-----------------------------:|
+| Qwen3-0.6B | **-29.1%** | -13.6% | **-3.0%** | **+26.1 pp** |
+| Qwen3-8B | **-36.5%** | -5.6% | **-25.2%** | **+11.3 pp** |
+| Qwen3-14B | +0.6% | +11.8% | **-8.1%** | **-8.7 pp** |
+| Qwen3-32B-AWQ | -1.0% | -12.7% | **-56.2%** | **-55.2 pp** |
+
+### Key Findings
+
+1. **Small models show substantial improvement**: vLLM 0.14.1 reduces native offload overhead dramatically for Qwen3-0.6B (+26.1 percentage points), though -3.0% degradation remains. With 20K CPU blocks, degradation is nearly eliminated (-0.3%).
+
+2. **Medium models show moderate improvement**: Qwen3-8B improves from -36.5% to -25.2% (+11.3 pp), though overhead remains significant. Increased CPU blocks (20K) provide no additional benefit, suggesting different bottleneck.
+
+3. **Large models regress significantly**: Qwen3-14B shifts from +0.6% (v0.4.0) to -8.1% (v0.5.0), a concerning **-8.7 pp regression**. With 20K blocks, performance recovers to -1.6%, but still below v0.4.0 baseline.
+
+4. **Quantized large models show severe degradation**: Qwen3-32B-AWQ experiences catastrophic -56.2% throughput loss with native offload, far worse than v0.4.0's -1.0%. Even 20K blocks show -58.4%, suggesting fundamental incompatibility or implementation issue.
+
+5. **CPU memory capacity matters for some models**: 0.6B and 14B show improvement with 20K blocks, while 8B and 32B-AWQ do not benefit, indicating model-specific bottlenecks.
+
+### Latency Analysis
+
+Median latency metrics at peak throughput reveal offload overhead characteristics:
+
+**Time to First Token (TTFT) at rate=50:**
+- **0.6B**: 701ms (baseline) → 738ms (10K) → 949ms (20K) - offload increases queueing
+- **8B**: 11.1s (baseline) → 16.1s (10K) → 16.3s (20K) - severe TTFT degradation
+- **14B**: 22.8s (baseline) → 21.6s (10K) → 23.4s (20K) - mixed results
+- **32B-AWQ**: 101ms @ rate=1 (baseline) → 31.4s @ rate=100 (10K) - dramatic shift in optimal concurrency
+
+**Inter-Token Latency (ITL) median:**
+- **0.6B**: 68.1ms (baseline) → 68.5ms (10K) - minimal impact
+- **8B**: 257ms (baseline) → 341ms (10K) - +33% latency increase
+- **14B**: 311ms (baseline) → 314ms (10K) - minimal impact
 
 ---
 
