@@ -398,6 +398,39 @@ echo "  Inference server configured successfully"
 
 echo ""
 echo "=========================================="
+echo "Capturing vLLM Startup Logs"
+echo "=========================================="
+
+# Get inference server pod name
+INFERENCE_POD=$(kubectl --kubeconfig="${KUBECONFIG}" get pods -n "${NAMESPACE}" \
+    -l llm-d.ai/inference-serving=true -o jsonpath='{.items[0].metadata.name}')
+
+if [ -z "${INFERENCE_POD}" ]; then
+    echo "  Warning: Could not find inference server pod, skipping log capture"
+else
+    echo "  Inference pod: ${INFERENCE_POD}"
+
+    # Create output directory if it doesn't exist yet
+    mkdir -p "${OUTPUT_DIR}"
+
+    # Capture vLLM startup logs
+    VLLM_LOG="${OUTPUT_DIR}/vllm-startup.log"
+    echo "  Capturing logs to: ${VLLM_LOG}"
+    kubectl --kubeconfig="${KUBECONFIG}" logs -n "${NAMESPACE}" "${INFERENCE_POD}" > "${VLLM_LOG}" 2>&1
+
+    # Show log size
+    LOG_LINES=$(wc -l < "${VLLM_LOG}")
+    echo "  Captured ${LOG_LINES} lines"
+
+    # Compress with zstd
+    echo "  Compressing with zstd..."
+    zstd -q -f "${VLLM_LOG}"
+    rm -f "${VLLM_LOG}"
+    echo "  Saved to: ${VLLM_LOG}.zst"
+fi
+
+echo ""
+echo "=========================================="
 echo "Detecting Cluster Resources"
 echo "=========================================="
 
@@ -506,32 +539,25 @@ echo ""
 echo "Collecting guidellm results..."
 RESULT_FILE="/models/benchmark.json"
 
-# Download uncompressed results and compress locally (like PCP archives)
-# This avoids streaming large compressed files through kubectl which can truncate
-echo "Downloading guidellm results..."
-set +e  # Temporarily disable exit on error
-kubectl --kubeconfig="${KUBECONFIG}" exec -n "${NAMESPACE}" "${INTERACTIVE_POD}" -- cat "${RESULT_FILE}" > "${OUTPUT_DIR}/guidellm-results.json" 2>/dev/null
+# Compress in pod first, then transfer compressed file
+# This avoids corruption issues with large JSON files during transfer
+# Use --rm to delete source file after compression to save space
+echo "Compressing guidellm results in pod..."
+kubectl --kubeconfig="${KUBECONFIG}" exec -n "${NAMESPACE}" "${INTERACTIVE_POD}" -- zstd -q -f --rm "${RESULT_FILE}"
+
+# Use chunked transfer for large files to avoid kubectl connection timeouts
+echo "Downloading compressed guidellm results (chunked transfer)..."
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+"${SCRIPT_DIR}/transfer-large-file-chunked.sh" "${KUBECONFIG}" "${NAMESPACE}" "${INTERACTIVE_POD}" "${RESULT_FILE}.zst" "${OUTPUT_DIR}/guidellm-results.json.zst" 10
 COPY_RESULT=$?
-set -e  # Re-enable exit on error
 
 # Check if file was actually copied (non-empty)
-if [ -s "${OUTPUT_DIR}/guidellm-results.json" ]; then
-    echo "Downloaded to: ${OUTPUT_DIR}/guidellm-results.json"
-
-    # Compress locally with zstd (same approach as PCP archives)
-    echo "Compressing guidellm results with zstd..."
-    zstd -q --rm "${OUTPUT_DIR}/guidellm-results.json" || echo "Warning: Failed to compress guidellm results"
-
-    if [ -s "${OUTPUT_DIR}/guidellm-results.json.zst" ]; then
-        echo "Saved to: ${OUTPUT_DIR}/guidellm-results.json.zst"
-    fi
-
-    # Clean up file from pod to prevent reuse in next benchmark
-    kubectl --kubeconfig="${KUBECONFIG}" exec -n "${NAMESPACE}" "${INTERACTIVE_POD}" -- rm -f "${RESULT_FILE}" 2>/dev/null || true
-elif [ ${COPY_RESULT} -eq 0 ]; then
-    echo "WARNING: guidellm results file is empty"
+if [ -s "${OUTPUT_DIR}/guidellm-results.json.zst" ] && [ ${COPY_RESULT} -eq 0 ]; then
+    # Clean up compressed file from pod to prevent reuse in next benchmark
+    # (original .json file already removed by zstd --rm)
+    kubectl --kubeconfig="${KUBECONFIG}" exec -n "${NAMESPACE}" "${INTERACTIVE_POD}" -- rm -f "${RESULT_FILE}.zst" 2>/dev/null || true
 else
-    echo "ERROR: Failed to copy guidellm results"
+    echo "ERROR: Failed to copy guidellm results (exit code: ${COPY_RESULT})"
     exit 1
 fi
 
@@ -561,9 +587,9 @@ for PCP_POD in ${PCP_PODS}; do
         archive_file=$(basename "${archive_path}")
 
         echo "  Copying: ${archive_file}"
-        # Use kubectl exec cat for reliable file copying
-        kubectl --kubeconfig="${KUBECONFIG}" exec -n "${NAMESPACE}" "${PCP_POD}" -- cat "${archive_path}" \
-            > "${OUTPUT_DIR}/pcp-archives/${POD_NODE}/${archive_file}" 2>/dev/null || true
+        # Use kubectl exec cat instead of kubectl cp to avoid tar overhead and EOF issues
+        # Use sh -c to ensure the entire pipeline (kubectl + redirect) is controlled by timeout
+        timeout --signal=KILL 60 sh -c "kubectl --kubeconfig='${KUBECONFIG}' exec -n '${NAMESPACE}' '${PCP_POD}' -- cat '${archive_path}' > '${OUTPUT_DIR}/pcp-archives/${POD_NODE}/${archive_file}'" 2>&1 || echo "    Warning: Failed to copy ${archive_file}"
 
         # Also copy index and meta files
         # PCP archive naming: data file is like 20260213.00.49.0, but index/meta are 20260213.00.49.{index,meta}
@@ -572,8 +598,7 @@ for PCP_POD in ${PCP_PODS}; do
         archive_base_name=$(basename "${archive_base}")
         for ext in index meta; do
             ext_file="${archive_base}.${ext}"
-            kubectl --kubeconfig="${KUBECONFIG}" exec -n "${NAMESPACE}" "${PCP_POD}" -- cat "${ext_file}" \
-                > "${OUTPUT_DIR}/pcp-archives/${POD_NODE}/${archive_base_name}.${ext}" 2>/dev/null || true
+            timeout --signal=KILL 60 sh -c "kubectl --kubeconfig='${KUBECONFIG}' exec -n '${NAMESPACE}' '${PCP_POD}' -- cat '${ext_file}' > '${OUTPUT_DIR}/pcp-archives/${POD_NODE}/${archive_base_name}.${ext}'" 2>&1 || true
         done
     done
 done
