@@ -16,7 +16,13 @@ This report evaluates KV-cache offload strategies in llm-d v0.5.0 (vLLM 0.14.1) 
 
 ## Summary
 
-llm-d v0.5.0 brings vLLM 0.14.1, which significantly improves native CPU offload performance compared to v0.4.0's vLLM 0.11.2. Testing with corrected PREFIX_COUNT configuration (rate × 2 for apples-to-apples comparison) reveals model-dependent improvements and regressions.
+llm-d v0.5.0 brings vLLM 0.14.1, which significantly improves native CPU offload performance compared to v0.4.0's vLLM 0.11.2. This vLLM version introduces substantial changes to the KV offloading implementation:
+
+- **CLI interface redesign**: The legacy `--kv-transfer-config` JSON syntax (v0.11.2) continues to work but vLLM's native interface moved to `--kv_offloading_backend` and `--kv_offloading_size` (v0.14.0+)
+- **Physical block size increase**: KV-cache physical blocks grew from 8-32 KB (v0.11.0) to 0.5-2 MB (v0.12.0+) by consolidating all layers into contiguous blocks, increasing block size by a factor of 2×num_layers
+- **Asynchronous DMA transfers**: New asynchronous offloading connector with Direct Memory Access for reduced transfer overhead
+
+These architectural changes produce model-dependent performance patterns, with small models benefiting from reduced overhead while larger models show regressions potentially related to increased block transfer granularity.
 
 **Key Findings:**
 
@@ -26,7 +32,7 @@ llm-d v0.5.0 brings vLLM 0.14.1, which significantly improves native CPU offload
 
 3. **Large models regress**: Qwen3-14B shifts from +0.6% (v0.4.0) to -8.1% (v0.5.0), an -8.7 pp regression. With 20K blocks, performance recovers to -1.6%, but still underperforms v0.4.0 baseline.
 
-4. **Quantized large models show severe degradation**: Qwen3-32B-AWQ experiences catastrophic -56.2% throughput loss with native offload, far worse than v0.4.0's -1.0%.
+4. **Quantized large models show degradation**: Qwen3-32B-AWQ experiences -56.2% throughput loss with native offload, compared to v0.4.0's -1.0%.
 
 5. **CPU memory capacity matters for some models**: 0.6B and 14B show improvement with 20K blocks, while 8B and 32B-AWQ do not benefit.
 
@@ -131,9 +137,9 @@ Median latency metrics at peak throughput reveal offload overhead characteristic
 
 **Time to First Token (TTFT) at rate=50:**
 - **0.6B**: 701ms (baseline) → 738ms (10K) → 949ms (20K) - offload increases queueing
-- **8B**: 11.1s (baseline) → 16.1s (10K) → 16.3s (20K) - severe TTFT degradation
+- **8B**: 11.1s (baseline) → 16.1s (10K) → 16.3s (20K) - TTFT degradation
 - **14B**: 22.8s (baseline) → 21.6s (10K) → 23.4s (20K) - mixed results
-- **32B-AWQ**: 101ms @ rate=1 (baseline) → 31.4s @ rate=100 (10K) - dramatic shift in optimal concurrency
+- **32B-AWQ**: 101ms @ rate=1 (baseline) → 31.4s @ rate=100 (10K) - in optimal concurrency
 
 **Inter-Token Latency (ITL) median:**
 - **0.6B**: 68.1ms (baseline) → 68.5ms (10K) - minimal impact
@@ -156,20 +162,26 @@ These improvements suggest vLLM 0.14.1 has more efficient CPU-GPU transfer mecha
 
 **Large Model Regressions (14B, 32B-AWQ):**
 - **Qwen3-14B**: Performance shifts from +0.6% (v0.4.0) to -8.1% (v0.5.0), an -8.7 pp regression. With 20K blocks, performance recovers to -1.6%, but still underperforms v0.4.0.
-- **Qwen3-32B-AWQ**: Catastrophic -56.2% throughput loss (vs v0.4.0's -1.0%), suggesting fundamental incompatibility or implementation issue with quantized models.
+- **Qwen3-32B-AWQ**: -56.2% throughput loss (vs v0.4.0's -1.0%).
+
+**Physical Block Size Impact:**
+
+The increase in physical block size from 8-32 KB (v0.11.0) to 0.5-2 MB (v0.12.0+) may contribute to these model-dependent patterns. Larger models with more layers see proportionally larger block sizes (2×num_layers factor), potentially explaining why:
+- Small models benefit from reduced transfer overhead (fewer smaller blocks to manage)
+- Large models face increased transfer granularity (larger contiguous blocks per transfer)
+- Quantized models (32B-AWQ) may interact poorly with the new block structure
 
 **CPU Memory Capacity Impact:**
 - **0.6B and 14B** benefit from increased CPU blocks (20K vs 10K)
 - **8B and 32B-AWQ** show no benefit or further degradation with 20K blocks
-- This suggests model-specific bottlenecks beyond CPU memory capacity
 
 ### Latency Overhead Patterns
 
-**TTFT degradation** is most severe for medium models (8B: +45%, 14B: mixed), suggesting queueing delays from offload overhead.
+**TTFT degradation** is largest for medium models (8B: +45%, 14B: mixed).
 
-**ITL impact** is modest for small models (0.6B: +0.6%) but significant for medium models (8B: +33%), indicating per-token transfer overhead.
+**ITL impact** is modest for small models (0.6B: +0.6%) but larger for medium models (8B: +33%).
 
-**Concurrency shift** for 32B-AWQ (optimal rate changes from 1 to 100 with offload) suggests scheduler behavior change, possibly to amortize transfer overhead across more requests.
+**Concurrency shift** for 32B-AWQ (optimal rate changes from 1 to 100 with offload).
 
 ---
 
@@ -177,7 +189,7 @@ These improvements suggest vLLM 0.14.1 has more efficient CPU-GPU transfer mecha
 
 ### vLLM 0.14.1 Native Offload Assessment
 
-vLLM 0.14.1 brings significant improvements to native CPU offload for small models, reducing overhead from -29% to -3% for the 0.6B model. However, larger models show concerning regressions, with the 14B model shifting from positive (+0.6%) to negative (-8.1%) performance impact and the 32B-AWQ model experiencing catastrophic degradation (-56.2%).
+vLLM 0.14.1 brings significant improvements to native CPU offload for small models, reducing overhead from -29% to -3% for the 0.6B model. Larger models show regressions, with the 14B model shifting from +0.6% to -8.1% and the 32B-AWQ model showing -56.2% degradation.
 
 ---
 
