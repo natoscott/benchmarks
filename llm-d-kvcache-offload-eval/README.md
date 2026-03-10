@@ -1,6 +1,6 @@
 # LLM-D KV-Cache Offload Evaluation
 
-Benchmark suite for evaluating KV-cache offloading and distributed caching strategies in llm-d deployments. See [REPORT.md](REPORT.md) for comprehensive evaluation results and analysis.
+Benchmark suite for evaluating KV-cache offloading and distributed caching strategies in llm-d deployments. See [REPORT.md](REPORT.md) for evaluation results and analysis.
 
 ## Overview
 
@@ -277,7 +277,7 @@ The captured logs contain:
 
 ### Results Report
 
-See [REPORT.md](REPORT.md) for a comprehensive evaluation of KV-cache management strategies with detailed analysis, visualizations, and insights.
+See [REPORT.md](REPORT.md) for a evaluation of KV-cache management strategies with detailed analysis, visualizations, and insights.
 
 ## Model Cache PVC
 
