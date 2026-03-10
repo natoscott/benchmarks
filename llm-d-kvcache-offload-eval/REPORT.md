@@ -69,9 +69,23 @@ Analysis of vLLM startup logs across both versions confirms that actual GPU memo
 | Qwen3-14B | +0.6% | -8.1% | **-8.7 pp** | v0.4.0 |
 | Qwen3-32B-AWQ | -1.0% | -56.2% | **-55.2 pp** | v0.4.0 |
 
+![v0.4.0 vs v0.5.0 Regression](analysis/v0.5.0_regression_comparison.png)
+*Figure: Qwen3-14B native offload regression between v0.4.0 (vLLM 0.11.2) and v0.5.0 (vLLM 0.14.1). Left: absolute throughput comparison showing v0.5.0 baseline improved +13.4% but offload shifted from parity to -7.5% degradation. Right: performance delta showing 8.0 percentage point regression in offload effectiveness.*
+
 vLLM 0.14.1 introduces substantial KV offloading changes: physical block sizes increased from 8-32 KB to 0.5-2 MB by consolidating all layers into contiguous blocks (2×num_layers factor), asynchronous DMA transfers, and CLI interface redesign. These changes benefit small models through reduced transfer overhead but create challenges for larger models where increased block transfer granularity may dominate.
 
-**Takeaway:** vLLM 0.14.1 (v0.5.0) improves small model offload but regresses for large/quantized models. For 14B and 32B-AWQ, v0.4.0 with LMCache provides superior performance.
+**14B Model Regression Analysis:**
+
+Performance Co-Pilot (PCP) metrics from v0.5.0 peak throughput scenarios (rate=50) reveal that the 14B model regression occurs despite conditions favorable for offload:
+
+- **GPU KV-cache utilization: 36%** - Substantial usage that should benefit from CPU offload
+- **Request queue depth:** 10.5 running requests, 7.6 waiting requests on average
+- **Prefix cache hit rate:** 21-22% across configurations
+- **Baseline improvement:** v0.5.0 no-offload shows +13.4% throughput vs v0.4.0, confirming general vLLM improvements
+
+The regression indicates that vLLM 0.14.1's offload implementation changes negatively impact the 14B model specifically at this memory pressure level (36% GPU KV-cache usage, 270K token capacity). In v0.4.0, offload achieved parity (+0.6%), but v0.5.0 degrades performance by -7.5%, a net -8.0 percentage point regression.
+
+**Takeaway:** vLLM 0.14.1 (v0.5.0) improves small model offload but regresses for mid-size and large/quantized models. For 14B and 32B-AWQ, v0.4.0 with LMCache provides superior performance. The 14B regression is particularly noteworthy given the model's 36% GPU KV-cache utilization - a level that historically benefited from offload in v0.4.0.
 
 ### Backend Equivalence: Redis vs Valkey
 
