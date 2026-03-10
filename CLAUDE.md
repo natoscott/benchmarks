@@ -61,3 +61,73 @@ This repository has established standards documented in `.claude/skills/`:
 - **repo-cleanliness**: Standards for maintaining clean repository structure. Consult `.claude/skills/repo-cleanliness/SKILL.md` when creating new files or organizing results.
 
 Always review the relevant skill documentation before starting work in these areas.
+
+## Writing Style Guidelines
+
+Reports in this repository must maintain a **neutral, factual tone** that
+presents data without emotional characterization or subjective judgment.
+
+### Avoid Opinionated Language
+
+Do NOT use adjectives that imply subjective judgment or emotional response:
+
+- **Avoid**: concerning, catastrophic, severe, unexpected, alarming,
+  troubling, worrying, problematic, dramatic, disappointing
+- **Instead**: Use quantified descriptors or neutral factual statements
+
+### Use Quantified Descriptors
+
+Always prefer specific numbers and measurements over qualitative adjectives:
+
+**Good examples:**
+- "14B model shifts from +0.6% to -8.1% (-8.7 pp regression)"
+- "32B-AWQ shows -56.2% throughput loss"
+- "Overhead reduced from -29.1% to -3.0% (+26.1 pp improvement)"
+- "9-14 individual CPUs averaged >80% saturation"
+
+**Avoid:**
+- "severely degraded performance"
+- "concerning regression"
+- "catastrophic throughput loss"
+
+### When "Significant" and "Substantial" are Acceptable
+
+These words can be used when describing **quantified changes** where the
+magnitude is objectively large:
+
+**Acceptable:**
+- "vLLM 0.14.1 significantly improves native CPU offload for small models
+  (0.6B: +26.1 pp improvement)"
+- "substantial changes to the KV offloading implementation"
+
+**Not acceptable:**
+- "significant problems with the implementation"
+- "substantially worse than expected"
+
+The key difference: use "significant/substantial" to describe the **size**
+of a measured change, not to characterize something as good or bad.
+
+### Examples from Report Updates
+
+**Before:**
+- "Concerning regressions for larger models"
+- "Catastrophic degradation for 32B-AWQ (-56.2%)"
+- "Severe load hotspotting across CPUs"
+- "Most severe overhead observed"
+
+**After:**
+- "Regressions for larger models"
+- "32B-AWQ shows -56.2% degradation"
+- "High load hotspotting across CPUs"
+- "Largest overhead observed"
+
+### General Principles
+
+1. **Present facts**: State what the data shows
+2. **Quantify changes**: Use percentages, absolute numbers, ranges
+3. **Be precise**: Avoid vague characterizations
+4. **Stay neutral**: Let the reader draw conclusions from the data
+
+The reports serve technical audiences who value objective analysis over
+editorial commentary. When in doubt, remove the adjective and let the
+numbers speak.
