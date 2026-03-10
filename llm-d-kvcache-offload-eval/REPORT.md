@@ -20,9 +20,9 @@ Detailed analysis is organized by llm-d version, with each report comparing agai
 
 **Key Findings:**
 - vLLM 0.14.1 significantly improves native CPU offload for small models (0.6B: +26.1 pp improvement, -3.0% overhead vs v0.4.0's -29.1%)
-- Large models show concerning regressions (14B: -8.7 pp, 32B-AWQ: -55.2 pp)
+- Large models show regressions (14B: -8.7 pp, 32B-AWQ: -55.2 pp)
 - 20K CPU block allocation nearly eliminates overhead for 0.6B model (-0.3%)
-- 32B-AWQ shows catastrophic -56.2% degradation with native offload
+- 32B-AWQ shows -56.2% degradation with native offload
 
 **Comparison:** v0.5.0 vs v0.4.0 side-by-side analysis
 
@@ -68,6 +68,8 @@ Analysis of vLLM startup logs across both versions confirms that actual GPU memo
 | Qwen3-8B | -36.5% | -25.2% | **+11.3 pp** | v0.5.0 |
 | Qwen3-14B | +0.6% | -8.1% | **-8.7 pp** | v0.4.0 |
 | Qwen3-32B-AWQ | -1.0% | -56.2% | **-55.2 pp** | v0.4.0 |
+
+vLLM 0.14.1 introduces substantial KV offloading changes: physical block sizes increased from 8-32 KB to 0.5-2 MB by consolidating all layers into contiguous blocks (2×num_layers factor), asynchronous DMA transfers, and CLI interface redesign. These changes benefit small models through reduced transfer overhead but create challenges for larger models where increased block transfer granularity may dominate.
 
 **Takeaway:** vLLM 0.14.1 (v0.5.0) improves small model offload but regresses for large/quantized models. For 14B and 32B-AWQ, v0.4.0 with LMCache provides superior performance.
 

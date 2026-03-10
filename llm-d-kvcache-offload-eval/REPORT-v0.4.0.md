@@ -18,7 +18,7 @@ The evaluation addresses two areas:
 
 **System-Level Insights:**
 
-- **Per-CPU analysis shows saturation**: Despite 4-10% average CPU utilization, 9-14 individual CPUs averaged >80% saturation across scenarios, with severe load hotspotting
+- **Per-CPU analysis shows saturation**: Despite 4-10% average CPU utilization, 9-14 individual CPUs averaged >80% saturation across scenarios, with high load hotspotting
 - **CPU offload increases CPU saturation**: Offload scenarios show 11-14 saturated CPUs vs 9.5 for baseline, consistent with CPU-GPU transfer overhead
 - **Prefix cache effectiveness varies widely**: Hit rates range from 2-61% depending on concurrency and model size, with effectiveness increasing substantially at higher concurrency
 
@@ -285,7 +285,7 @@ This counterintuitive pattern â€” higher GPU utilization with lower throughput â
 **Findings:**
 - KV-cache utilization varies from 29-48% across configurations
 - The workload uses a substantial portion of GPU KV-cache capacity without completely exhausting it
-- This moderate utilization level suggests memory pressure exists but isn't severe for most model sizes
+- This moderate utilization level suggests memory pressure exists for most model sizes
 - Exception: The 14B model's improvement with CPU offload suggests it operates near a memory pressure threshold where offload provides measurable benefits
 
 #### Request Queue Dynamics
@@ -348,7 +348,7 @@ However, per-CPU analysis reveals a different picture:
 - **native-offload**: 11.2 saturated CPUs, max CPU 447% average utilization
 - **no-offload**: 9.5 saturated CPUs, max CPU 457% average utilization
 
-All scenarios show individual CPUs hitting >95% utilization during benchmark execution, with high variance in CPU load distribution (standard deviation 64-136%). The CPU load range (max CPU - min CPU) spans 270-877%, indicating severe hotspotting where some CPUs remain relatively idle while others saturate.
+All scenarios show individual CPUs hitting >95% utilization during benchmark execution, with high variance in CPU load distribution (standard deviation 64-136%). The CPU load range (max CPU - min CPU) spans 270-877%, indicating hotspotting where some CPUs remain relatively idle while others saturate.
 
 **Findings:**
 1. **CPU saturation is widespread**: All scenarios show 9-14 CPUs averaging >80% utilization, contradicting the low aggregate average
@@ -360,7 +360,7 @@ All scenarios show individual CPUs hitting >95% utilization during benchmark exe
 *Figure: Number of saturated CPUs vs expected from average CPU utilization - shows how averaging hides saturation*
 
 ![CPU Load Distribution](analysis/percpu_load_distribution.png)
-*Figure: CPU load variance and range showing severe hotspotting across all scenarios*
+*Figure: CPU load variance and range showing hotspotting across all scenarios*
 
 ![CPU Offload Impact on Saturation](analysis/percpu_offload_impact.png)
 *Figure: CPU saturation comparison - offload scenarios show higher CPU saturation than baseline*
@@ -447,7 +447,7 @@ This evaluation compares three CPU offload approaches against the GPU-only basel
 **Performance by Model Size:**
 
 #### Qwen3-0.6B (Tiny Model)
-- **Native offload**: -29.1% (severe degradation)
+- **Native offload**: -29.1%
 - **LMCache local**: -13.6% (moderate degradation)
 - **LMCache distributed**: -6.0% to -13.0% (moderate degradation)
 
@@ -458,7 +458,7 @@ The small model shows consistent degradation across all CPU offload strategies, 
 - **LMCache local**: -5.6% (moderate degradation)
 - **LMCache distributed**: -6.5% to -10.0% (moderate degradation)
 
-The 8B model shows severe degradation with native offloading and moderate degradation with LMCache. This model size appears to be in an "overhead zone" where CPU offload costs are high but benefits are minimal.
+The 8B model shows -36.5% degradation with native offloading and moderate degradation with LMCache. This model size appears to be in an "overhead zone" where CPU offload costs are high but benefits are minimal.
 
 #### Qwen3-14B (Medium Model, Optimal Size for offload here)
 - **Native offload**: +0.6% (performance parity)
@@ -529,7 +529,7 @@ The 14B model's +11-13% throughput improvement with CPU offload (LMCache) stands
 
 **Memory Pressure Quantified**
 
-Actual GPU KV-cache memory measurements (from vLLM startup logs) show the 14B model operates under significantly higher memory pressure:
+Actual GPU KV-cache memory measurements (from vLLM startup logs) show the 14B model operates under higher memory pressure:
 
 - **14B**: 20.58 GiB GPU KV-cache memory, 270K token capacity, 6.58x max concurrency
 - **8B**: 26.83 GiB GPU KV-cache memory, 391K token capacity, 9.54x max concurrency
@@ -539,14 +539,14 @@ The 14B model has **39% less GPU KV-cache memory** and **58% less token capacity
 
 **Why CPU Offload Helps the 14B Model:**
 
-1. **Severe memory constraints quantified**: Only 20.58 GiB available for KV-cache vs 33.92 GiB for 0.6B
+1. **Memory constraints quantified**: Only 20.58 GiB available for KV-cache vs 33.92 GiB for 0.6B
 2. **Low token capacity**: 270K tokens vs 635K for 0.6B creates faster memory exhaustion
 3. **CPU offload provides escape valve**: Moving KV-cache to CPU alleviates GPU memory pressure
 4. **Transfer overhead justified**: The memory pressure relief outweighs CPU-GPU transfer costs
 
 **Contrasting with other models:**
 
-- **0.6B and 8B**: Abundant GPU memory (33.92 GiB and 26.83 GiB respectively) means no memory pressure. CPU offload introduces pure overhead without benefits. The severe -36.5% degradation for 8B native-offload suggests this model size hits a particularly bad overhead zone where transfer costs are high but memory benefits are absent.
+- **0.6B and 8B**: Abundant GPU memory (33.92 GiB and 26.83 GiB respectively) means no memory pressure. CPU offload introduces pure overhead without benefits. The -36.5% degradation for 8B native-offload suggests this model size hits a particularly bad overhead zone where transfer costs are high but memory benefits are absent.
 
 - **32B-AWQ**: Despite being larger, quantization gives it **more GPU KV-cache memory than 14B** (25.40 GiB vs 20.58 GiB). This explains why it needed 20K CPU blocks (vs 14B's 10K) to show benefits. The -12.7% degradation with 10K blocks reflects insufficient CPU capacity, not absence of memory pressure.
 
