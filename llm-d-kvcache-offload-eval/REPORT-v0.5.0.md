@@ -120,6 +120,9 @@ Results show peak output token throughput achieved at optimal concurrency for ea
 | | native-offload-10k | 22.4 | 100 | **-56.2%** |
 | | native-offload-20k | 21.3 | 50 | **-58.4%** |
 
+![Peak Throughput Comparison](analysis/v0.5.0_peak_throughput.png)
+*Figure: Peak throughput across all models and configurations. Small models (0.6B) show near-parity with native offload, while larger models (32B-AWQ) show substantial degradation.*
+
 ### Comparison with v0.4.0 Performance
 
 **Native Offload Performance Impact:**
@@ -130,6 +133,14 @@ Results show peak output token throughput achieved at optimal concurrency for ea
 | Qwen3-8B | **-36.5%** | -5.6% | **-25.2%** | **+11.3 pp** |
 | Qwen3-14B | +0.6% | +11.8% | **-8.1%** | **-8.7 pp** |
 | Qwen3-32B-AWQ | -1.0% | -12.7% | **-56.2%** | **-55.2 pp** |
+
+![Version Comparison Heatmap](analysis/v0.5.0_vs_v0.4.0_heatmap.png)
+*Figure: v0.5.0 vs v0.4.0 performance change heatmap. Green shows improvement (small models), red shows regression (large models). Values represent percentage point change in throughput delta vs baseline.*
+
+### Throughput vs Concurrency
+
+![Throughput vs Concurrency](analysis/v0.5.0_throughput_vs_concurrency.png)
+*Figure: Throughput vs concurrency across all models. The 0.6B model shows convergence between baseline and offload at higher concurrency. The 32B-AWQ model shifts optimal concurrency from rate=1 to rate=100 with offload enabled.*
 
 ### Latency Analysis
 
@@ -145,6 +156,9 @@ Median latency metrics at peak throughput reveal offload overhead characteristic
 - **0.6B**: 68.1ms (baseline) → 68.5ms (10K) - minimal impact
 - **8B**: 257ms (baseline) → 341ms (10K) - +33% latency increase
 - **14B**: 311ms (baseline) → 314ms (10K) - minimal impact
+
+![Latency Comparison](analysis/v0.5.0_latency_comparison.png)
+*Figure: Latency comparison at peak throughput. TTFT and ITL show varying offload overhead across models. The 32B-AWQ model's latency spike reflects the shift in optimal concurrency from rate=1 to rate=100.*
 
 ---
 
