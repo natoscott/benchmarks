@@ -49,10 +49,10 @@ def extract_all_metrics(results_dir):
             duration = benchmark['duration']
             throughput = total_output_tokens / duration
 
-            # Latency metrics
-            ttft_median = metrics.get('time_to_first_token', {}).get('successful', {}).get('median', 0) / 1000  # ms to s
-            itl_median = metrics.get('inter_token_latency', {}).get('successful', {}).get('median', 0)
-            tpot_median = metrics.get('time_per_output_token', {}).get('successful', {}).get('median', 0)
+            # Latency metrics (all in milliseconds from GuideLLM)
+            ttft_median = metrics.get('time_to_first_token_ms', {}).get('successful', {}).get('median', 0) / 1000  # ms to s
+            itl_median = metrics.get('inter_token_latency_ms', {}).get('successful', {}).get('median', 0)
+            tpot_median = metrics.get('time_per_output_token_ms', {}).get('successful', {}).get('median', 0)
 
             # Request counts
             request_totals = metrics['request_totals']
