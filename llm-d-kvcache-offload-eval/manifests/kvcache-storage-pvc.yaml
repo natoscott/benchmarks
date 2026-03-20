@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: kvcache-storage-pvc
+  namespace: llm-d-pfc-cpu
+  annotations:
+    # Maximum IOPS for KV cache offload
+    ibm.io/iops: "64000"
+    # Maximum throughput for KV cache offload
+    ibm.io/throughput: "1024"
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      # Storage for KV cache blocks
+      storage: 256Gi
+  storageClassName: ibmc-vpc-block-custom

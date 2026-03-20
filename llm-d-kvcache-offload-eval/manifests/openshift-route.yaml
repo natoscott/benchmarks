@@ -1,0 +1,13 @@
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: llm-d-inference-gateway-istio
+  namespace: llm-d-pfc-cpu
+spec:
+  port:
+    targetPort: http
+  to:
+    kind: Service
+    name: llm-d-model-server
+    weight: 100
+  wildcardPolicy: None

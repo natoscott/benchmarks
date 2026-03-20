@@ -376,7 +376,7 @@ kubectl --kubeconfig="${KUBECONFIG}" wait --for=condition=Ready pod -l llm-d.ai/
 # guidellm validates using the /health endpoint, but lmcache doesn't expose this
 # So we need to ensure the gateway can route successfully before guidellm runs
 echo "  Validating gateway routing..."
-INTERACTIVE_POD=$(kubectl --kubeconfig="${KUBECONFIG}" get pods -n "${NAMESPACE}" -l app=interactive-pod --field-selector=status.phase=Running -o jsonpath='{.items[0].metadata.name}')
+INTERACTIVE_POD=$(kubectl --kubeconfig="${KUBECONFIG}" get pods -n "${NAMESPACE}" -l app=guidellm --field-selector=status.phase=Running -o jsonpath='{.items[0].metadata.name}')
 if [ -z "${INTERACTIVE_POD}" ]; then
     echo "  Warning: No interactive pod found for validation, skipping gateway check"
 else
@@ -445,7 +445,7 @@ PCP_POD_COUNT=$(echo "${PCP_PODS}" | wc -w)
 echo "Found ${PCP_POD_COUNT} PCP pod(s): ${PCP_PODS}"
 
 echo "Detecting current interactive pod..."
-INTERACTIVE_POD=$(kubectl --kubeconfig="${KUBECONFIG}" get pods -n "${NAMESPACE}" -l app=interactive-pod --field-selector=status.phase=Running -o jsonpath='{.items[0].metadata.name}')
+INTERACTIVE_POD=$(kubectl --kubeconfig="${KUBECONFIG}" get pods -n "${NAMESPACE}" -l app=guidellm --field-selector=status.phase=Running -o jsonpath='{.items[0].metadata.name}')
 if [ -z "${INTERACTIVE_POD}" ]; then
     echo "ERROR: No running interactive pod found in namespace ${NAMESPACE}"
     exit 1
@@ -517,6 +517,8 @@ echo ""
 echo "Running guidellm benchmark..."
 
 # Build guidellm command
+# Note: --sample-requests omitted to use default (None) which keeps JSON files small
+# See: https://github.com/vllm-project/guidellm/pull/591
 GUIDELLM_CMD="guidellm benchmark run \
     --target=\"${TARGET}\" \
     --rate-type=\"${RATE_TYPE}\" \
@@ -524,7 +526,6 @@ GUIDELLM_CMD="guidellm benchmark run \
     --max-seconds=\"${MAX_SECONDS}\" \
     --random-seed=\"${RANDOM_SEED}\" \
     --data='{\"prompt_tokens\":${PROMPT_TOKENS},\"output_tokens\":${OUTPUT_TOKENS},\"prefix_tokens\":${PREFIX_TOKENS},\"turns\":${TURNS},\"prefix_count\":${PREFIX_COUNT}}' \
-    --sample-requests=\"${SAMPLE_REQUESTS}\" \
     --outputs=/models/benchmark.json"
 
 # Execute guidellm command
@@ -539,23 +540,24 @@ echo ""
 echo "Collecting guidellm results..."
 RESULT_FILE="/models/benchmark.json"
 
-# Compress in pod first, then transfer compressed file
-# This avoids corruption issues with large JSON files during transfer
-# Use --rm to delete source file after compression to save space
-echo "Compressing guidellm results in pod..."
-kubectl --kubeconfig="${KUBECONFIG}" exec -n "${NAMESPACE}" "${INTERACTIVE_POD}" -- zstd -q -f --rm "${RESULT_FILE}"
+# Note: Official guidellm container doesn't have zstd, but JSON files are small now
+# thanks to omitting --sample-requests (see https://github.com/vllm-project/guidellm/pull/591)
+# Transfer uncompressed JSON, then compress locally after download
 
-# Use chunked transfer for large files to avoid kubectl connection timeouts
-echo "Downloading compressed guidellm results (chunked transfer)..."
+# Use chunked transfer for reliability with large files
+echo "Downloading guidellm results (chunked transfer)..."
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-"${SCRIPT_DIR}/transfer-large-file-chunked.sh" "${KUBECONFIG}" "${NAMESPACE}" "${INTERACTIVE_POD}" "${RESULT_FILE}.zst" "${OUTPUT_DIR}/guidellm-results.json.zst" 10
+"${SCRIPT_DIR}/transfer-large-file-chunked.sh" "${KUBECONFIG}" "${NAMESPACE}" "${INTERACTIVE_POD}" "${RESULT_FILE}" "${OUTPUT_DIR}/guidellm-results.json" 10
 COPY_RESULT=$?
 
 # Check if file was actually copied (non-empty)
-if [ -s "${OUTPUT_DIR}/guidellm-results.json.zst" ] && [ ${COPY_RESULT} -eq 0 ]; then
-    # Clean up compressed file from pod to prevent reuse in next benchmark
-    # (original .json file already removed by zstd --rm)
-    kubectl --kubeconfig="${KUBECONFIG}" exec -n "${NAMESPACE}" "${INTERACTIVE_POD}" -- rm -f "${RESULT_FILE}.zst" 2>/dev/null || true
+if [ -s "${OUTPUT_DIR}/guidellm-results.json" ] && [ ${COPY_RESULT} -eq 0 ]; then
+    # Compress locally after download to save disk space
+    echo "Compressing guidellm results locally..."
+    zstd -q -f --rm "${OUTPUT_DIR}/guidellm-results.json"
+
+    # Clean up JSON file from pod to prevent reuse in next benchmark
+    kubectl --kubeconfig="${KUBECONFIG}" exec -n "${NAMESPACE}" "${INTERACTIVE_POD}" -- rm -f "${RESULT_FILE}" 2>/dev/null || true
 else
     echo "ERROR: Failed to copy guidellm results (exit code: ${COPY_RESULT})"
     exit 1

@@ -1,13 +1,13 @@
 #!/bin/bash
 set -e
 
-# This script runs focused benchmarks for llm-d v0.5.0 testing native CPU offload improvements
-# Focus: Test if native offload improved from v0.4.0 to v0.5.0 (vLLM 0.11.2 -> 0.14.1)
+# This script runs focused benchmarks for llm-d v0.5.1 testing native CPU offload improvements
+# Focus: Test if native offload improved from v0.4.0 to v0.5.1 (vLLM 0.11.2 -> 0.14.1)
 # IMPORTANT: Uses EXACT same parameters as v0.4.0 run-all.sh for apples-to-apples comparison
 
-# Configuration list - test native offload with different CPU block sizes
-RUNS="${RUNS:-no-offload native-offload-10k native-offload-20k}"
-MODELS="${MODELS:-Qwen/Qwen3-14B Qwen/Qwen3-8B Qwen/Qwen3-0.6B Qwen/Qwen3-32B-AWQ}"
+# Configuration list - test native offload with 20k CPU blocks only
+RUNS="${RUNS:-no-offload native-offload-20k}"
+MODELS="${MODELS:-Qwen/Qwen3-0.6B Qwen/Qwen3-8B Qwen/Qwen3-14B Qwen/Qwen3-32B-AWQ}"
 REPLICAS="${REPLICAS:-1}"
 
 # Export common variables that run-benchmark.sh will use - MATCH v0.4.0 run-all.sh
@@ -16,7 +16,7 @@ export NAMESPACE="${NAMESPACE:-llm-d-pfc-cpu}"
 export RATE_LIST="${RATE:-1,50,100,150,300,400,500,650}"
 export MAX_SECONDS=120  # v0.4.0 run-all.sh line 21
 export HARDWARE="${HARDWARE:-1x2xL40S}"
-export SOFTWARE="${SOFTWARE:-upstream-llm-d-0.5.0}"
+export SOFTWARE="${SOFTWARE:-upstream-llm-d-0.5.1}"
 export TURNS=5  # v0.4.0 run-all.sh line 24
 export INFERENCE_DEPLOYMENT="${INFERENCE_DEPLOYMENT:-llm-d-model-server}"
 
@@ -89,21 +89,21 @@ do
             case "$run" in
                 "no-offload")
                     # Baseline: GPU-only, no CPU offloading
-                    export CONTAINER_IMAGE="ghcr.io/llm-d/llm-d-cuda:v0.5.0"
+                    export CONTAINER_IMAGE="ghcr.io/llm-d/llm-d-cuda:v0.5.1"
                     export VLLM_EXTRA_ARGS=""
                     export VLLM_ENV_VARS=""
                     export EPP_BACKEND_CONFIG="in-memory"
                     ;;
                 "native-offload-10k")
                     # vLLM native CPU offloading (matches v0.4.0 actual CPU allocation)
-                    export CONTAINER_IMAGE="ghcr.io/llm-d/llm-d-cuda:v0.5.0"
+                    export CONTAINER_IMAGE="ghcr.io/llm-d/llm-d-cuda:v0.5.1"
                     export VLLM_EXTRA_ARGS="--kv-transfer-config '{\"kv_connector\":\"OffloadingConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"cpu_bytes_to_use\":${CPU_BYTES_10K}}}'"
                     export VLLM_ENV_VARS=""
                     export EPP_BACKEND_CONFIG="in-memory"
                     ;;
                 "native-offload-20k")
                     # vLLM native CPU offloading (2x the 10K allocation)
-                    export CONTAINER_IMAGE="ghcr.io/llm-d/llm-d-cuda:v0.5.0"
+                    export CONTAINER_IMAGE="ghcr.io/llm-d/llm-d-cuda:v0.5.1"
                     export VLLM_EXTRA_ARGS="--kv-transfer-config '{\"kv_connector\":\"OffloadingConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"cpu_bytes_to_use\":${CPU_BYTES_20K}}}'"
                     export VLLM_ENV_VARS=""
                     export EPP_BACKEND_CONFIG="in-memory"

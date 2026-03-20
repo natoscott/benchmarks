@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: guidellm
+  name: guidellm
+  namespace: llm-d-pfc-cpu
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app: guidellm
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: guidellm
+    spec:
+      # Note: serviceAccountName still uses 'interactive-pod' SA which holds the
+      # necessary RBAC permissions. Rename the SA in a future cleanup pass.
+      serviceAccountName: interactive-pod
+      terminationGracePeriodSeconds: 10
+      containers:
+      - name: benchmark-runner
+        image: ghcr.io/vllm-project/guidellm:latest
+        imagePullPolicy: Always
+        command:
+        - bash
+        - -lc
+        - sleep infinity
+        stdin: true
+        tty: true
+        env:
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: HF_HOME
+          value: /models/.hf
+        - name: HF_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: llm-d-hf-token
+              key: HF_TOKEN
+        resources:
+          requests:
+            cpu: "2"
+            memory: 4Gi
+          limits:
+            cpu: "4"
+            memory: 8Gi
+        volumeMounts:
+        - name: model-cache
+          mountPath: /models
+      volumes:
+      - name: model-cache
+        persistentVolumeClaim:
+          claimName: model-storage-pvc

@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: model-storage-pvc
+  namespace: llm-d-pfc-cpu
+  annotations:
+    # High IOPS for model loading
+    ibm.io/iops: "64000"
+    # High throughput for model loading
+    ibm.io/throughput: "1024"
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      # Large enough for multiple Qwen models
+      storage: 512Gi
+  storageClassName: ibmc-vpc-block-custom
