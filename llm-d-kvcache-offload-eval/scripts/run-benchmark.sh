@@ -235,6 +235,12 @@ else
     else
         NEW_ARGS="${BASE_VLLM_ARGS}"
     fi
+
+    # Optionally prepend a setup command (e.g. pip install for external connectors)
+    # VLLM_PRE_CMD is joined with && so failures abort before vllm starts
+    if [ -n "${VLLM_PRE_CMD}" ]; then
+        NEW_ARGS="${VLLM_PRE_CMD} && ${NEW_ARGS}"
+    fi
 fi
 
 # Build JSON patch operations
@@ -517,8 +523,8 @@ echo ""
 echo "Running guidellm benchmark..."
 
 # Build guidellm command
-# Note: --sample-requests omitted to use default (None) which keeps JSON files small
-# See: https://github.com/vllm-project/guidellm/pull/591
+# --sample-requests=0: suppress per-request sample data from JSON output, keeping
+# files small. Confirmed with guidellm maintainer (see PR #591 for background).
 GUIDELLM_CMD="guidellm benchmark run \
     --target=\"${TARGET}\" \
     --rate-type=\"${RATE_TYPE}\" \
@@ -526,6 +532,7 @@ GUIDELLM_CMD="guidellm benchmark run \
     --max-seconds=\"${MAX_SECONDS}\" \
     --random-seed=\"${RANDOM_SEED}\" \
     --data='{\"prompt_tokens\":${PROMPT_TOKENS},\"output_tokens\":${OUTPUT_TOKENS},\"prefix_tokens\":${PREFIX_TOKENS},\"turns\":${TURNS},\"prefix_count\":${PREFIX_COUNT}}' \
+    --sample-requests=0 \
     --outputs=/models/benchmark.json"
 
 # Execute guidellm command
@@ -547,7 +554,7 @@ RESULT_FILE="/models/benchmark.json"
 # Use chunked transfer for reliability with large files
 echo "Downloading guidellm results (chunked transfer)..."
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-"${SCRIPT_DIR}/transfer-large-file-chunked.sh" "${KUBECONFIG}" "${NAMESPACE}" "${INTERACTIVE_POD}" "${RESULT_FILE}" "${OUTPUT_DIR}/guidellm-results.json" 10
+"${SCRIPT_DIR}/transfer-large-file-chunked.sh" "${KUBECONFIG}" "${NAMESPACE}" "${INTERACTIVE_POD}" "${RESULT_FILE}" "${OUTPUT_DIR}/guidellm-results.json"
 COPY_RESULT=$?
 
 # Check if file was actually copied (non-empty)
