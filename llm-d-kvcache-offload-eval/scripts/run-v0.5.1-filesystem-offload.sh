@@ -17,7 +17,7 @@ set -e
 # Configs:
 #   fs-offload  - GPU → filesystem (SharedStorageOffloadingSpec via llmd_fs_connector)
 
-RUNS="${RUNS:-fs-offload}"
+RUNS="${RUNS:-cpu+fs-offload-20k}"
 MODELS="${MODELS:-Qwen/Qwen3-0.6B Qwen/Qwen3-8B Qwen/Qwen3-14B Qwen/Qwen3-32B-AWQ}"
 REPLICAS="${REPLICAS:-1}"
 
@@ -87,16 +87,32 @@ for replicas in ${REPLICAS}; do
         for run in ${RUNS}; do
             export PARAMETERS="$run"
 
+            # Per-model CPU byte allocations (20k blocks, same as native-offload-20k)
+            case "$MODEL_NAME" in
+                "Qwen3-0.6B")  CPU_BYTES_20K=72842645340 ;;
+                "Qwen3-8B")    CPU_BYTES_20K=57616986275 ;;
+                "Qwen3-14B")   CPU_BYTES_20K=44195213475 ;;
+                "Qwen3-32B-AWQ") CPU_BYTES_20K=54546084659 ;;
+                *) echo "Unknown model: $MODEL_NAME"; exit 1 ;;
+            esac
+
+            NSIGHT_LIBSTDCPP="/opt/nvidia/nsight-compute/2025.2.1/host/linux-desktop-glibc_2_11_3-x64/libstdc++.so.6"
+
             case "$run" in
                 "fs-offload")
                     export CONTAINER_IMAGE="ghcr.io/llm-d/llm-d-cuda:v0.5.1"
                     export VLLM_EXTRA_ARGS="--kv-transfer-config '{\"kv_connector\":\"OffloadingConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"spec_name\":\"SharedStorageOffloadingSpec\",\"shared_storage_path\":\"/kvcache/kv-cache/\",\"block_size\":256,\"threads_per_gpu\":64,\"spec_module_path\":\"llmd_fs_backend.spec\"}}' --distributed-executor-backend mp"
-                    # LD_PRELOAD: force-load Nsight Compute's libstdc++.so.6 (GLIBCXX_3.4.33)
-                    # before anything else so storage_offload.so finds GLIBCXX_3.4.30+.
-                    # LD_LIBRARY_PATH alone doesn't work because the system libstdc++ (GCC 11
-                    # / RHEL9, max 3.4.29) is already mapped into the process before any
-                    # user-space code runs. LD_PRELOAD overrides it at the earliest point.
-                    NSIGHT_LIBSTDCPP="/opt/nvidia/nsight-compute/2025.2.1/host/linux-desktop-glibc_2_11_3-x64/libstdc++.so.6"
+                    export VLLM_ENV_VARS="PYTHONHASHSEED=42 PYTHONPATH=${FS_PACKAGES_DIR} LD_PRELOAD=${NSIGHT_LIBSTDCPP}"
+                    export EPP_BACKEND_CONFIG="in-memory"
+                    export USE_LMCACHE_IMAGE=""
+                    ;;
+                "cpu+fs-offload-20k")
+                    # Hierarchical GPU→CPU→filesystem via MultiConnector.
+                    # Load: CPU first (fast hit), filesystem fallback.
+                    # Save: both simultaneously.
+                    # CPU allocation matches native-offload-20k for direct comparison.
+                    export CONTAINER_IMAGE="ghcr.io/llm-d/llm-d-cuda:v0.5.1"
+                    export VLLM_EXTRA_ARGS="--kv-transfer-config '{\"kv_connector\":\"MultiConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"connectors\":[{\"kv_connector\":\"OffloadingConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"cpu_bytes_to_use\":${CPU_BYTES_20K}}},{\"kv_connector\":\"OffloadingConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"spec_name\":\"SharedStorageOffloadingSpec\",\"shared_storage_path\":\"/kvcache/kv-cache/\",\"block_size\":256,\"threads_per_gpu\":64,\"spec_module_path\":\"llmd_fs_backend.spec\"}}]}}' --distributed-executor-backend mp"
                     export VLLM_ENV_VARS="PYTHONHASHSEED=42 PYTHONPATH=${FS_PACKAGES_DIR} LD_PRELOAD=${NSIGHT_LIBSTDCPP}"
                     export EPP_BACKEND_CONFIG="in-memory"
                     export USE_LMCACHE_IMAGE=""
