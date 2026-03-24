@@ -2,9 +2,9 @@
 
 ## Overview
 
-This repository contains performance evaluations of KV-cache management strategies in the llm-d inference serving system across multiple versions. Testing covers seven configurations across four model sizes (Qwen3-0.6B, Qwen3-8B, Qwen3-14B, Qwen3-32B-AWQ) using high-concurrency workloads with tensor parallelism across 2x NVIDIA L40S GPUs.
+This repository contains performance evaluations of KV-cache management strategies in the llm-d inference serving system across multiple versions. Testing covers configurations across four model sizes (Qwen3-0.6B, Qwen3-8B, Qwen3-14B, Qwen3-32B-AWQ) using high-concurrency workloads with tensor parallelism across 2x NVIDIA L40S GPUs.
 
-**Hardware:** 2x NVIDIA L40S GPUs (48GB total VRAM), 48 vCPUs, OpenShift on IBM Cloud
+**Hardware:** 2x NVIDIA L40S GPUs (48GB total VRAM), 48 vCPUs, OpenShift on IBM Cloud (Single Node OpenShift)
 
 **Models:** Qwen/Qwen3-0.6B, Qwen/Qwen3-8B, Qwen/Qwen3-14B, Qwen/Qwen3-32B-AWQ
 
@@ -12,144 +12,98 @@ This repository contains performance evaluations of KV-cache management strategi
 
 ## Version Reports
 
-Detailed analysis is organized by llm-d version, with each report comparing against the immediately prior version:
+### [REPORT-v0.5.1.md](REPORT-v0.5.1.md) — llm-d v0.5.1 (vLLM 0.15.1) ← current
 
-### [REPORT-v0.5.0.md](REPORT-v0.5.0.md) - llm-d v0.5.0 (vLLM 0.14.1)
-
-**Status:** Native offload evaluation complete
-
-**Key Findings:**
-- vLLM 0.14.1 significantly improves native CPU offload for small models (0.6B: +26.1 pp improvement, -3.0% overhead vs v0.4.0's -29.1%)
-- Large models show regressions (14B: -8.7 pp, 32B-AWQ: -55.2 pp)
-- 20K CPU block allocation nearly eliminates overhead for 0.6B model (-0.3%)
-- 32B-AWQ shows -56.2% degradation with native offload
-
-**Comparison:** v0.5.0 vs v0.4.0 side-by-side analysis
-
-### [REPORT-v0.4.0.md](REPORT-v0.4.0.md) - llm-d v0.4.0 (vLLM 0.11.2, LMCache v0.3.7)
-
-**Status:** Complete
-
-**Key Findings:**
-- GPU KV-cache memory availability determines offload effectiveness: 14B model benefits (+12-17%) due to constrained memory (20.58 GiB), while 0.6B model (-13% to -29%) has abundant memory (33.92 GiB)
-- llm-d EPP distributed indexing achieves performance parity (within ±2% for most models)
-- vLLM native offloading underperforms LMCache across all model sizes
-- CPU memory capacity is critical: 32B-AWQ shifted from -12.7% to +11.9% when CPU blocks doubled from 10K to 20K
+**Status:** Complete — 128 runs across 4 configurations, 4 models, 8 concurrency levels
 
 **Configurations:**
-- Baseline GPU-only (no-offload)
-- vLLM native CPU offload (10K/20K blocks)
-- LMCache local CPU (10K/20K blocks)
-- LMCache distributed (Redis/Valkey backends)
-- llm-d EPP distributed indexing (Redis/Valkey backends)
+- `no-offload` — GPU-only KV-cache (baseline)
+- `native-offload-20k` — CPU offload via `OffloadingConnector` / `CPUOffloadingSpec`
+- `fs-offload` — Filesystem offload via `SharedStorageOffloadingSpec` (llmd_fs_connector 0.15.1)
+- `cpu+fs-offload-20k` — Hierarchical CPU+filesystem via `MultiConnector`
+
+**Observations:**
+- Qwen3-14B benefits from all offload configurations: +14.5% (native-20k), +7.3% (cpu+fs), +3.6% (fs)
+- Qwen3-0.6B fs-offload unstable at sustained concurrency (zero completions at rate≥300)
+- Disk I/O negligible for filesystem offload runs (≤0.04 MB/s); IBM VPC block PVC operates via OS page cache
+- MultiConnector writes to CPU and filesystem simultaneously; reads prioritise CPU over filesystem
+- Qwen3-14B no-offload regressed -11.2% from v0.5.0 to v0.5.1 (66.1→58.7 tok/s)
+- libstdc++ ABI incompatibility: llmd_fs_connector requires GLIBCXX_3.4.30+; RHEL9 image provides 3.4.29
+
+**Supersedes:** REPORT-v0.5.0.md
 
 ---
 
-## Cross-Version Insights
+### [REPORT-v0.4.0.md](REPORT-v0.4.0.md) — llm-d v0.4.0 (vLLM 0.11.2, LMCache v0.3.7)
 
-### GPU Memory Availability is the Dominant Factor
+**Status:** Complete — 272 runs across 7 configurations, 4 models, 8 concurrency levels
 
-Analysis of vLLM startup logs across both versions confirms that actual GPU memory available for KV-cache after model loading (not parameter count) predicts offload effectiveness:
+**Configurations:**
+- `no-offload`, `native-offload` (10K/20K blocks)
+- `lmcache-local`, `lmcache-redis`, `lmcache-valkey`
+- `llm-d-redis`, `llm-d-valkey` (EPP distributed KV-block indexing)
 
-| Model | GPU Memory (GiB) | Token Capacity | Offload Benefit | Optimal Strategy |
-|-------|----------------:|---------------:|:---------------:|------------------|
-| Qwen3-0.6B | 33.92 | 635K | ❌ | GPU-only |
-| Qwen3-8B | 26.83 | 391K | ❌ | GPU-only |
-| Qwen3-14B | 20.58 | 270K | ✅ | CPU offload (v0.4.0 LMCache) |
-| Qwen3-32B-AWQ | 25.40 | 208K | ⚠️ | CPU offload with adequate capacity |
-
-**Memory Pressure Threshold:** ~26 GiB GPU memory appears to be the crossover point where memory pressure justifies offload overhead on this hardware.
-
-### vLLM Version Comparison: Native Offload Performance
-
-| Model | v0.4.0 Native (10K) | v0.5.0 Native (10K) | Change | Winner |
-|-------|--------------------:|--------------------:|-------:|--------|
-| Qwen3-0.6B | -29.1% | -3.0% | **+26.1 pp** | v0.5.0 |
-| Qwen3-8B | -36.5% | -25.2% | **+11.3 pp** | v0.5.0 |
-| Qwen3-14B | +0.6% | -8.1% | **-8.7 pp** | v0.4.0 |
-| Qwen3-32B-AWQ | -1.0% | -56.2% | **-55.2 pp** | v0.4.0 |
-
-![v0.4.0 vs v0.5.0 Regression](analysis/v0.5.0_regression_comparison.png)
-*Figure: Qwen3-14B native offload regression between v0.4.0 (vLLM 0.11.2) and v0.5.0 (vLLM 0.14.1). Left: absolute throughput comparison showing v0.5.0 baseline improved +13.4% but offload shifted from parity to -7.5% degradation. Right: performance delta showing 8.0 percentage point regression in offload effectiveness.*
-
-vLLM 0.14.1 introduces substantial KV offloading changes: physical block sizes increased from 8-32 KB to 0.5-2 MB by consolidating all layers into contiguous blocks (2×num_layers factor), asynchronous DMA transfers, and CLI interface redesign. These changes benefit small models through reduced transfer overhead but create challenges for larger models where increased block transfer granularity may dominate.
-
-**14B Model Regression Analysis:**
-
-Performance Co-Pilot (PCP) metrics from v0.5.0 peak throughput scenarios (rate=50) reveal that the 14B model regression occurs despite conditions favorable for offload:
-
-- **GPU KV-cache utilization: 36%** - Substantial usage that should benefit from CPU offload
-- **Request queue depth:** 10.5 running requests, 7.6 waiting requests on average
-- **Prefix cache hit rate:** 21-22% across configurations
-- **Baseline improvement:** v0.5.0 no-offload shows +13.4% throughput vs v0.4.0, confirming general vLLM improvements
-
-The regression indicates that vLLM 0.14.1's offload implementation changes negatively impact the 14B model specifically at this memory pressure level (36% GPU KV-cache usage, 270K token capacity). In v0.4.0, offload achieved parity (+0.6%), but v0.5.0 degrades performance by -7.5%, a net -8.0 percentage point regression.
-
-**Takeaway:** vLLM 0.14.1 (v0.5.0) improves small model offload but regresses for mid-size and large/quantized models. For 14B and 32B-AWQ, v0.4.0 with LMCache provides superior performance. The 14B regression is particularly noteworthy given the model's 36% GPU KV-cache utilization - a level that historically benefited from offload in v0.4.0.
-
-### Backend Equivalence: Redis vs Valkey
-
-Both versions confirm that Redis and Valkey perform identically (within ±1-2%) for:
-- llm-d EPP distributed KV-block indexing
-- LMCache distributed KV-cache storage
-
-Backend selection can be based on operational factors (licensing, ecosystem, features) without performance concerns.
+**Observations:**
+- GPU KV-cache memory availability after model loading determines offload effectiveness
+- Qwen3-14B (20.58 GiB GPU KV-cache) benefits from CPU offload (+12–17% with LMCache)
+- Qwen3-0.6B (33.92 GiB GPU KV-cache) shows degradation under all offload strategies (-13% to -29%)
+- llm-d EPP distributed KV-block indexing within ±2% of baseline for all models
+- Redis and Valkey perform identically for both EPP indexing and LMCache storage
+- vLLM native offload underperforms LMCache at all model sizes in v0.4.0
 
 ---
 
-## Hardware Dependencies and Limitations
+## Cross-Version Summary
 
-**Test Hardware:** 2x NVIDIA L40S GPUs (24GB VRAM each, 48GB total), 48 vCPUs, OpenShift on IBM Cloud
+### Native CPU Offload: v0.4.0 → v0.5.0 → v0.5.1
 
-**Findings are specific to:**
-- L40S PCIe Gen4 bandwidth (~32 GB/s bidirectional)
-- GPU KV-cache memory ranging from 20.58 GiB (14B) to 33.92 GiB (0.6B)
-- CPU memory capacity matching or exceeding GPU KV-cache capacity
-- High-concurrency workloads with 10K-token shared prefixes
+| Model | v0.4.0 (10k) | v0.5.0 (20k) | v0.5.1 (20k) |
+|-------|:------------:|:------------:|:------------:|
+| Qwen3-0.6B | -29.1% | -0.3% | -2.2% |
+| Qwen3-8B | -36.5% | -26.1% | -29.9% |
+| Qwen3-14B | +0.6% | -1.6% | **+14.5%** |
+| Qwen3-32B-AWQ | -1.0% | -58.4% | -58.3% |
 
-**Expected shifts with different hardware:**
-- **Higher GPU memory** (H100: 80GB, A100: 40GB/80GB): Shifts optimal offload model size upward
-- **PCIe Gen5** (doubled bandwidth): Reduces offload overhead, potentially benefiting larger models
-- **Different CPU memory bandwidth**: May shift CPU offload effectiveness threshold
-- **Shorter context workloads**: Reduces memory pressure, shifts optimal model size upward
+Values are % throughput delta vs same-version no-offload baseline. Block counts are not directly comparable: v0.4.0 used `num_cpu_blocks`; v0.5.0/v0.5.1 use `cpu_bytes_to_use` (API changed in vLLM 0.15.x).
+
+### No-Offload Baseline Throughput (tok/s)
+
+| Model | v0.4.0 | v0.5.0 | v0.5.1 |
+|-------|-------:|-------:|-------:|
+| Qwen3-0.6B | 602.0 | 634.7 | 636.8 |
+| Qwen3-8B | 113.0 | 114.1 | 114.1 |
+| Qwen3-14B | 58.7 | 66.1 | 58.7 |
+| Qwen3-32B-AWQ | 49.2 | 51.2 | 51.2 |
+
+### Filesystem Offload (v0.5.1 only)
+
+| Model | fs-offload | cpu+fs-offload-20k |
+|-------|:----------:|:-----------------:|
+| Qwen3-0.6B | unstable¹ | unstable¹ |
+| Qwen3-8B | -33.6% | -33.6% |
+| Qwen3-14B | +3.6% | +7.3% |
+| Qwen3-32B-AWQ | -56.2% | -56.2% |
+
+¹ Zero completed requests at rate≥300.
+
+---
+
+## Hardware and Scope
+
+All results are specific to: 2× NVIDIA L40S (24 GB VRAM each), PCIe Gen4, 48 vCPUs, IBM VPC block storage. GPU KV-cache memory available after model loading ranges from 20.58 GiB (Qwen3-14B FP16) to 33.92 GiB (Qwen3-0.6B). This range determines which models benefit from offload on this hardware.
 
 ---
 
 ## Methodology
 
-### Benchmark Framework
-
-- **Tool**: GuideLLM v0.5.3
-- **Workload**: High-concurrency multi-turn conversations with shared 10K-token prefixes
-- **Concurrency levels**: 1, 50, 100, 150, 300, 400, 500, 650
-- **Duration**: 120 seconds per concurrency level
-- **Sample requests**: 4000 per benchmark run
-
-### Metrics Collection
-
-- **GuideLLM**: Throughput, latency (TTFT, ITL, TPOT), request completion
-- **Performance Co-Pilot**: System-level metrics (CPU, GPU, memory, vLLM internals)
-- **vLLM startup logs**: Actual GPU/CPU KV-cache memory allocations
-- **Sampling**: 10-second intervals throughout benchmark execution
-
-### Data Organization
-
-**Raw Data:**
-- GuideLLM results: `results/*/guidellm-results.json.zst`
-- PCP archives: `results/*/pcp-archives/*.zst`
-- vLLM logs: `results/*/vllm-startup.log.zst` or `vllm-startup-logs/*.log.zst`
-
-**Analysis:**
-- CSV extracts: `analysis/*.csv`
-- Visualizations: `analysis/*.png`
-- Scripts: `scripts/analyze-*.py`, `scripts/extract-*.py`
-
-See [README.md](README.md) for complete documentation.
+- **Tool**: GuideLLM
+- **Workload**: Multi-turn concurrent conversations, 10K-token shared prefix, 128 prompt + 128 output tokens per turn, 5 turns
+- **Concurrency**: 1, 50, 100, 150, 300, 400, 500, 650 (120 seconds each)
+- **Metrics**: GuideLLM (throughput, TTFT, ITL, TPOT) + PCP (GPU, CPU, disk, vLLM internals via OpenMetrics)
+- **Data**: `results/*/guidellm-results.json.zst`, `results/*/pcp-archives/`, `results/*/vllm-startup.log.zst`
+- **Analysis**: `scripts/analyze-*.py`, outputs in `analysis/`
 
 ---
 
-*Reports generated from benchmark runs completed February-March 2026*
-
 *Analysis framework: Performance Co-Pilot + GuideLLM*
-
-*System: OpenShift on IBM Cloud with 2x NVIDIA L40S GPUs*
+*System: Single Node OpenShift on IBM Cloud with 2× NVIDIA L40S GPUs*
