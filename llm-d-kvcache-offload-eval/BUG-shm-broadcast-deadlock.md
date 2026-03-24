@@ -125,37 +125,57 @@ on all TP workers before the deadlock occurs:
 
 ## Root Cause Analysis
 
-The `--distributed-executor-backend mp` executor uses shared memory buffers for
-inter-process communication between the EngineCore scheduler and the worker
-processes. The `shm_broadcast.py` module implements a circular broadcast
-mechanism where the EngineCore writes to a slot and waits for all workers to
-acknowledge before reusing it.
+### Causal chain
 
-Under high concurrency with `SharedStorageOffloadingSpec`, the filesystem I/O
-worker threads (64 per GPU) become saturated with KV block write operations.
-While these threads are blocked on I/O, the main worker process loop cannot
-drain the shared memory broadcast queue fast enough. The EngineCore times out
-waiting for broadcast acknowledgement (60-second timeout), logs the warning, and
-the engine stalls. No further requests are dispatched until the process is
-restarted.
+```
+llmd_fs_connector staging buffer exhausted under high write pressure
+  → connector write call blocks the vLLM worker process's main loop
+    → worker cannot drain vLLM's shm_broadcast queue  [vLLM: shm_broadcast.py]
+      → EngineCore times out waiting for broadcast ack  [vLLM: shm_broadcast.py]
+        → engine stalls; gateway returns HTTP 503
+```
 
-**Why Qwen3-0.6B is affected but larger models are not:**
+### Primary: llmd_fs_connector write path blocks the worker main loop
+
+The connector initialises with `staging_buffer_size_mb=14` (only 14 MB of
+staging memory across 64 I/O threads per GPU). At high concurrency with a fast
+model, the rate of KV block writes exhausts this buffer. When the buffer is
+full, the connector's write call into `StorageOffloadingHandlers` blocks the
+calling thread. The calling thread is the vLLM worker process's main loop. With
+the main loop blocked, the worker cannot drain the `shm_broadcast` queue.
+
+The primary fix belongs in **llmd_fs_connector**: write operations into the
+connector should never block the worker's main loop. The correct design is a
+non-blocking enqueue with backpressure signalled to the vLLM scheduler via the
+connector API, allowing the scheduler to reduce dispatch rate rather than
+stalling the worker.
+
+### Secondary: vLLM mp executor is not resilient to slow workers
+
+vLLM's `shm_broadcast.py` implements a circular broadcast where the EngineCore
+waits indefinitely (with 60-second logged warnings) for all workers to
+acknowledge each slot. This design assumes workers drain the queue promptly.
+There is no mechanism for a worker to signal that it is temporarily busy, nor
+for the EngineCore to gracefully degrade (e.g. timeout a single worker rather
+than stalling the whole engine). A secondary fix in **vLLM** would make the mp
+executor resilient to slow broadcast acknowledgements regardless of the cause.
+
+### Why Qwen3-0.6B is affected but larger models are not
 
 Qwen3-0.6B generates tokens at ~636 tok/s (no-offload, rate=50). Under
-rate=300 concurrent requests, the volume of KV blocks written per second
-substantially exceeds what larger models produce — Qwen3-8B generates ~114
-tok/s, Qwen3-14B ~59 tok/s, Qwen3-32B-AWQ ~51 tok/s. The smaller model's
-high throughput creates disproportionate write pressure on the connector's I/O
-threads, crossing the threshold where broadcast starvation occurs.
+rate=300 concurrent requests the volume of KV blocks written per second
+substantially exceeds what larger models produce — Qwen3-8B ~114 tok/s,
+Qwen3-14B ~59 tok/s, Qwen3-32B-AWQ ~51 tok/s. The smaller model's high token
+throughput creates disproportionate write pressure, exhausting the 14 MB
+staging buffer where larger models do not.
 
-**Storage medium note:**
+### Storage medium note
 
-The storage path (`/kvcache/kv-cache/`) was backed by an IBM VPC block PVC
-mounted via the kernel filesystem. During the 120-second benchmark window, disk
-I/O was negligible (≤0.04 MB/s) — all writes went to the OS page cache. The
-deadlock therefore occurs before any physical I/O, purely from the threading
-and IPC interaction between the connector's I/O pool and the mp executor's
-broadcast mechanism.
+The storage path (`/kvcache/kv-cache/`) was backed by an IBM VPC block PVC.
+During the 120-second benchmark window, disk I/O was negligible (≤0.04 MB/s)
+— all writes went to the OS page cache. The deadlock therefore occurs before
+any physical I/O, purely from staging buffer exhaustion and the resulting
+thread-blocking in the connector.
 
 ## Impact
 
@@ -170,16 +190,26 @@ broadcast mechanism.
 
 ## Suggested Investigation
 
-1. **Increase broadcast buffer size** in `shm_broadcast.py` to reduce
-   sensitivity to slow broadcast acknowledgements
-2. **Non-blocking I/O** in `StorageOffloadingHandlers`: ensure I/O threads
-   cannot block the worker process's main loop (e.g. async I/O or a separate
-   process for I/O)
-3. **Broadcast timeout tuning**: the 60-second timeout may be appropriate for
-   compilation/quantisation but too long for production request handling;
-   a shorter timeout with graceful degradation may be preferable
-4. **Backpressure from connector**: the EngineCore should limit request dispatch
-   rate when the connector's I/O queue depth exceeds a threshold
+### llmd_fs_connector (primary)
+
+1. **Non-blocking write path**: `StorageOffloadingHandlers` write calls should
+   never block the caller. Use a bounded async queue; if the queue is full,
+   return immediately with a backpressure signal rather than blocking.
+2. **Backpressure API**: expose a connector method that the vLLM scheduler can
+   poll to determine whether the connector is under pressure, allowing the
+   scheduler to reduce dispatch rate before the staging buffer fills.
+3. **Larger default staging buffer**: 14 MB is small for high-throughput models;
+   the default should scale with `threads_per_gpu` and expected write rate.
+
+### vLLM mp executor (secondary)
+
+4. **Resilient broadcast acknowledgement**: the EngineCore should not stall the
+   entire engine if one worker is slow to acknowledge. Options include draining
+   the broadcast in a dedicated worker thread (decoupled from the main loop), or
+   treating a broadcast timeout as a worker health failure with graceful recovery.
+5. **Broadcast timeout context**: the 60-second timeout is appropriate for
+   one-time operations (compilation, quantisation) but not for steady-state
+   request handling. The timeout or escalation path could be context-aware.
 
 ## Data Location
 
