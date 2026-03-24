@@ -554,7 +554,7 @@ RESULT_FILE="/models/benchmark.json"
 # Use chunked transfer for reliability with large files
 echo "Downloading guidellm results (chunked transfer)..."
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-"${SCRIPT_DIR}/transfer-large-file-chunked.sh" "${KUBECONFIG}" "${NAMESPACE}" "${INTERACTIVE_POD}" "${RESULT_FILE}" "${OUTPUT_DIR}/guidellm-results.json"
+"${SCRIPT_DIR}/../../scripts/transfer-large-file-chunked.sh" "${KUBECONFIG}" "${NAMESPACE}" "${INTERACTIVE_POD}" "${RESULT_FILE}" "${OUTPUT_DIR}/guidellm-results.json"
 COPY_RESULT=$?
 
 # Check if file was actually copied (non-empty)
@@ -562,6 +562,13 @@ if [ -s "${OUTPUT_DIR}/guidellm-results.json" ] && [ ${COPY_RESULT} -eq 0 ]; the
     # Compress locally after download to save disk space
     echo "Compressing guidellm results locally..."
     zstd -q -f --rm "${OUTPUT_DIR}/guidellm-results.json"
+
+    # Strip request/response content (prompt text, model output) from the result.
+    # These fields are not needed for analysis and account for ~86% of file size.
+    echo "Stripping request content from guidellm results..."
+    python3 "${SCRIPT_DIR}/../../scripts/strip-guidellm-request-content.py" \
+        "${OUTPUT_DIR}/guidellm-results.json.zst" || \
+        echo "  Warning: strip failed (file may be corrupt), continuing"
 
     # Clean up JSON file from pod to prevent reuse in next benchmark
     kubectl --kubeconfig="${KUBECONFIG}" exec -n "${NAMESPACE}" "${INTERACTIVE_POD}" -- rm -f "${RESULT_FILE}" 2>/dev/null || true
