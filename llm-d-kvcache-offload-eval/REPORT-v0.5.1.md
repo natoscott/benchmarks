@@ -2,10 +2,8 @@
 
 This report evaluates KV-cache offload strategies in llm-d v0.5.1 (vLLM 0.15.1) and places the results in the context of prior evaluations on v0.4.0 (vLLM 0.11.2) and v0.5.0 (vLLM 0.14.1). Two new offload paths are evaluated for the first time: filesystem offload via the `llmd_fs_connector` external module, and hierarchical CPU+filesystem offload via vLLM's `MultiConnector`.
 
-This report supersedes REPORT-v0.5.0.md.
-
 **Software Versions:**
-- **llm-d**: v0.5.1 (vLLM 0.15.1, GuideLLM)
+- **llm-d**: v0.5.1 (vLLM 0.15.1, GuideLLM 0.5.4)
 - **Prior baselines**: llm-d v0.5.0 (vLLM 0.14.1), llm-d v0.4.0 (vLLM 0.11.2)
 
 **Hardware:** 2× NVIDIA L40S GPUs (48 GB total VRAM), 48 vCPUs, OpenShift on IBM Cloud
@@ -213,7 +211,30 @@ The Qwen3-14B native offload improves from -1.6% to +14.5% vs baseline between v
 
 #### Qwen3-0.6B
 
-native-offload-20k tracks the baseline closely at all concurrency levels (-2.2% at peak). The fs-offload and cpu+fs-offload-20k configurations show throughput at rate=1 (268.8 and 211.2 tok/s respectively) but drop to 85.3 and 25.6 tok/s at rate=50, and show zero completed requests at rate=300 and rate=500. This indicates the `SharedStorageOffloadingSpec` path is unstable at sustained high concurrency for this model size. The IBM VPC block PVC exhibited negligible disk I/O (≤0.04 MB/s) throughout, suggesting the instability is not storage-I/O bound.
+native-offload-20k tracks the baseline closely at all concurrency levels (-2.2% at peak). The fs-offload and cpu+fs-offload-20k configurations show throughput at rate=1 (268.8 and 211.2 tok/s respectively) but drop to 85.3 and 25.6 tok/s at rate=50, and produce zero successful requests at rate=300 and rate=500.
+
+**Failure mechanism at rate≥300:** vLLM does not crash. The API server process remains alive and `/health` returns 200 OK throughout the benchmark. The failure is an EngineCore deadlock in the multiprocessing executor. The vLLM startup log records:
+
+```
+No available shared memory broadcast block found in 60 seconds. This typically
+happens when some processes are hanging or doing some time-consuming work
+(e.g. compilation, weight/kv cache quantization).
+```
+
+This message repeats every 60 seconds for the full 120-second benchmark duration, beginning approximately 8 minutes after the model server starts (once the high-concurrency load hits). The Istio gateway returns HTTP 503 Service Unavailable for all requests during this period. Guidellm records 53,000–54,000 errored requests (`HTTPStatusError: 503 Service Unavailable`) and 0 successful completions. At rate=150, 39 requests completed successfully before the deadlock set in, after which the remaining 151 errored with 503.
+
+**Sequence of events:**
+
+1. `SharedStorageOffloadingSpec` initialises correctly on both TP workers (`threads_per_gpu=64`, staging buffer 14 MB)
+2. High-concurrency requests (rate=300) flood the gateway; the connector begins writing KV blocks to `/kvcache/kv-cache/`
+3. The filesystem I/O worker threads saturate under write pressure
+4. Blocked I/O workers cannot drain the shared memory broadcast queue used by vLLM's multiprocess executor (`--distributed-executor-backend mp`)
+5. EngineCore waits 60 seconds for a broadcast acknowledgement, logs the warning, and the engine stalls — no new requests are dispatched to workers
+6. Gateway returns 503 for all subsequent requests; `/health` continues to respond (API server process unaffected)
+
+**Why this does not occur for larger models:** Qwen3-8B, Qwen3-14B, and Qwen3-32B-AWQ all operate within their sustained concurrency limits without triggering the deadlock. Token generation for larger models is substantially slower, reducing the rate of KV block writes to the filesystem connector. For Qwen3-0.6B, the high token generation rate at 300 concurrent requests produces I/O pressure that the connector's worker threads cannot sustain without blocking the shared memory broadcast path.
+
+This is a reproducible deadlock in the combination of `SharedStorageOffloadingSpec` + `--distributed-executor-backend mp` under high concurrency. See the accompanying bug report file for full reproduction details.
 
 #### Qwen3-8B
 
@@ -285,9 +306,9 @@ This has two implications:
 1. The performance comparison between native-offload-20k (explicit CPU allocation) and fs-offload (filesystem-backed, effectively page-cache-backed) measures implementation overhead differences, not storage tier differences.
 2. For deployments targeting persistent cross-restart or cross-instance KV cache reuse (the primary use case for `SharedStorageOffloadingSpec`), longer-running workloads or explicit cache flushing would be required to bypass the page cache.
 
-### Qwen3-0.6B Instability
+### Qwen3-0.6B EngineCore Deadlock
 
-The Qwen3-0.6B model shows zero completed requests at rate=300 and rate=500 for both fs-offload and cpu+fs-offload-20k configurations. PCP data shows GPU utilization drops to near zero at these concurrency levels for these configurations, while the no-offload and native-offload-20k configurations continue operating. The cause is not identified from the available metrics. The vLLM startup log confirms `SharedStorageOffloadingSpec` initialised correctly (both workers). The instability may reflect a connector scheduling interaction at high concurrency that does not manifest for larger models.
+At rate=300 and rate=500, vLLM's multiprocess EngineCore deadlocks under the combined load of high-concurrency requests and filesystem KV connector I/O. The API server process remains alive (HTTP 503 responses are returned by the gateway rather than connection failures). The failure is a shared memory broadcast queue starvation in `--distributed-executor-backend mp`: filesystem I/O worker threads block before they can drain the broadcast queue, causing the EngineCore to wait indefinitely for worker acknowledgement. The effect is total request failure (53,000+ 503 errors) for the full 120-second benchmark window. See the Qwen3-0.6B section under Throughput vs Concurrency for the full event sequence, and the accompanying bug report (`BUG-shm-broadcast-deadlock.md`) for reproduction steps.
 
 ### MultiConnector (cpu+fs-offload-20k) Behaviour
 
