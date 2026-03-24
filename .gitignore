@@ -1,0 +1,18 @@
+# Automated analysis
+/analysis/*.parquet
+/analysis/*.csv
+
+# Temporary files
+*.tmp
+*.log
+
+# Uncompressed archives
+*.0
+*.meta
+*.index
+
+# configs, tokens, secrets
+*kubeconfig*
+*hftoken*
+*.key
+*.crt
