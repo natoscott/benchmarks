@@ -16,7 +16,7 @@ HTTP 503 for all subsequent requests.
 | llm-d | v0.5.1 (`ghcr.io/llm-d/llm-d-cuda:v0.5.1`) |
 | llmd_fs_connector | 0.15.1 (`llmd_fs_connector-0.15.1-cp312-cp312-linux_x86_64.whl`) |
 | Python | 3.12.12 |
-| CUDA | 12.x |
+| CUDA | 12.9 |
 | GPUs | 2× NVIDIA L40S (tensor-parallel-size=2) |
 | OS | RHEL 9 (kernel 5.14) |
 | Executor backend | `--distributed-executor-backend mp` |
