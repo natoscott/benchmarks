@@ -4,6 +4,41 @@ metadata:
   name: llm-d-infpool-epp
   namespace: llm-d-pfc-cpu
 data:
+  default-plugins.yaml: |
+    apiVersion: inference.networking.x-k8s.io/v1alpha1
+    kind: EndpointPickerConfig
+    plugins:
+    - type: queue-scorer
+    - type: kv-cache-utilization-scorer
+    - type: prefix-cache-scorer
+      name: gpu-prefix-cache-scorer
+      parameters:
+        indexerConfig:
+          kvBlockIndexConfig:
+            redisConfig:
+              address: "valkey://valkey.llm-d-pfc-cpu.svc.cluster.local:6379"
+              backendType: "valkey"
+    - type: prefix-cache-scorer
+      name: cpu-prefix-cache-scorer
+      parameters:
+        autoTune: false
+        lruCapacityPerServer: 41000
+        indexerConfig:
+          kvBlockIndexConfig:
+            redisConfig:
+              address: "valkey://valkey.llm-d-pfc-cpu.svc.cluster.local:6379"
+              backendType: "valkey"
+    schedulingProfiles:
+    - name: default
+      plugins:
+      - pluginRef: queue-scorer
+        weight: 2
+      - pluginRef: kv-cache-utilization-scorer
+        weight: 2
+      - pluginRef: gpu-prefix-cache-scorer
+        weight: 1
+      - pluginRef: cpu-prefix-cache-scorer
+        weight: 1
   custom-plugins.yaml: |
     apiVersion: inference.networking.x-k8s.io/v1alpha1
     kind: EndpointPickerConfig
@@ -18,8 +53,6 @@ data:
             redisConfig:
               address: "valkey://valkey.llm-d-pfc-cpu.svc.cluster.local:6379"
               backendType: "valkey"
-            enableMetrics: true
-            metricsLoggingInterval: "1m0s"
     - type: prefix-cache-scorer
       name: cpu-prefix-cache-scorer
       parameters:
@@ -30,8 +63,6 @@ data:
             redisConfig:
               address: "valkey://valkey.llm-d-pfc-cpu.svc.cluster.local:6379"
               backendType: "valkey"
-            enableMetrics: true
-            metricsLoggingInterval: "1m0s"
     schedulingProfiles:
     - name: default
       plugins:

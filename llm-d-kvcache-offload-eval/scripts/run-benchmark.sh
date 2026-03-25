@@ -194,9 +194,40 @@ kubectl --kubeconfig="${KUBECONFIG}" apply -f "${MANIFEST_FILE}"
 echo "  Restarting EPP deployment..."
 kubectl --kubeconfig="${KUBECONFIG}" rollout restart deployment/"${EPP_DEPLOYMENT}" -n "${NAMESPACE}"
 
-# Wait for rollout
-echo "  Waiting for EPP deployment rollout to complete..."
-kubectl --kubeconfig="${KUBECONFIG}" rollout status deployment/"${EPP_DEPLOYMENT}" -n "${NAMESPACE}" --timeout=120s
+# Poll for a Ready EPP pod (avoids depending on kube-controller-manager Deployment
+# rollout bookkeeping, which is intermittently unavailable on this cluster).
+# EPP pods carry label inferencepool=<deployment-name>.
+# Polling is used instead of kubectl wait to handle the race where both the old
+# terminating pod and the new pod briefly share the same label.
+echo "  Waiting for EPP pod to be Ready..."
+EPP_READY=""
+for i in $(seq 1 60); do
+    # Find a non-terminating EPP pod that has Ready=True.
+    # Terminating pods retain status.phase=Running so field-selector can't exclude them;
+    # python parses the full JSON and skips pods with metadata.deletionTimestamp set.
+    EPP_READY=$(kubectl --kubeconfig="${KUBECONFIG}" get pods -n "${NAMESPACE}" \
+        -l inferencepool="${EPP_DEPLOYMENT}" -o json 2>/dev/null | \
+        python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+for item in d.get('items', []):
+    if item.get('metadata', {}).get('deletionTimestamp'):
+        continue
+    for cond in item.get('status', {}).get('conditions', []):
+        if cond.get('type') == 'Ready' and cond.get('status') == 'True':
+            print(item['metadata']['name'])
+            sys.exit(0)
+" 2>/dev/null || true)
+    if [ -n "${EPP_READY}" ]; then
+        echo "  EPP pod ready: ${EPP_READY}"
+        break
+    fi
+    sleep 5
+done
+if [ -z "${EPP_READY}" ]; then
+    echo "ERROR: EPP not ready after 5 minutes"
+    exit 1
+fi
 
 # Wait for EPP to fully initialize and connect to model server
 echo "  Waiting 90 seconds for EPP initialization..."
@@ -506,6 +537,7 @@ Software: ${SOFTWARE}
 Model: ${MODEL}
 Model Name: ${MODEL_NAME}
 Parameters: ${PARAMETERS}
+GPU Memory Utilization: ${GPU_MEMORY_UTILIZATION}
 Replicas: ${REPLICAS}
 Experiment Name: ${EXPERIMENT_NAME}
 Namespace: ${NAMESPACE}
