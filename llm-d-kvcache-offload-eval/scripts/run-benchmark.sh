@@ -415,7 +415,31 @@ echo "${PATCH_JSON}" | kubectl --kubeconfig="${KUBECONFIG}" patch deployment "${
 
 # Wait for rollout (allow time for model downloads - up to 15 minutes)
 echo "  Waiting for inference server rollout to complete..."
-kubectl --kubeconfig="${KUBECONFIG}" rollout status deployment/"${INFERENCE_DEPLOYMENT}" -n "${NAMESPACE}" --timeout=900s
+INFER_READY=""
+for i in $(seq 1 120); do
+    INFER_READY=$(kubectl --kubeconfig="${KUBECONFIG}" get pods -n "${NAMESPACE}" \
+        -l llm-d.ai/inference-serving=true -o json 2>/dev/null | \
+        python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+for item in d.get('items', []):
+    if item.get('metadata', {}).get('deletionTimestamp'):
+        continue
+    for cond in item.get('status', {}).get('conditions', []):
+        if cond.get('type') == 'Ready' and cond.get('status') == 'True':
+            print(item['metadata']['name'])
+            sys.exit(0)
+" 2>/dev/null || true)
+    if [ -n "${INFER_READY}" ]; then
+        echo "  Inference server ready: ${INFER_READY}"
+        break
+    fi
+    sleep 5
+done
+if [ -z "${INFER_READY}" ]; then
+    echo "ERROR: Inference server not ready after 10 minutes"
+    exit 1
+fi
 
 # Wait for pods to be ready using Kubernetes readiness probes
 echo "  Waiting for inference server pods to be ready..."
