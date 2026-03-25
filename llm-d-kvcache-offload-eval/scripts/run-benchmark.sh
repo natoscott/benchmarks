@@ -127,17 +127,6 @@ if [ -n "${OLD_PCP_PODS}" ]; then
     kubectl --kubeconfig="${KUBECONFIG}" wait --for=condition=ready pod -l app.kubernetes.io/name=pcp -n "${NAMESPACE}" --timeout=600s
     echo "  PCP pod(s) restarted successfully"
 
-    # Install pcp-zeroconf for 10-second default sampling (temporary workaround until upstream PR merges)
-    # This ensures openmetrics metrics appear within ~20s instead of ~60s
-    echo "  Installing pcp-zeroconf in PCP pod(s)..."
-    NEW_PCP_PODS=$(kubectl --kubeconfig="${KUBECONFIG}" get pods -n "${NAMESPACE}" -l app.kubernetes.io/name=pcp -o jsonpath='{.items[*].metadata.name}')
-    for pod in ${NEW_PCP_PODS}; do
-        echo "    Installing in pod: ${pod}"
-        kubectl --kubeconfig="${KUBECONFIG}" exec -n "${NAMESPACE}" "${pod}" -- \
-            sh -c "microdnf install -y pcp-zeroconf || dnf install -y pcp-zeroconf || yum install -y pcp-zeroconf" 2>&1 | grep -E "(Installing|Installed|Already installed|Nothing to do)" || true
-    done
-    echo "  pcp-zeroconf installation complete"
-
     # Capture the PCP pod hostname now — archives live in /var/log/pcp/pmlogger/<hostname>/
     # on the hostPath. If the pod is replaced later (liveness probe failure), the new pod
     # can still read the old archives by hostname, so we need to preserve this.
@@ -416,7 +405,7 @@ echo "${PATCH_JSON}" | kubectl --kubeconfig="${KUBECONFIG}" patch deployment "${
 # Wait for rollout (allow time for model downloads - up to 15 minutes)
 echo "  Waiting for inference server rollout to complete..."
 INFER_READY=""
-for i in $(seq 1 120); do
+for i in $(seq 1 180); do
     INFER_READY=$(kubectl --kubeconfig="${KUBECONFIG}" get pods -n "${NAMESPACE}" \
         -l llm-d.ai/inference-serving=true -o json 2>/dev/null | \
         python3 -c "
@@ -437,7 +426,7 @@ for item in d.get('items', []):
     sleep 5
 done
 if [ -z "${INFER_READY}" ]; then
-    echo "ERROR: Inference server not ready after 10 minutes"
+    echo "ERROR: Inference server not ready after 15 minutes"
     exit 1
 fi
 

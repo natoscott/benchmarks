@@ -86,7 +86,7 @@ for replicas in ${REPLICAS}; do
                     esac
                     export CONTAINER_IMAGE="docker.io/lmcache/vllm-openai:v0.3.7"
                     export VLLM_EXTRA_ARGS="--kv-transfer-config '{\"kv_connector\":\"LMCacheConnectorV1\",\"kv_role\":\"kv_both\"}' --enable-prefix-caching"
-                    export VLLM_ENV_VARS="HOME=/tmp LMCACHE_MAX_LOCAL_CPU_SIZE=${LMCACHE_SIZE} PYTHONHASHSEED=123"
+                    export VLLM_ENV_VARS="HOME=/tmp HF_HOME=/data/.hf LMCACHE_MAX_LOCAL_CPU_SIZE=${LMCACHE_SIZE} PYTHONHASHSEED=123"
                     export EPP_BACKEND_CONFIG="in-memory"
                     export USE_LMCACHE_IMAGE="true"
                     export VLLM_PRE_CMD=""
@@ -94,7 +94,7 @@ for replicas in ${REPLICAS}; do
                 "lmcache-valkey")
                     export CONTAINER_IMAGE="docker.io/lmcache/vllm-openai:v0.3.7"
                     export VLLM_EXTRA_ARGS="--kv-transfer-config '{\"kv_connector\":\"LMCacheConnectorV1\",\"kv_role\":\"kv_both\"}' --enable-prefix-caching"
-                    export VLLM_ENV_VARS="HOME=/tmp LMCACHE_REMOTE_URL=valkey://valkey.${NAMESPACE}.svc.cluster.local:6379 LMCACHE_USE_EXPERIMENTAL=true PYTHONHASHSEED=123"
+                    export VLLM_ENV_VARS="HOME=/tmp HF_HOME=/data/.hf LMCACHE_REMOTE_URL=valkey://valkey.${NAMESPACE}.svc.cluster.local:6379 LMCACHE_USE_EXPERIMENTAL=true PYTHONHASHSEED=123"
                     export EPP_BACKEND_CONFIG="in-memory"
                     export USE_LMCACHE_IMAGE="true"
                     export VLLM_PRE_CMD=""
