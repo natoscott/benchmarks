@@ -1,7 +1,11 @@
 # URLs scraped by the PCP openmetrics PMDA.
-# No EPP or Istio in this RHOAI setup — only vLLM and DCGM.
-# vllm-metrics service round-robins to all vLLM replicas; sufficient for
-# aggregate metrics. DCGM exporter is cluster-scoped in nvidia-gpu-operator.
+# vllm.url  — vLLM Prometheus metrics (served by the kserve-managed pod directly)
+# dcgm.url  — DCGM GPU metrics (cluster-scoped in nvidia-gpu-operator)
+# epp.url   — EPP/inference-scheduler metrics (per-model service, port 9090).
+#             run-benchmark.sh patches this entry before each PCP restart so the
+#             correct model's EPP pod is targeted. The placeholder below matches
+#             the naming pattern: <llm-service-name>-kserve-router-scheduler.
+# kserve.url — KServe controller metrics (static, cluster-wide health view).
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -10,3 +14,7 @@ metadata:
 data:
   vllm.url: http://vllm-metrics.llm-d-pfc-cpu.svc.cluster.local:8000/metrics
   dcgm.url: http://nvidia-dcgm-exporter.nvidia-gpu-operator.svc.cluster.local:9400/metrics
+  epp.url: http://llama-70b-kserve-router-scheduler.llm-d-pfc-cpu.svc.cluster.local:9090/metrics
+  # NOTE: kserve metrics service is HTTPS/8443 — verify TLS accessibility from PCP pod
+  # before relying on this. May need --insecure flag or CA cert in PCP config.
+  kserve.url: https://kserve-controller-manager-metrics-service.redhat-ods-applications.svc.cluster.local:8443/metrics

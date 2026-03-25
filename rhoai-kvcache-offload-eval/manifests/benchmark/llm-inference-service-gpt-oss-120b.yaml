@@ -21,7 +21,7 @@ metadata:
 spec:
   baseRefs:
   - name: v3-3-0-kserve-config-llm-template
-  - name: v3-3-0-kserve-config-llm-scheduler
+  - name: epp-scheduler-valkey        # replaces v3-3-0-kserve-config-llm-scheduler
   - name: v3-3-0-kserve-config-llm-router-route
   model:
     name: "openai/gpt-oss-120b"
@@ -32,14 +32,6 @@ spec:
     tensor: 2
   replicas: 1
   template:
-    initContainers:
-    - name: storage-initializer
-      env:
-      - name: HUGGING_FACE_HUB_TOKEN
-        valueFrom:
-          secretKeyRef:
-            name: llm-d-hf-token
-            key: HF_TOKEN
     containers:
     - name: main
       env:

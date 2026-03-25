@@ -1,0 +1,27 @@
+# Grants guidellm service account permission to GET LLMInferenceServices.
+# Required by the Kuadrant AuthPolicy on the openshift-ai-inference gateway,
+# which does a Kubernetes SubjectAccessReview for get/llminferenceservices.serving.kserve.io
+# before forwarding requests. The guidellm pod passes its SA token as the Bearer token.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: guidellm-inference-access
+  namespace: llm-d-pfc-cpu
+rules:
+- apiGroups: ["serving.kserve.io"]
+  resources: ["llminferenceservices"]
+  verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: guidellm-inference-access
+  namespace: llm-d-pfc-cpu
+subjects:
+- kind: ServiceAccount
+  name: guidellm
+  namespace: llm-d-pfc-cpu
+roleRef:
+  kind: Role
+  name: guidellm-inference-access
+  apiGroup: rbac.authorization.k8s.io

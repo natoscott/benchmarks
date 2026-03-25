@@ -6,3 +6,5 @@ metadata:
 data:
   vllm: "#pmlogconf-setup 2.0\nident   vLLM metrics from openmetrics PMDA\nforce   include\n\topenmetrics.vllm\n"
   dcgm: "#pmlogconf-setup 2.0\nident   DCGM metrics from openmetrics PMDA\nforce   include\n\topenmetrics.dcgm\n"
+  epp: "#pmlogconf-setup 2.0\nident   EPP inference-scheduler metrics from openmetrics PMDA\nforce   include\n\topenmetrics.epp\n"
+  kserve: "#pmlogconf-setup 2.0\nident   KServe controller metrics from openmetrics PMDA\nforce   include\n\topenmetrics.kserve\n"

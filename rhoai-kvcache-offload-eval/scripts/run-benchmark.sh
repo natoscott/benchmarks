@@ -33,9 +33,13 @@ NUM_CPU_BLOCKS="${NUM_CPU_BLOCKS:-20000}"   # used for native-offload-20k
 HARDWARE="${HARDWARE:-2x8xH200}"
 SOFTWARE="${SOFTWARE:-rhoai-3.3}"
 
-# Gateway access — HTTPS, path-prefixed per namespace/service-name
-GATEWAY_SVC="data-science-gateway-data-science-gateway-class.openshift-ingress.svc.cluster.local"
-TARGET="${TARGET:-https://${GATEWAY_SVC}/${NAMESPACE}/${LLM_SERVICE_NAME}}"
+# Gateway access — HTTPS via the openshift-ai-inference gateway.
+# Path-prefixed per namespace/service-name. SA token used as Bearer via OPENAI_API_KEY.
+# Derive the apps domain from the cluster's ingress config at runtime.
+APPS_DOMAIN=$(kubectl --kubeconfig="${KUBECONFIG}" get ingresses.config.openshift.io cluster \
+    -o jsonpath='{.spec.domain}' 2>/dev/null || echo "apps.example.com")
+GATEWAY_HOST="inference-gateway.${APPS_DOMAIN}"
+TARGET="${TARGET:-https://${GATEWAY_HOST}/${NAMESPACE}/${LLM_SERVICE_NAME}}"
 
 RUN_ID="${HARDWARE}_${SOFTWARE}_${MODEL_NAME}_${PARAMETERS}_replica${REPLICAS}_rate${RATE}"
 OUTPUT_DIR="./results/${RUN_ID}"
@@ -107,6 +111,18 @@ done
 # Allow a settling period after ready
 sleep 20
 
+# ── Update openmetrics PMDA ConfigMap for this model's services ──────────────
+# Both epp.url and vllm.url follow predictable naming from the LLMInferenceService name.
+VLLM_SVC="${LLM_SERVICE_NAME}-kserve-workload-svc.${NAMESPACE}.svc.cluster.local"
+EPP_SVC="${LLM_SERVICE_NAME}-epp-service.${NAMESPACE}.svc.cluster.local"
+echo "Updating openmetrics URLs: vllm=${VLLM_SVC}:8000 epp=${EPP_SVC}:9090"
+kubectl --kubeconfig="${KUBECONFIG}" patch configmap openmetrics-pmda-configmap \
+    -n "${NAMESPACE}" --type=merge \
+    -p "{\"data\":{
+        \"vllm.url\":\"https://${VLLM_SVC}:8000/metrics\",
+        \"epp.url\":\"http://${EPP_SVC}:9090/metrics\"
+    }}"
+
 # ── Restart PCP pod for a fresh archive ──────────────────────────────────────
 echo "Restarting PCP pods for fresh archive..."
 OLD_PCP_PODS=$(kubectl --kubeconfig="${KUBECONFIG}" get pods -n "${NAMESPACE}" \
@@ -124,8 +140,6 @@ kubectl --kubeconfig="${KUBECONFIG}" wait --for=condition=ready pod \
 NEW_PCP_PODS=$(kubectl --kubeconfig="${KUBECONFIG}" get pods -n "${NAMESPACE}" \
     -l app.kubernetes.io/name=pcp -o jsonpath='{.items[*].metadata.name}')
 for pod in ${NEW_PCP_PODS}; do
-    kubectl --kubeconfig="${KUBECONFIG}" exec -n "${NAMESPACE}" "${pod}" -- \
-        sh -c "microdnf install -y pcp-zeroconf 2>&1 | grep -E '(Installing|Installed|Already)'" || true
 done
 
 # Wait for pmlogger to be operational
@@ -211,10 +225,12 @@ GUIDELLM_CMD="guidellm benchmark run \
     --sample-requests=0 \
     --outputs=/models/benchmark.json"
 
-# OPENAI_VERIFY_SSL=0 disables TLS certificate verification for the self-signed
-# gateway cert. This is safe because guidellm is co-located in the same cluster.
+# OPENAI_API_KEY is set to the pod's SA token — this satisfies the Kuadrant AuthPolicy
+# which does a Kubernetes SubjectAccessReview using the bearer token.
+# OPENAI_VERIFY_SSL=0 disables cert verification for the self-signed gateway cert.
 kubectl --kubeconfig="${KUBECONFIG}" exec -n "${NAMESPACE}" "${GUIDELLM_POD}" -- \
-    sh -c "OPENAI_VERIFY_SSL=0 PYTHONHTTPSVERIFY=0 ${GUIDELLM_CMD}"
+    sh -c 'SA_TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+    OPENAI_API_KEY="$SA_TOKEN" OPENAI_VERIFY_SSL=0 PYTHONHTTPSVERIFY=0 '"${GUIDELLM_CMD}"
 
 END_TIME=$(date +%s)
 echo "Benchmark duration: $(( END_TIME - START_TIME ))s"
