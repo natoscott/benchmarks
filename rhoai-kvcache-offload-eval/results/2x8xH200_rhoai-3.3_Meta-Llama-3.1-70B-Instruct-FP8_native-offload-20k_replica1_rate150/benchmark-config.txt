@@ -1,13 +1,13 @@
-Run ID: 2x8xH200_rhoai-3.3_Meta-Llama-3.1-70B-Instruct-FP8_native-offload-20k_replica1_rate1
-Date: Wed 25 Mar 2026 07:36:56 UTC
+Run ID: 2x8xH200_rhoai-3.3_Meta-Llama-3.1-70B-Instruct-FP8_native-offload-20k_replica1_rate150
+Date: Wed 25 Mar 2026 07:50:21 UTC
 Target: https://inference-gateway.apps.psap-de-h200-cluster.ibm.rhperfscale.org/llm-d-pfc-cpu/llama-70b
 Rate Type: concurrent
-Rate (Concurrency): 1
+Rate (Concurrency): 150
 Max Seconds: 120
 Prompt Tokens: 512
 Output Tokens: 128
 Prefix Tokens: 10000
-Prefix Count: 2
+Prefix Count: 300
 Turns: 5
 Hardware: 2x8xH200
 Software: rhoai-3.3
@@ -22,4 +22,4 @@ Num CPU Blocks: 20000
 VLLM Additional Args: --tensor-parallel-size 2 --gpu-memory-utilization 0.75 --max-num-seq 1024 --kv-transfer-config '{"kv_connector":"OffloadingConnector","kv_role":"kv_both","kv_connector_extra_config":{"num_cpu_blocks":20000}}'
 Namespace: llm-d-pfc-cpu
 guidellm Pod: guidellm-5b9f4d8678-25xhk
-PCP Pods: pcp-576bd4bfb6-7snsj
+PCP Pods: pcp-576bd4bfb6-rn2hj

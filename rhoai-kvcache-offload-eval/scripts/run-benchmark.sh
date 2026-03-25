@@ -71,6 +71,24 @@ esac
 
 VLLM_ADDITIONAL_ARGS="${BASE_VLLM_ARGS}${VLLM_EXTRA:+ ${VLLM_EXTRA}}"
 
+# ── Scale down all OTHER LLMInferenceServices to 0 ───────────────────────────
+# Ensures inactive models don't consume GPU memory, which would reduce the active
+# model's KV cache headroom and distort results. Critical for replicas=2 testing
+# where both models together would saturate all 8 GPUs on the node.
+ALL_SERVICES=$(kubectl --kubeconfig="${KUBECONFIG}" get llminferenceservices \
+    -n "${NAMESPACE}" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null)
+for svc in ${ALL_SERVICES}; do
+    [ "${svc}" = "${LLM_SERVICE_NAME}" ] && continue
+    CURRENT=$(kubectl --kubeconfig="${KUBECONFIG}" get llminferenceservice "${svc}" \
+        -n "${NAMESPACE}" -o jsonpath='{.spec.replicas}' 2>/dev/null)
+    if [ "${CURRENT:-1}" != "0" ]; then
+        echo "  Scaling down inactive service: ${svc} → 0 replicas"
+        kubectl --kubeconfig="${KUBECONFIG}" patch llminferenceservice "${svc}" \
+            -n "${NAMESPACE}" --type=json \
+            -p '[{"op":"replace","path":"/spec/replicas","value":0}]' 2>/dev/null || true
+    fi
+done
+
 # ── Patch LLMInferenceService ─────────────────────────────────────────────────
 echo "Configuring LLMInferenceService ${LLM_SERVICE_NAME}..."
 echo "  Replicas: ${REPLICAS}"
