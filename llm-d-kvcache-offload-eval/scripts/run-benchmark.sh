@@ -28,6 +28,7 @@ CONTAINER_IMAGE="${CONTAINER_IMAGE:-}"
 INFERENCE_DEPLOYMENT="${INFERENCE_DEPLOYMENT:-llm-d-model-server}"
 TENSOR_PARALLEL_SIZE="${TENSOR_PARALLEL_SIZE:-2}"
 GPUS_PER_REPLICA="${GPUS_PER_REPLICA:-${TENSOR_PARALLEL_SIZE}}"
+GPU_MEMORY_UTILIZATION="${GPU_MEMORY_UTILIZATION:-0.9}"
 
 # EPP configuration (optional)
 # If EPP_BACKEND_CONFIG is set, the EPP ConfigMap will be updated and EPP deployment restarted
@@ -227,7 +228,7 @@ if [ "${USE_LMCACHE_IMAGE}" = "true" ]; then
     VLLM_ARGS_ARRAY='["serve","'${MODEL}'","--tensor-parallel-size","'${TENSOR_PARALLEL_SIZE}'","--port","8000","--max-num-seq","1024","--kv-transfer-config","{\"kv_connector\":\"LMCacheConnectorV1\",\"kv_role\":\"kv_both\"}","--enable-prefix-caching"]'
 else
     # llm-d images use bash -c with exec vllm serve
-    BASE_VLLM_ARGS="exec vllm serve ${MODEL} --tensor-parallel-size ${TENSOR_PARALLEL_SIZE} --port 8000 --max-num-seq 1024"
+    BASE_VLLM_ARGS="exec vllm serve ${MODEL} --tensor-parallel-size ${TENSOR_PARALLEL_SIZE} --port 8000 --max-num-seq 1024 --gpu-memory-utilization ${GPU_MEMORY_UTILIZATION}"
 
     # Append extra args if provided
     if [ -n "${VLLM_EXTRA_ARGS}" ]; then

@@ -1,0 +1,160 @@
+#!/bin/bash
+set -e
+
+# v0.5.1 benchmarks with per-model gpu_memory_utilization tuned to force
+# >80% GPU KV cache utilisation at average load. Same utilization values as
+# run-v0.4.0-mempress.sh — KV cache scaling is hardware-determined and
+# identical between vLLM 0.11.2 and 0.15.1 on the same GPUs.
+#
+# Configs tested:
+#   no-offload, native-offload-20k, fs-offload, cpu+fs-offload-20k
+
+RUNS="${RUNS:-no-offload native-offload-20k fs-offload cpu+fs-offload-20k}"
+MODELS="${MODELS:-Qwen/Qwen3-0.6B Qwen/Qwen3-8B Qwen/Qwen3-14B Qwen/Qwen3-32B-AWQ}"
+REPLICAS="${REPLICAS:-1}"
+
+export KUBECONFIG="${KUBECONFIG:-./kubeconfig}"
+export NAMESPACE="${NAMESPACE:-llm-d-pfc-cpu}"
+export RATE_LIST="${RATE:-1,50,100,150,300,400,500,650}"
+export MAX_SECONDS=120
+export HARDWARE="${HARDWARE:-1x2xL40S}"
+export SOFTWARE="${SOFTWARE:-upstream-llm-d-0.5.1-mempress}"
+export TURNS=5
+export INFERENCE_DEPLOYMENT="${INFERENCE_DEPLOYMENT:-llm-d-model-server}"
+export TENSOR_PARALLEL_SIZE=2
+export GPUS_PER_REPLICA=2
+
+# llmd_fs_connector setup (same as run-v0.5.1-filesystem-offload.sh)
+FS_WHEEL_PATH="/data/llmd_fs_connector-0.15.1-cp312-cp312-linux_x86_64.whl"
+FS_PACKAGES_DIR="/tmp/llmd_packages"
+NSIGHT_LIBSTDCPP="/opt/nvidia/nsight-compute/2025.2.1/host/linux-desktop-glibc_2_11_3-x64/libstdc++.so.6"
+
+# ---------------------------------------------------------------------------
+# One-time setup: ensure kvcache-storage-pvc is mounted in the inference server
+# ---------------------------------------------------------------------------
+echo "=========================================="
+echo "Checking kvcache volume mount"
+echo "=========================================="
+EXISTING_VOLUMES=$(kubectl --kubeconfig="${KUBECONFIG}" get deployment "${INFERENCE_DEPLOYMENT}" \
+    -n "${NAMESPACE}" -o jsonpath='{.spec.template.spec.volumes[*].name}')
+if echo "${EXISTING_VOLUMES}" | grep -qw kvcache; then
+    echo "  kvcache volume already mounted"
+else
+    echo "  Adding kvcache-storage-pvc volume mount at /kvcache..."
+    kubectl --kubeconfig="${KUBECONFIG}" patch deployment "${INFERENCE_DEPLOYMENT}" \
+        -n "${NAMESPACE}" --type='json' -p='[
+        {"op":"add","path":"/spec/template/spec/volumes/-",
+         "value":{"name":"kvcache","persistentVolumeClaim":{"claimName":"kvcache-storage-pvc"}}},
+        {"op":"add","path":"/spec/template/spec/containers/0/volumeMounts/-",
+         "value":{"name":"kvcache","mountPath":"/kvcache"}}
+    ]'
+fi
+echo ""
+
+IFS=',' read -ra RATES <<< "$RATE_LIST"
+
+for replicas in ${REPLICAS}; do
+    export CURRENT_REPLICAS="${replicas}"
+
+    echo "=========================================="
+    echo "Setting replica count to: ${replicas}"
+    echo "=========================================="
+    kubectl --kubeconfig="${KUBECONFIG}" scale deployment/"${INFERENCE_DEPLOYMENT}" \
+        -n "${NAMESPACE}" --replicas="${replicas}"
+    kubectl --kubeconfig="${KUBECONFIG}" rollout status deployment/"${INFERENCE_DEPLOYMENT}" \
+        -n "${NAMESPACE}" --timeout=300s
+    sleep 30
+
+    for model in ${MODELS}; do
+        export MODEL="${model}"
+        export MODEL_NAME="${model##*/}"
+
+        # Per-model gpu_memory_utilization
+        case "${MODEL_NAME}" in
+            "Qwen3-0.6B")    export GPU_MEMORY_UTILIZATION=0.55 ;;
+            "Qwen3-8B")      export GPU_MEMORY_UTILIZATION=0.65 ;;
+            "Qwen3-14B")     export GPU_MEMORY_UTILIZATION=0.70 ;;
+            "Qwen3-32B-AWQ") export GPU_MEMORY_UTILIZATION=0.65 ;;
+            *) echo "Unknown model: ${MODEL_NAME}"; exit 1 ;;
+        esac
+
+        # cpu_bytes_to_use for native offload (20k block equivalent per model)
+        case "${MODEL_NAME}" in
+            "Qwen3-0.6B")    CPU_BYTES_20K=72842645340 ;;
+            "Qwen3-8B")      CPU_BYTES_20K=57616986275 ;;
+            "Qwen3-14B")     CPU_BYTES_20K=44195213475 ;;
+            "Qwen3-32B-AWQ") CPU_BYTES_20K=54546084659 ;;
+        esac
+
+        for run in ${RUNS}; do
+            export PARAMETERS="${run}"
+
+            case "${run}" in
+                "no-offload")
+                    export CONTAINER_IMAGE="ghcr.io/llm-d/llm-d-cuda:v0.5.1"
+                    export VLLM_EXTRA_ARGS=""
+                    export VLLM_ENV_VARS=""
+                    export EPP_BACKEND_CONFIG="in-memory"
+                    export USE_LMCACHE_IMAGE=""
+                    export VLLM_PRE_CMD=""
+                    ;;
+                "native-offload-20k")
+                    export CONTAINER_IMAGE="ghcr.io/llm-d/llm-d-cuda:v0.5.1"
+                    export VLLM_EXTRA_ARGS="--kv-transfer-config '{\"kv_connector\":\"OffloadingConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"cpu_bytes_to_use\":${CPU_BYTES_20K}}}'"
+                    export VLLM_ENV_VARS=""
+                    export EPP_BACKEND_CONFIG="in-memory"
+                    export USE_LMCACHE_IMAGE=""
+                    export VLLM_PRE_CMD=""
+                    ;;
+                "fs-offload")
+                    export CONTAINER_IMAGE="ghcr.io/llm-d/llm-d-cuda:v0.5.1"
+                    export VLLM_EXTRA_ARGS="--kv-transfer-config '{\"kv_connector\":\"OffloadingConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"spec_name\":\"SharedStorageOffloadingSpec\",\"shared_storage_path\":\"/kvcache/kv-cache/\",\"block_size\":256,\"threads_per_gpu\":64,\"spec_module_path\":\"llmd_fs_backend.spec\"}}' --distributed-executor-backend mp"
+                    export VLLM_ENV_VARS="PYTHONHASHSEED=42 PYTHONPATH=${FS_PACKAGES_DIR} LD_PRELOAD=${NSIGHT_LIBSTDCPP}"
+                    export EPP_BACKEND_CONFIG="in-memory"
+                    export USE_LMCACHE_IMAGE=""
+                    export VLLM_PRE_CMD="pip3.12 install --quiet --target ${FS_PACKAGES_DIR} ${FS_WHEEL_PATH} && mkdir -p /kvcache/kv-cache"
+                    ;;
+                "cpu+fs-offload-20k")
+                    export CONTAINER_IMAGE="ghcr.io/llm-d/llm-d-cuda:v0.5.1"
+                    export VLLM_EXTRA_ARGS="--kv-transfer-config '{\"kv_connector\":\"MultiConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"connectors\":[{\"kv_connector\":\"OffloadingConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"cpu_bytes_to_use\":${CPU_BYTES_20K}}},{\"kv_connector\":\"OffloadingConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"spec_name\":\"SharedStorageOffloadingSpec\",\"shared_storage_path\":\"/kvcache/kv-cache/\",\"block_size\":256,\"threads_per_gpu\":64,\"spec_module_path\":\"llmd_fs_backend.spec\"}}]}}' --distributed-executor-backend mp"
+                    export VLLM_ENV_VARS="PYTHONHASHSEED=42 PYTHONPATH=${FS_PACKAGES_DIR} LD_PRELOAD=${NSIGHT_LIBSTDCPP}"
+                    export EPP_BACKEND_CONFIG="in-memory"
+                    export USE_LMCACHE_IMAGE=""
+                    export VLLM_PRE_CMD="pip3.12 install --quiet --target ${FS_PACKAGES_DIR} ${FS_WHEEL_PATH} && mkdir -p /kvcache/kv-cache"
+                    ;;
+                *)
+                    echo "Unknown configuration: ${run}"
+                    exit 1
+                    ;;
+            esac
+
+            for rate in "${RATES[@]}"; do
+                export RATE="${rate}"
+                export PREFIX_COUNT=$((2 * rate))
+                export SAMPLE_REQUESTS=$((2 * rate * TURNS))
+
+                RUN_ID="${HARDWARE}_${SOFTWARE}_${MODEL_NAME}_${PARAMETERS}_replica${replicas}_rate${rate}"
+                OUTPUT_DIR="./results/${RUN_ID}"
+
+                if [ -f "${OUTPUT_DIR}/guidellm-results.json.zst" ]; then
+                    echo "SKIPPING (already complete): ${RUN_ID}"
+                    continue
+                fi
+
+                echo ""
+                echo "=========================================="
+                echo "Starting: ${MODEL_NAME} / ${run} / rate=${rate} / gmu=${GPU_MEMORY_UTILIZATION}"
+                echo "=========================================="
+
+                bash "$(dirname "$0")/run-benchmark.sh"
+                sleep 10
+            done
+        done
+    done
+done
+
+echo ""
+echo "=========================================="
+echo "v0.5.1 memory-pressure benchmarks complete!"
+echo "Results in: results/${HARDWARE}_${SOFTWARE}_*"
+echo "=========================================="
