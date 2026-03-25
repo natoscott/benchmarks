@@ -138,6 +138,17 @@ if [ -n "${OLD_PCP_PODS}" ]; then
     done
     echo "  pcp-zeroconf installation complete"
 
+    # Capture the PCP pod hostname now — archives live in /var/log/pcp/pmlogger/<hostname>/
+    # on the hostPath. If the pod is replaced later (liveness probe failure), the new pod
+    # can still read the old archives by hostname, so we need to preserve this.
+    PCP_ARCHIVE_HOSTNAMES=""
+    for pod in ${NEW_PCP_PODS}; do
+        h=$(kubectl --kubeconfig="${KUBECONFIG}" exec -n "${NAMESPACE}" "${pod}" -- hostname 2>/dev/null || true)
+        PCP_ARCHIVE_HOSTNAMES="${PCP_ARCHIVE_HOSTNAMES} ${h}"
+    done
+    PCP_ARCHIVE_HOSTNAMES="${PCP_ARCHIVE_HOSTNAMES# }"
+    echo "  PCP archive hostname(s): ${PCP_ARCHIVE_HOSTNAMES}"
+
     # Wait for pmlogger to be fully operational by checking pmcd.pmlogger.host contains expected hostname
     echo "  Waiting for pmlogger to initialize..."
     NEW_PCP_PODS=$(kubectl --kubeconfig="${KUBECONFIG}" get pods -n "${NAMESPACE}" -l app.kubernetes.io/name=pcp -o jsonpath='{.items[*].metadata.name}')
@@ -615,39 +626,41 @@ echo "Collecting PCP archives from ${PCP_POD_COUNT} pod(s)..."
 # Create PCP archives directory
 mkdir -p "${OUTPUT_DIR}/pcp-archives"
 
-# Copy PCP archives from each PCP pod (one per node)
-echo "Finding PCP archives for time window: $(date -d @${START_TIME}) to $(date -d @${END_TIME})"
-for PCP_POD in ${PCP_PODS}; do
-    echo ""
-    echo "Collecting archives from PCP pod: ${PCP_POD}"
+# Re-query current PCP pods at collection time — the pod may have been replaced
+# by a liveness probe restart during the benchmark. We exec into whatever pod is
+# currently running but read archives from the ORIGINAL hostname directory, which
+# persists on the hostPath even after the pod is replaced.
+CURRENT_PCP_PODS=$(kubectl --kubeconfig="${KUBECONFIG}" get pods -n "${NAMESPACE}" \
+    -l app.kubernetes.io/name=pcp -o jsonpath='{.items[*].metadata.name}')
+EXEC_PCP_POD=$(echo "${CURRENT_PCP_PODS}" | awk '{print $1}')
 
-    # Get the node/hostname for this PCP pod
-    POD_NODE=$(kubectl --kubeconfig="${KUBECONFIG}" get pod -n "${NAMESPACE}" "${PCP_POD}" -o jsonpath='{.spec.nodeName}')
+echo "Finding PCP archives for time window: $(date -d @${START_TIME}) to $(date -d @${END_TIME})"
+for PCP_ARCHIVE_HOST in ${PCP_ARCHIVE_HOSTNAMES}; do
+    echo ""
+    echo "Collecting archives for hostname: ${PCP_ARCHIVE_HOST} (via pod: ${EXEC_PCP_POD})"
+
+    # Get the node name from the current pod (for output directory naming)
+    POD_NODE=$(kubectl --kubeconfig="${KUBECONFIG}" get pod -n "${NAMESPACE}" \
+        "${EXEC_PCP_POD}" -o jsonpath='{.spec.nodeName}' 2>/dev/null || echo "${PCP_ARCHIVE_HOST}")
     echo "  Node: ${POD_NODE}"
 
     # Create subdirectory for this node's archives
     mkdir -p "${OUTPUT_DIR}/pcp-archives/${POD_NODE}"
 
-    # Copy archives from this PCP pod's current directory only
-    # Using $(hostname) ensures we only get archives from THIS pod's directory, not old pod directories
-    # Filter to only main archive files (ending in digits like .0, .1), not .index or .meta files
-    kubectl --kubeconfig="${KUBECONFIG}" exec -n "${NAMESPACE}" "${PCP_POD}" -- \
-        sh -c 'ls -1 /var/log/pcp/pmlogger/$(hostname)/[0-9]* 2>/dev/null | grep -E "\.[0-9]+$" | head -20' | while read -r archive_path; do
+    # Copy archives from the original hostname's directory (not $(hostname) which would
+    # give the new pod's name if the pod was replaced during the benchmark run)
+    kubectl --kubeconfig="${KUBECONFIG}" exec -n "${NAMESPACE}" "${EXEC_PCP_POD}" -- \
+        sh -c "ls -1 /var/log/pcp/pmlogger/${PCP_ARCHIVE_HOST}/[0-9]* 2>/dev/null | grep -E \"\.[0-9]+$\" | head -20" | while read -r archive_path; do
         archive_file=$(basename "${archive_path}")
 
         echo "  Copying: ${archive_file}"
-        # Use kubectl exec cat instead of kubectl cp to avoid tar overhead and EOF issues
-        # Use sh -c to ensure the entire pipeline (kubectl + redirect) is controlled by timeout
-        timeout --signal=KILL 60 sh -c "kubectl --kubeconfig='${KUBECONFIG}' exec -n '${NAMESPACE}' '${PCP_POD}' -- cat '${archive_path}' > '${OUTPUT_DIR}/pcp-archives/${POD_NODE}/${archive_file}'" 2>&1 || echo "    Warning: Failed to copy ${archive_file}"
+        timeout --signal=KILL 60 sh -c "kubectl --kubeconfig='${KUBECONFIG}' exec -n '${NAMESPACE}' '${EXEC_PCP_POD}' -- cat '${archive_path}' > '${OUTPUT_DIR}/pcp-archives/${POD_NODE}/${archive_file}'" 2>&1 || echo "    Warning: Failed to copy ${archive_file}"
 
-        # Also copy index and meta files
-        # PCP archive naming: data file is like 20260213.00.49.0, but index/meta are 20260213.00.49.{index,meta}
-        # So we need to strip the trailing volume number (.0, .1, etc.) before appending .index/.meta
         archive_base="${archive_path%.[0-9]*}"
         archive_base_name=$(basename "${archive_base}")
         for ext in index meta; do
             ext_file="${archive_base}.${ext}"
-            timeout --signal=KILL 60 sh -c "kubectl --kubeconfig='${KUBECONFIG}' exec -n '${NAMESPACE}' '${PCP_POD}' -- cat '${ext_file}' > '${OUTPUT_DIR}/pcp-archives/${POD_NODE}/${archive_base_name}.${ext}'" 2>&1 || true
+            timeout --signal=KILL 60 sh -c "kubectl --kubeconfig='${KUBECONFIG}' exec -n '${NAMESPACE}' '${EXEC_PCP_POD}' -- cat '${ext_file}' > '${OUTPUT_DIR}/pcp-archives/${POD_NODE}/${archive_base_name}.${ext}'" 2>&1 || true
         done
     done
 done

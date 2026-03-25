@@ -1,0 +1,138 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pcp
+  namespace: llm-d-pfc-cpu
+  labels:
+    app.kubernetes.io/instance: pcp
+    app.kubernetes.io/name: pcp
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: pcp
+      app.kubernetes.io/name: pcp
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: pcp
+        app.kubernetes.io/name: pcp
+        name: pcp
+    spec:
+      affinity:
+        # Prefer to schedule on nodes running inference workloads.
+        # On SNO this has no effect (single node), but provides consistency
+        # with multi-node cluster deployments.
+        podAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: llm-d.ai/inference-serving
+                  operator: Exists
+              topologyKey: kubernetes.io/hostname
+      nodeSelector:
+        nvidia.com/gpu.present: "true"
+      serviceAccount: pcp
+      serviceAccountName: pcp
+      containers:
+      - name: pcp
+        image: quay.io/performancecopilot/pcp:latest
+        imagePullPolicy: IfNotPresent
+        command:
+        - /bin/bash
+        - -c
+        - |
+          # Enable external access for pmcd and pmproxy
+          sed -i 's/PMCD_LOCAL=1/PMCD_LOCAL=0/' /etc/sysconfig/pmcd
+          sed -i 's/# PMPROXY_LOCAL=1/PMPROXY_LOCAL=0/' /etc/sysconfig/pmproxy
+          echo "PCP external access configured"
+          # container-entrypoint for PCP_DOMAIN_AGENTS, then start systemd
+          exec /usr/bin/container-entrypoint /usr/sbin/init
+        env:
+        - name: KEY_SERVERS
+          value: localhost:6379
+        - name: PCP_DOMAIN_AGENTS
+          value: openmetrics,redis
+        - name: PCP_SERVICES
+          value: pmcd,pmlogger,pmproxy
+        ports:
+        - containerPort: 44321
+          name: pmcd-port
+          protocol: TCP
+        - containerPort: 44322
+          name: pmproxy-port
+          protocol: TCP
+        readinessProbe:
+          tcpSocket:
+            port: pmcd-port
+          initialDelaySeconds: 15
+          periodSeconds: 5
+          failureThreshold: 3
+          timeoutSeconds: 3
+        livenessProbe:
+          exec:
+            command:
+            - /bin/bash
+            - -c
+            - systemctl is-active pmcd
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          failureThreshold: 3
+          timeoutSeconds: 5
+        securityContext:
+          allowPrivilegeEscalation: true
+          privileged: true
+          runAsNonRoot: false
+          seccompProfile:
+            type: Unconfined
+        volumeMounts:
+        - mountPath: /var/lib/pcp/config/pmlogconf/openmetrics
+          name: openmetrics-pmlogconf-volume
+          readOnly: true
+        - mountPath: /var/lib/pcp/pmdas/redis/redis.conf
+          name: redis-pmda-volume
+          readOnly: true
+          subPath: redis.conf
+        - mountPath: /var/lib/pcp/pmdas/openmetrics/config.d/epp.url
+          name: openmetrics-pmda-volume
+          readOnly: true
+          subPath: epp.url
+        - mountPath: /var/lib/pcp/pmdas/openmetrics/config.d/vllm.url
+          name: openmetrics-pmda-volume
+          readOnly: true
+          subPath: vllm.url
+        - mountPath: /var/lib/pcp/pmdas/openmetrics/config.d/istio.url
+          name: openmetrics-pmda-volume
+          readOnly: true
+          subPath: istio.url
+        - mountPath: /var/lib/pcp/pmdas/openmetrics/config.d/dcgm.url
+          name: openmetrics-pmda-volume
+          readOnly: true
+          subPath: dcgm.url
+        - mountPath: /var/log/pcp/pmlogger
+          name: pmlogger-storage
+        - mountPath: /var/log/pcp/pmproxy
+          name: pmproxy-storage
+      volumes:
+      - configMap:
+          name: openmetrics-pmlogconf-configmap
+        name: openmetrics-pmlogconf-volume
+      - configMap:
+          name: redis-pmda-configmap
+        name: redis-pmda-volume
+      - configMap:
+          name: openmetrics-pmda-configmap
+        name: openmetrics-pmda-volume
+      - hostPath:
+          path: /var/log/pcp/pmlogger
+          type: DirectoryOrCreate
+        name: pmlogger-storage
+      - hostPath:
+          path: /var/log/pcp/pmproxy
+          type: DirectoryOrCreate
+        name: pmproxy-storage
