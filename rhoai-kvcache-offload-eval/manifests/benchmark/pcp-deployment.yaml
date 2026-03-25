@@ -60,6 +60,17 @@ spec:
           sed -i 's/PMCD_LOCAL=1/PMCD_LOCAL=0/' /etc/sysconfig/pmcd
           sed -i 's/# PMPROXY_LOCAL=1/PMPROXY_LOCAL=0/' /etc/sysconfig/pmproxy
           echo "PCP external access configured"
+          # Add kserve self-signed CA certs to the system trust store so that
+          # pmdaopenmetrics can verify HTTPS connections to vLLM metrics endpoints.
+          # Secrets are mounted with optional:true — certs for models not yet deployed
+          # are simply absent and skipped.
+          # Add the OpenShift service-serving-signer CA to the system trust store.
+          # kserve vLLM service certs are signed by this cluster CA (not truly self-signed).
+          # openshift-service-ca.crt is auto-injected into every namespace by OpenShift.
+          cp /etc/pki/kserve-certs/service-ca.crt \
+              /etc/pki/ca-trust/source/anchors/openshift-service-ca.crt
+          update-ca-trust extract
+          echo "OpenShift service-serving-signer CA added to trust store"
           exec /usr/bin/container-entrypoint /usr/sbin/init
         env:
         - name: PCP_DOMAIN_AGENTS
@@ -103,6 +114,18 @@ spec:
           mountPath: /var/lib/pcp/pmdas/openmetrics/config.d/dcgm.url
           subPath: dcgm.url
           readOnly: true
+        - name: openmetrics-pmda-volume
+          mountPath: /var/lib/pcp/pmdas/openmetrics/config.d/epp.url
+          subPath: epp.url
+          readOnly: true
+        - name: openmetrics-pmda-volume
+          mountPath: /var/lib/pcp/pmdas/openmetrics/config.d/kserve.url
+          subPath: kserve.url
+          readOnly: true
+        # kserve self-signed CA certs — added to system trust store at startup
+        - name: kserve-certs
+          mountPath: /etc/pki/kserve-certs
+          readOnly: true
         - name: pmlogger-storage
           mountPath: /var/log/pcp/pmlogger
         - name: pmproxy-storage
@@ -114,6 +137,14 @@ spec:
       - name: openmetrics-pmda-volume
         configMap:
           name: openmetrics-pmda-configmap
+      # OpenShift service-serving-signer CA bundle — signs all kserve vLLM service certs.
+      # Auto-injected into every namespace by the OpenShift service-ca operator.
+      - name: kserve-certs
+        configMap:
+          name: openshift-service-ca.crt
+          items:
+          - key: service-ca.crt
+            path: service-ca.crt
       - name: pmlogger-storage
         hostPath:
           path: /var/log/pcp/pmlogger

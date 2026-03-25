@@ -57,6 +57,7 @@ spec:
           - /var/run/kserve/tls
           - --config-file
           - /config/config.yaml
+          - --metrics-endpoint-auth=false
           env:
           - name: SSL_CERT_DIR
             value: /var/run/secrets/kubernetes.io/serviceaccount:/etc/pki/tls/certs

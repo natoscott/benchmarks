@@ -136,13 +136,9 @@ done
 kubectl --kubeconfig="${KUBECONFIG}" wait --for=condition=ready pod \
     -l app.kubernetes.io/name=pcp -n "${NAMESPACE}" --timeout=600s
 
-# Install pcp-zeroconf for 10s default sampling interval
+# Wait for pmlogger to be operational
 NEW_PCP_PODS=$(kubectl --kubeconfig="${KUBECONFIG}" get pods -n "${NAMESPACE}" \
     -l app.kubernetes.io/name=pcp -o jsonpath='{.items[*].metadata.name}')
-for pod in ${NEW_PCP_PODS}; do
-done
-
-# Wait for pmlogger to be operational
 for pod in ${NEW_PCP_PODS}; do
     for i in {1..30}; do
         if kubectl --kubeconfig="${KUBECONFIG}" exec -n "${NAMESPACE}" "${pod}" -- \
