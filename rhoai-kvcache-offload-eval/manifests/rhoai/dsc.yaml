@@ -1,0 +1,45 @@
+# DataScienceCluster - configures which RHOAI components to install.
+# Schema for v2 API (RHOAI 3.3): valid components are aipipelines, dashboard,
+# feastoperator, kserve, kueue, llamastackoperator, mlflowoperator, modelregistry,
+# ray, trainer, trainingoperator, trustyai, workbenches.
+# kserve no longer has a serving.mode field; RawDeployment is configured via
+# rawDeploymentServiceConfig (Headless|Headed). No ServiceMesh required.
+apiVersion: datasciencecluster.opendatahub.io/v2
+kind: DataScienceCluster
+metadata:
+  labels:
+    app.kubernetes.io/name: datasciencecluster
+  name: default-dsc
+spec:
+  components:
+    aipipelines:
+      managementState: Removed
+    dashboard:
+      managementState: Managed
+    feastoperator:
+      managementState: Removed
+    kserve:
+      managementState: Managed
+      rawDeploymentServiceConfig: Headed
+      nim:
+        managementState: Removed
+      modelsAsService:
+        managementState: Removed
+    kueue:
+      managementState: Removed
+    llamastackoperator:
+      managementState: Removed
+    mlflowoperator:
+      managementState: Removed
+    modelregistry:
+      managementState: Removed
+    ray:
+      managementState: Removed
+    trainer:
+      managementState: Removed
+    trainingoperator:
+      managementState: Removed
+    trustyai:
+      managementState: Removed
+    workbenches:
+      managementState: Removed

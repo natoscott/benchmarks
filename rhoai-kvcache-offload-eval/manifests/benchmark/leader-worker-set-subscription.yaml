@@ -1,0 +1,29 @@
+# leader-worker-set operator — required for LLMInferenceService tensor parallelism.
+# install mode: OwnNamespace only, so it gets its own namespace + OperatorGroup.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: openshift-lws
+  labels:
+    name: openshift-lws
+---
+apiVersion: operators.coreos.com/v1
+kind: OperatorGroup
+metadata:
+  name: lws-operator-group
+  namespace: openshift-lws
+spec:
+  targetNamespaces:
+  - openshift-lws
+---
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: leader-worker-set
+  namespace: openshift-lws
+spec:
+  channel: stable-v1.0
+  name: leader-worker-set
+  source: redhat-operators
+  sourceNamespace: openshift-marketplace
+  installPlanApproval: Automatic

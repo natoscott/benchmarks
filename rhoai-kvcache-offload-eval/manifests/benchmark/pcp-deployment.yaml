@@ -1,0 +1,123 @@
+# PCP DaemonSet — one pod per GPU worker node.
+# Runs pmcd + pmlogger + pmproxy + openmetrics PMDA (vLLM + DCGM endpoints).
+# Restricted to GPU nodes via nodeSelector so it doesn't land on masters.
+#
+# Archives are written to /var/log/pcp/pmlogger on the HOST (hostPath mount),
+# so run-benchmark.sh can retrieve them after each run by exec-ing into the
+# PCP pod and cat-ing the archive files.
+# Single-replica Deployment (not DaemonSet) — one PCP pod is sufficient because the
+# local-NVMe PVC topology pins all vLLM pods to one GPU node. Pod affinity keeps PCP
+# co-located with the LLMInferenceService workload on that node.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pcp
+  namespace: llm-d-pfc-cpu
+  labels:
+    app.kubernetes.io/name: pcp
+    app.kubernetes.io/instance: pcp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: pcp
+      app.kubernetes.io/instance: pcp
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: pcp
+        app.kubernetes.io/instance: pcp
+        name: pcp
+    spec:
+      serviceAccountName: pcp
+      nodeSelector:
+        nvidia.com/gpu.present: "true"
+      # Prefer the same node as LLMInferenceService pods so host-level metrics
+      # (CPU, memory, network) reflect the node actually running the workload.
+      affinity:
+        podAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: serving.kserve.io/inferenceservice
+                  operator: Exists
+              topologyKey: kubernetes.io/hostname
+      terminationGracePeriodSeconds: 15
+      containers:
+      - name: pcp
+        image: quay.io/performancecopilot/pcp:latest
+        imagePullPolicy: IfNotPresent
+        command:
+        - /bin/bash
+        - -c
+        - |
+          # Enable external access for pmcd and pmproxy
+          sed -i 's/PMCD_LOCAL=1/PMCD_LOCAL=0/' /etc/sysconfig/pmcd
+          sed -i 's/# PMPROXY_LOCAL=1/PMPROXY_LOCAL=0/' /etc/sysconfig/pmproxy
+          echo "PCP external access configured"
+          exec /usr/bin/container-entrypoint /usr/sbin/init
+        env:
+        - name: PCP_DOMAIN_AGENTS
+          value: openmetrics
+        - name: PCP_SERVICES
+          value: pmcd,pmlogger,pmproxy
+        ports:
+        - name: pmcd-port
+          containerPort: 44321
+          protocol: TCP
+        - name: pmproxy-port
+          containerPort: 44322
+          protocol: TCP
+        readinessProbe:
+          tcpSocket:
+            port: pmcd-port
+          initialDelaySeconds: 15
+          periodSeconds: 5
+          failureThreshold: 3
+        livenessProbe:
+          exec:
+            command: [/bin/bash, -c, "systemctl is-active pmcd"]
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          failureThreshold: 3
+        securityContext:
+          privileged: true
+          allowPrivilegeEscalation: true
+          runAsNonRoot: false
+          seccompProfile:
+            type: Unconfined
+        volumeMounts:
+        - name: openmetrics-pmlogconf-volume
+          mountPath: /var/lib/pcp/config/pmlogconf/openmetrics
+          readOnly: true
+        - name: openmetrics-pmda-volume
+          mountPath: /var/lib/pcp/pmdas/openmetrics/config.d/vllm.url
+          subPath: vllm.url
+          readOnly: true
+        - name: openmetrics-pmda-volume
+          mountPath: /var/lib/pcp/pmdas/openmetrics/config.d/dcgm.url
+          subPath: dcgm.url
+          readOnly: true
+        - name: pmlogger-storage
+          mountPath: /var/log/pcp/pmlogger
+        - name: pmproxy-storage
+          mountPath: /var/log/pcp/pmproxy
+      volumes:
+      - name: openmetrics-pmlogconf-volume
+        configMap:
+          name: openmetrics-pmlogconf-configmap
+      - name: openmetrics-pmda-volume
+        configMap:
+          name: openmetrics-pmda-configmap
+      - name: pmlogger-storage
+        hostPath:
+          path: /var/log/pcp/pmlogger
+          type: DirectoryOrCreate
+      - name: pmproxy-storage
+        hostPath:
+          path: /var/log/pcp/pmproxy
+          type: DirectoryOrCreate

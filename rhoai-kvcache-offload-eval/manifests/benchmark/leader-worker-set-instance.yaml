@@ -1,0 +1,8 @@
+# Activates the LWS controller and registers the leaderworkerset.x-k8s.io/v1 CRD.
+# Required after installing the leader-worker-set operator subscription.
+apiVersion: operator.openshift.io/v1
+kind: LeaderWorkerSetOperator
+metadata:
+  name: cluster
+spec:
+  managementState: Managed

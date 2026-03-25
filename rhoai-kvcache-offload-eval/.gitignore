@@ -1,0 +1,2 @@
+# Secrets and credentials covered by top-level .gitignore (kubeconfig, hftoken).
+# No additional exclusions needed for this scenario.

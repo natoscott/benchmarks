@@ -1,0 +1,62 @@
+# guidellm benchmark runner pod.
+# Runs `sleep infinity` — run-benchmark.sh execs guidellm commands inside it.
+# Mounts model-storage-pvc at /models so benchmark.json can be written there
+# and retrieved by the host via kubectl cp / chunked transfer.
+# Must schedule on the same node as the model-storage-pvc (topology constraint
+# is enforced automatically by the local storage class).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: guidellm
+  namespace: llm-d-pfc-cpu
+  labels:
+    app: guidellm
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app: guidellm
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: guidellm
+    spec:
+      serviceAccountName: guidellm
+      terminationGracePeriodSeconds: 10
+      containers:
+      - name: benchmark-runner
+        image: ghcr.io/vllm-project/guidellm:latest
+        imagePullPolicy: Always
+        command: [bash, -lc]
+        args: [sleep infinity]
+        stdin: true
+        tty: true
+        env:
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: HF_HOME
+          value: /models/.hf
+        - name: HF_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: llm-d-hf-token
+              key: HF_TOKEN
+        resources:
+          requests:
+            cpu: "2"
+            memory: 4Gi
+          limits:
+            cpu: "4"
+            memory: 8Gi
+        volumeMounts:
+        - name: model-cache
+          mountPath: /models
+      volumes:
+      - name: model-cache
+        persistentVolumeClaim:
+          claimName: model-storage-pvc

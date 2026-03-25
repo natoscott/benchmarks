@@ -1,0 +1,12 @@
+# URLs scraped by the PCP openmetrics PMDA.
+# No EPP or Istio in this RHOAI setup — only vLLM and DCGM.
+# vllm-metrics service round-robins to all vLLM replicas; sufficient for
+# aggregate metrics. DCGM exporter is cluster-scoped in nvidia-gpu-operator.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openmetrics-pmda-configmap
+  namespace: llm-d-pfc-cpu
+data:
+  vllm.url: http://vllm-metrics.llm-d-pfc-cpu.svc.cluster.local:8000/metrics
+  dcgm.url: http://nvidia-dcgm-exporter.nvidia-gpu-operator.svc.cluster.local:9400/metrics
