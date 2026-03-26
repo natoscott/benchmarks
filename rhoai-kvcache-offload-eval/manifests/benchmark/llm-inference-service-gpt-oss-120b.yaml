@@ -34,6 +34,18 @@ spec:
   template:
     containers:
     - name: main
+      # gpt-oss-120b (MoE, MXFP4) takes ~150-180s to start due to CUDA graph capture.
+      # The RHOAI default liveness probe allows only 120+30=150s, which is too tight.
+      # Extend initialDelaySeconds to 240s to give sufficient headroom.
+      livenessProbe:
+        httpGet:
+          path: /health
+          port: 8000
+          scheme: HTTPS
+        initialDelaySeconds: 240
+        periodSeconds: 10
+        failureThreshold: 3
+        timeoutSeconds: 10
       env:
       - name: HUGGING_FACE_HUB_TOKEN
         valueFrom:

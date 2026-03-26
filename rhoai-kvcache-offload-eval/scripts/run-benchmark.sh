@@ -87,6 +87,10 @@ for svc in ${ALL_SERVICES}; do
             -n "${NAMESPACE}" --type=json \
             -p '[{"op":"replace","path":"/spec/replicas","value":0}]' 2>/dev/null || true
     fi
+    # Also scale down the router-scheduler (EPP) deployment — kserve keeps it
+    # running even when spec.replicas=0, but it's unnecessary when not benchmarking.
+    kubectl --kubeconfig="${KUBECONFIG}" scale deployment "${svc}-kserve-router-scheduler" \
+        -n "${NAMESPACE}" --replicas=0 2>/dev/null || true
 done
 
 # ── Patch LLMInferenceService ─────────────────────────────────────────────────
@@ -126,8 +130,31 @@ while true; do
     ELAPSED=$(( ELAPSED + INTERVAL ))
 done
 
-# Allow a settling period after ready
-sleep 20
+# Wait for the gateway to actually route to the new backend — LLMInferenceService
+# Ready=True doesn't guarantee the gateway has registered all pods. Poll /v1/models
+# via the guidellm pod until it returns 200, or time out after 120s.
+echo "  Waiting for gateway routing to be live..."
+GWAY_OK=false
+for i in $(seq 1 24); do
+    _GPOD=$(kubectl --kubeconfig="${KUBECONFIG}" get pods -n "${NAMESPACE}" \
+        -l app=guidellm --field-selector=status.phase=Running \
+        -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+    HTTP=$(kubectl --kubeconfig="${KUBECONFIG}" exec -n "${NAMESPACE}" "${_GPOD}" -- \
+        bash -c "SA_TOKEN=\$(cat /var/run/secrets/kubernetes.io/serviceaccount/token); \
+        curl -sk -o /dev/null -w '%{http_code}' --max-time 5 \
+        -H \"Authorization: Bearer \$SA_TOKEN\" \
+        \"${TARGET}/v1/models\"" 2>/dev/null || echo "000")
+    if [ "${HTTP}" = "200" ]; then
+        echo "  Gateway live (attempt ${i})"
+        GWAY_OK=true
+        break
+    fi
+    echo "  Gateway not ready yet (HTTP ${HTTP}), waiting 5s..."
+    sleep 5
+done
+if [ "${GWAY_OK}" = "false" ]; then
+    echo "WARNING: Gateway did not become live after 120s, proceeding anyway"
+fi
 
 # ── Update openmetrics PMDA ConfigMap for this model's services ──────────────
 # Both epp.url and vllm.url follow predictable naming from the LLMInferenceService name.
@@ -307,6 +334,8 @@ find "${OUTPUT_DIR}/pcp-archives" -type f \
 done
 
 echo "=========================================="
+echo "  Waiting 10s before next run..."
+sleep 10
 echo "Benchmark complete: ${RUN_ID}"
 echo "Results: ${OUTPUT_DIR}"
 ls -lh "${OUTPUT_DIR}"

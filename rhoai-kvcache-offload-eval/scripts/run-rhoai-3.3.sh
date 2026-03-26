@@ -87,9 +87,6 @@ for replicas in ${REPLICAS}; do
                 echo "▶ ${HARDWARE} ${SOFTWARE} | ${MODEL_NAME} | ${run} | replicas=${replicas} | rate=${rate}"
 
                 bash "$(dirname "$0")/run-benchmark.sh"
-
-                echo "  Waiting 10s before next run..."
-                sleep 10
             done
         done
     done
