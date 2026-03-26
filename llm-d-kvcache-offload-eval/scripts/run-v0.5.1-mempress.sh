@@ -147,6 +147,19 @@ for replicas in ${REPLICAS}; do
                 echo "=========================================="
 
                 bash "$(dirname "$0")/run-benchmark.sh"
+
+                # Clean up kvcache storage after fs-offload/cpu+fs-offload runs to prevent
+                # accumulated files causing slow fsGroup chown on subsequent pod restarts
+                if [[ "${run}" == *"fs-offload"* ]]; then
+                    INFER_POD=$(kubectl --kubeconfig="${KUBECONFIG}" get pods -n "${NAMESPACE}" \
+                        -l llm-d.ai/inference-serving=true --field-selector=status.phase=Running \
+                        -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+                    if [ -n "${INFER_POD}" ]; then
+                        kubectl --kubeconfig="${KUBECONFIG}" exec -n "${NAMESPACE}" "${INFER_POD}" -- \
+                            sh -c "rm -rf /kvcache/kv-cache/* 2>/dev/null; echo 'kvcache cleared'" || true
+                    fi
+                fi
+
                 sleep 10
             done
         done

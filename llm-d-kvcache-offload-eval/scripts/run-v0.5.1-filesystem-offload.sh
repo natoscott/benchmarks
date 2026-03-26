@@ -152,6 +152,19 @@ for replicas in ${REPLICAS}; do
                 bash "$(dirname "$0")/run-benchmark.sh"
 
                 echo "Waiting 10 seconds before next run..."
+                # Clean up kvcache storage after each run so that:
+                # 1. Each run starts with a clean cache (no cross-run contamination)
+                # 2. Accumulated files don't cause slow fsGroup chown on next pod restart
+                # The model server pod has kvcache-storage-pvc mounted at /kvcache.
+                echo "Cleaning up kvcache storage..."
+                INFER_POD=$(kubectl --kubeconfig="${KUBECONFIG}" get pods -n "${NAMESPACE}" \
+                    -l llm-d.ai/inference-serving=true --field-selector=status.phase=Running \
+                    -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+                if [ -n "${INFER_POD}" ]; then
+                    kubectl --kubeconfig="${KUBECONFIG}" exec -n "${NAMESPACE}" "${INFER_POD}" -- \
+                        sh -c "rm -rf /kvcache/kv-cache/* 2>/dev/null; echo 'kvcache cleared'" || true
+                fi
+
                 sleep 10
             done
         done
