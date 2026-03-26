@@ -11,7 +11,8 @@ spec:
     - allowedRoutes:
         namespaces:
           from: All
-      hostname: "inference-gateway.apps.psap-de-h200-cluster.ibm.rhperfscale.org"
+      # PATCH BEFORE APPLYING: replace with inference-gateway.apps.<cluster-domain>
+      hostname: "inference-gateway.apps.REPLACEME.example.com"
       name: https
       port: 443
       protocol: HTTPS

@@ -6,7 +6,7 @@
 #   1. Installs the leader-worker-set operator (required for LLMInferenceService TP)
 #   2. Patches the data-science-gateway to allow routes from llm-d-pfc-cpu namespace
 #   3. Creates namespace, RBAC, PVC, HF token secret
-#   4. Deploys PCP DaemonSet and guidellm pod
+#   4. Deploys PCP Deployment (single pod, co-located with vLLM) and guidellm pod
 #   5. Applies LLMInferenceService manifests (pods start downloading models)
 #
 # Usage:
@@ -113,15 +113,15 @@ echo "  PVC will bind when the first consumer pod is scheduled."
 echo "  NOTE: All pods sharing this PVC (vLLM replicas, guidellm) will be"
 echo "  pinned to whichever GPU node the PVC binds to."
 
-# ── Step 5: PCP ConfigMaps and DaemonSet ──────────────────────────────────────
+# ── Step 5: PCP ConfigMaps and Deployment ─────────────────────────────────────
 echo ""
-echo "[5/7] Deploying PCP DaemonSet (openmetrics PMDA: vLLM + DCGM)..."
+echo "[5/7] Deploying PCP Deployment (openmetrics PMDA: vLLM + DCGM)..."
 kubectl apply -f "${MANIFESTS}/openmetrics-pmda-configmap.yaml"
 kubectl apply -f "${MANIFESTS}/openmetrics-pmlogconf-configmap.yaml"
 kubectl apply -f "${MANIFESTS}/pcp-deployment.yaml"
 
-echo "  Waiting for PCP pods on GPU nodes..."
-kubectl rollout status daemonset/pcp -n "${NAMESPACE}" --timeout=300s
+echo "  Waiting for PCP pod..."
+kubectl rollout status deployment/pcp -n "${NAMESPACE}" --timeout=300s
 
 # ── Step 6: guidellm pod ──────────────────────────────────────────────────────
 echo ""
