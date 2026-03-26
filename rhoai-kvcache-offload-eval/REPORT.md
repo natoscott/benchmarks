@@ -146,14 +146,17 @@ counts, and eight concurrency levels.
 
 ### Workload
 
-**Profile:** Concurrent multi-turn conversation with shared prefix
-- Duration: 120 seconds per concurrency level
-- Prompt tokens: 512 per turn
-- Output tokens: 128 per turn
-- Prefix tokens: 10,000 (shared across requests)
-- Turns: 5 per conversation
+**Profile:** Concurrent multi-turn conversation with shared prefix. Three workload variants:
 
-**GuideLLM benchmark command:**
+| Variant | Prompt tokens | Output tokens | Prefix tokens | Concurrency range | gpu_util |
+|---------|:------------:|:-------------:|:-------------:|:-----------------:|:--------:|
+| standard | 512 | 128 | 10,000 | 1–650 | 0.75 / 0.65 |
+| kv-stress | 512 | 512 | 10,000 | 1–650 | 0.75 / 0.65 |
+| long-context | 4,096 | 256 | 10,000 | 1–300 | 0.50 / 0.50 |
+
+All variants use 5 turns per conversation and 120-second benchmark duration.
+
+**GuideLLM benchmark command (standard variant shown):**
 ```bash
 guidellm benchmark run \
   --target "https://inference-gateway.apps.<cluster>/llm-d-pfc-cpu/<model>" \
