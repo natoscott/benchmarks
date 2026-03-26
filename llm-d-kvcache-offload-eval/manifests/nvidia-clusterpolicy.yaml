@@ -1,0 +1,41 @@
+apiVersion: nvidia.com/v1
+kind: ClusterPolicy
+metadata:
+  name: gpu-cluster-policy
+spec:
+  operator:
+    defaultRuntime: crio
+    use_ocp_driver_toolkit: true
+  driver:
+    enabled: true
+    use_ocp_driver_toolkit: true
+    manager:
+      env:
+      - name: ENABLE_GPU_POD_EVICTION
+        value: "false"
+  toolkit:
+    enabled: true
+  devicePlugin:
+    enabled: true
+  dcgm:
+    enabled: true
+  dcgmExporter:
+    enabled: true
+  gfd:
+    enabled: true
+  migManager:
+    enabled: false
+  nodeStatusExporter:
+    enabled: true
+  gds:
+    enabled: false
+  vgpuManager:
+    enabled: false
+  vgpuDeviceManager:
+    enabled: false
+  sandboxDevicePlugin:
+    enabled: false
+  vfioManager:
+    enabled: false
+  validator:
+    enabled: false
