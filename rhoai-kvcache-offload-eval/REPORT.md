@@ -2,10 +2,11 @@
 
 This report evaluates native CPU KV cache offload on Red Hat OpenShift AI 3.3 (vLLM 0.13.0+rhai11)
 running on NVIDIA H200 hardware. Two models are tested across single- and dual-replica
-configurations using the RHOAI llm-d serving stack.
+configurations using the RHOAI llm-d serving stack. Three workload profiles are used to
+characterise offload behaviour across a range of KV cache pressure levels.
 
 **Software Versions:**
-- **RHOAI**: 3.3.0 (vLLM 0.13.0+rhai11, GuideLLM latest)
+- **RHOAI**: 3.3.0 (vLLM 0.13.0+rhai11, GuideLLM 0.5.4)
 - **llm-d**: Integrated via RHOAI `LLMInferenceService` with EPP inference scheduler
 - **EPP**: `odh-llm-d-inference-scheduler-rhel9`, Valkey-backed prefix cache index
 
@@ -16,7 +17,10 @@ configurations using the RHOAI llm-d serving stack.
 - `RedHatAI/Meta-Llama-3.1-70B-Instruct-FP8` — compressed-tensors FP8 quantisation
 - `openai/gpt-oss-120b` — Mixture-of-Experts (MoE), MXFP4-quantised expert weights
 
-**Concurrency levels:** 1, 50, 100, 150, 300, 400, 500, 650
+**Workload profiles:**
+- **Standard**: prompt=512 tokens, output=128 tokens, concurrency 1–650
+- **KV-stress**: prompt=512 tokens, output=512 tokens, concurrency 1–650 (4× output)
+- **Long-context**: prompt=4,096 tokens, output=256 tokens, gpu_util=0.50, concurrency 1–300
 
 ---
 
@@ -61,6 +65,14 @@ counts, and eight concurrency levels.
 6. **gpt-oss-120b scales to ~100% efficiency at concurrency ≥ 300** (rate=300–400), with
    sub-linear scaling at lower concurrency due to the model's high per-replica throughput
    leaving the second replica underutilised at low request rates.
+
+7. **CPU offload provides a throughput benefit for Llama-3.1-70B-FP8 under long-context
+   workloads with reduced GPU memory allocation.** With prompt=4,096 tokens and
+   gpu_memory_utilization=0.50 (reducing GPU blocks from 26,842 to ~14,440), offload delivers
+   +21.4% throughput at concurrency=10 and +17.5% at concurrency=20. This identifies the
+   operating conditions where recomputation cost (~350 µs at 21,760-token context) exceeds
+   the CPU fetch cost (~78 µs), making offload beneficial. gpt-oss-120b does not reach this
+   crossover at 0.50 utilisation due to its larger GPU KV pool (~131,000 blocks).
 
 **Peak Throughput Summary:**
 
@@ -269,6 +281,51 @@ trajectory but with greater variance.
 
 ---
 
+## Long-Context Results
+
+The long-context workload uses 4,096 prompt tokens per turn (5 turns = 21,760 unique tokens per
+sequence), 256 output tokens, and `gpu_memory_utilization=0.50` for both models. This reduces the
+GPU KV block pool to create genuine eviction pressure while pushing recomputation cost
+(~350 µs per block at 21,760-token context) above the CPU fetch cost (~78 µs), the crossover
+condition for offload benefit.
+
+### Long-Context Throughput
+
+![Long-Context Throughput](longctx_throughput.png)
+
+**Llama-3.1-70B-FP8** shows the native-offload-20k line (orange) exceeding no-offload (blue) in
+the concurrency range 5–100. Peak benefit occurs at concurrency=10 (+21.4%). The shaded region
+marks the zone where recomputation cost dominates CPU fetch cost. Throughput peaks at concurrency=10
+and declines at higher rates as queue pressure accumulates regardless of cache configuration.
+
+**gpt-oss-120b** shows the offload line closely tracking no-offload at low concurrency but diverging
+negatively from concurrency=20 onwards, reaching −47% to −51% at concurrency≥50. Even at
+gpu_utilization=0.50, the MoE model retains ~131,000 GPU blocks — too large a pool for 20,000 CPU
+blocks to make a meaningful contribution, while connector overhead applies to all KV operations.
+
+### Long-Context Offload Impact
+
+![Long-Context Offload Delta](longctx_offload_delta.png)
+
+For Llama-3.1-70B-FP8, both replica counts show positive offload delta between concurrency=5 and
+concurrency=100 (replicas=1 peaks at +21.4% at rate=10; replicas=2 peaks at +17.5%). The benefit
+narrows at high concurrency as queue saturation limits the practical advantage of CPU cache capacity.
+Below concurrency=5 and above concurrency=100-200 the connector overhead returns as the
+dominant term.
+
+For gpt-oss-120b, both replica counts remain negative throughout, with collapse at concurrency≥50.
+
+**Long-Context Throughput Summary (replicas=1):**
+
+| Model | Config | rate=10 | rate=20 | rate=50 | rate=100 |
+|-------|--------|:-------:|:-------:|:-------:|:--------:|
+| Llama-3.1-70B-FP8 | no-offload | 191.8 tok/s | 164.3 tok/s | 145.6 tok/s | 132.5 tok/s |
+| Llama-3.1-70B-FP8 | native-offload-20k | **232.9 (+21.4%)** | **193.1 (+17.5%)** | 151.0 (+3.7%) | 136.8 (+3.3%) |
+| gpt-oss-120b | no-offload | 772.5 tok/s | 1060.2 tok/s | 822.7 tok/s | 649.8 tok/s |
+| gpt-oss-120b | native-offload-20k | 766.9 (−0.7%) | 960.5 (−9.4%) | 429.8 (−47.8%) | 317.2 (−51.2%) |
+
+---
+
 ## Observations
 
 1. **Native CPU KV cache offload reduces throughput on H200 hardware for both tested models**
@@ -302,11 +359,28 @@ trajectory but with greater variance.
    concurrency, per-replica throughput is high enough that a second replica is not fully
    utilised.
 
+7. **CPU offload is beneficial for Llama-3.1-70B-FP8 under long-context conditions.** When
+   gpu_memory_utilization=0.50 reduces the GPU KV block pool to ~14,440 blocks and prompt
+   tokens=4,096 per turn increase per-sequence recomputation cost to ~350 µs (exceeding the
+   ~78 µs CPU fetch cost), offload delivers +21.4% throughput at concurrency=10 and
+   +17.5% at concurrency=20. This is the condition where the OffloadingConnector earns its
+   overhead: recomputation is more expensive than CPU round-trip.
+
+8. **gpt-oss-120b does not show offload benefit under any tested conditions.** Even at
+   gpu_memory_utilization=0.50, the MoE model retains ~131,000 GPU blocks, making the
+   20,000 CPU blocks an 11% supplement while connector overhead applies to all KV operations.
+   The recomputation-vs-fetch crossover point is not reached at tested concurrency levels.
+
+9. **The OffloadingConnector's absence of SupportsHMA integration is the primary constraint.**
+   Without it, the connector replaces vLLM's native hybrid KV cache manager for all block
+   operations, not only those that cross the GPU/CPU boundary. A connector implementing
+   SupportsHMA would reduce overhead to transfers only, materially changing the cost-benefit
+   balance for both models across more operating conditions.
 
 ---
 
 *Data source:*
 *[PCP](https://pcp.io) metric archives and [GuideLLM](https://github.com/vllm-project/guidellm) benchmark results*
 
-*Test dates: March 25–26, 2026.*
+*Test dates: March 25–27, 2026.*
 *Report generated in conjunction with [Claude Code](https://claude.ai).*
