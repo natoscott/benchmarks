@@ -130,6 +130,8 @@ if [ -n "${OLD_PCP_PODS}" ]; then
     # Capture the PCP pod hostname now — archives live in /var/log/pcp/pmlogger/<hostname>/
     # on the hostPath. If the pod is replaced later (liveness probe failure), the new pod
     # can still read the old archives by hostname, so we need to preserve this.
+    NEW_PCP_PODS=$(kubectl --kubeconfig="${KUBECONFIG}" get pods -n "${NAMESPACE}" \
+        -l app.kubernetes.io/name=pcp -o jsonpath='{.items[*].metadata.name}')
     PCP_ARCHIVE_HOSTNAMES=""
     for pod in ${NEW_PCP_PODS}; do
         h=$(kubectl --kubeconfig="${KUBECONFIG}" exec -n "${NAMESPACE}" "${pod}" -- hostname 2>/dev/null || true)
