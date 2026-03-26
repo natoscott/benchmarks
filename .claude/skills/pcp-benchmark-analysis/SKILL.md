@@ -109,6 +109,12 @@ pminfo -a archive-name -l hinv.ncpu | sed -e 's/ *labels //g' -e '/^hinv/d' | jq
 **vLLM/llm-d Metrics**:
 - `openmetrics.*` (all Prometheus metrics)
 
+⚠️ **vLLM `*_perc` metrics export 0–1 fractions, not 0–100**: Despite the `_perc` suffix,
+vLLM metrics such as `vllm:kv_cache_usage_perc` and `vllm:gpu_cache_usage_perc` export
+values in the range 0.0–1.0. Multiply by 100 before plotting as a percentage axis.
+This is a vLLM metric naming convention — other sources (e.g. DCGM GPU utilization)
+may genuinely be 0–100, so do not apply a blanket correction.
+
 **System Metrics**:
 - `mem.util.*` (memory utilisation)
 - `kernel.all.cpu.*` (CPU utilisation)
