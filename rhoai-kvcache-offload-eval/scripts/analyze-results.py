@@ -228,7 +228,7 @@ def fig_throughput_curves(df: pd.DataFrame):
                 d = sub[sub["config"] == config].sort_values("rate")
                 if d.empty:
                     continue
-                ax.plot(d["rate"], d["gen_tok_s_mean"], marker="o", ms=5,
+                ax.plot(rpos(d["rate"]), d["gen_tok_s_mean"], marker="o", ms=5,
                         color=col, ls=ls, lw=2, label=lbl)
 
             ax.set_title(f"{MODEL_LABELS[model]}  ·  {rep} replica{'s' if rep > 1 else ''}",
