@@ -33,10 +33,10 @@ counts, and eight concurrency levels.
 
 1. **Native CPU offload reduces throughput for both models across nearly all concurrency levels.**
    Reductions range from -2.1% to -31.1% for Llama-3.1-70B-FP8 (replicas=1) and -33.6% to
-   -64.3% for gpt-oss-120b. These results contrast with upstream evaluations on L40S hardware
+   -64.3% for gpt-oss-120b. These results contrast with upstream llm-d evaluations
    where CPU offload improved throughput for dense models of similar parameter counts.
 
-2. **GPU KV cache block counts on H200 hardware are larger than on L40S:**
+2. **GPU KV cache block counts are large relative to the 20,000 CPU blocks added by offload:**
    - Llama-3.1-70B-FP8: 26,842 GPU blocks (75% gpu-memory-utilization, FP8 weights at 33.9 GiB/GPU)
    - gpt-oss-120b: 181,691 GPU blocks (65% gpu-memory-utilization, MXFP4 weights at 33.0 GiB/GPU)
    The 20,000 CPU blocks added by native-offload-20k represent +74% additional capacity for
@@ -95,10 +95,10 @@ counts, and eight concurrency levels.
 |-----------|---------|
 | RHOAI | 3.3.0 |
 | vLLM | 0.13.0+rhai11 (bundled in `rhaiis/vllm-cuda-rhel9`) |
-| GuideLLM | latest |
+| GuideLLM | 0.5.4 |
 | EPP scheduler | `odh-llm-d-inference-scheduler-rhel9` |
 | OpenShift | 4.20 |
-| PCP | 7.x (quay.io/performancecopilot/pcp:latest) |
+| PCP | 7.0.3 (quay.io/performancecopilot/pcp:latest) |
 
 ### Model Configuration
 
@@ -140,6 +140,18 @@ counts, and eight concurrency levels.
 - Output tokens: 128 per turn
 - Prefix tokens: 10,000 (shared across requests)
 - Turns: 5 per conversation
+
+**GuideLLM benchmark command:**
+```bash
+guidellm benchmark run \
+  --target "https://inference-gateway.apps.<cluster>/llm-d-pfc-cpu/<model>" \
+  --rate-type concurrent \
+  --rate <N> \
+  --max-seconds 120 \
+  --random-seed 889 \
+  --data '{"prompt_tokens":512,"output_tokens":128,"prefix_tokens":10000,"turns":5,"prefix_count":<2N>}' \
+  --sample-requests 0
+```
 
 ### Routing and Metrics
 
@@ -290,44 +302,6 @@ trajectory but with greater variance.
    concurrency, per-replica throughput is high enough that a second replica is not fully
    utilised.
 
----
-
-## Appendix: Technical Details
-
-### vLLM OffloadingConnector Behaviour
-
-When `--kv-transfer-config` is set, vLLM 0.13.0 logs:
-
-> *"Turning off hybrid kv cache manager because `--kv-transfer-config` is set. This will reduce
-> the performance of vLLM on LLMs with sliding window attention or Mamba attention. If you are
-> a developer of kv connector, please consider supporting hybrid kv cache manager for your
-> connector by making sure your connector is a subclass of `SupportsHMA` defined in
-> kv_connector/v1/base.py and use `--no-disable-hybrid-kv-cache-manager` to start vLLM."*
-
-The hybrid KV cache manager provides native block allocation optimisations. Disabling it
-introduces overhead that scales with the number of KV operations, explaining the degradation
-at higher concurrency where KV operations are most frequent.
-
-### PCP Metrics Captured
-
-Each 120-second benchmark run includes a PCP archive recording:
-- `openmetrics.vllm.*` — all vLLM Prometheus metrics (vLLM metrics named `*_perc` export
-  values in 0–1 range, not 0–100; multiply by 100 for percentage display)
-- `openmetrics.dcgm.*` — DCGM GPU metrics (8× H200, per-GPU utilisation and memory)
-- `openmetrics.epp.*` — EPP inference scheduler workqueue metrics
-
-### GuideLLM Benchmark Command
-
-```bash
-guidellm benchmark run \
-  --target "https://inference-gateway.apps.<cluster>/llm-d-pfc-cpu/<model>" \
-  --rate-type concurrent \
-  --rate <N> \
-  --max-seconds 120 \
-  --random-seed 889 \
-  --data '{"prompt_tokens":512,"output_tokens":128,"prefix_tokens":10000,"turns":5,"prefix_count":<2N>}' \
-  --sample-requests 0
-```
 
 ---
 

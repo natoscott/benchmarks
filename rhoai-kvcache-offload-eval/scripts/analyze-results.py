@@ -44,6 +44,25 @@ CONFIG_LABELS = {
     "native-offload-20k": "native-offload-20k",
 }
 
+# Ordered rate values — used to give each rate equal x-axis spacing
+RATES_ORDERED = [1, 50, 100, 150, 300, 400, 500, 650]
+RATE_POS = {r: i for i, r in enumerate(RATES_ORDERED)}
+
+
+def rpos(series):
+    """Map a rate Series to ordinal x-axis positions."""
+    return series.map(RATE_POS)
+
+
+def set_rate_xaxis(ax, rates=None):
+    """Apply equal-spaced x-axis with rate labels."""
+    ordered = rates if rates is not None else RATES_ORDERED
+    positions = range(len(ordered))
+    ax.set_xticks(list(positions))
+    ax.set_xticklabels(ordered)
+    ax.set_xlim(-0.5, len(ordered) - 0.5)
+
+
 # Known GPU/CPU block counts from startup logs and PCP cache_config_info
 BLOCK_COUNTS = {
     "Meta-Llama-3.1-70B-Instruct-FP8": {"gpu": 26842, "cpu": 20000},
@@ -216,9 +235,7 @@ def fig_throughput_curves(df: pd.DataFrame):
                          fontsize=11)
             ax.set_xlabel("Concurrency (requests)")
             ax.set_ylabel("Output throughput (tok/s)")
-            ax.set_xscale("log")
-            ax.set_xticks([1, 50, 100, 150, 300, 400, 500, 650])
-            ax.get_xaxis().set_major_formatter(mticker.ScalarFormatter())
+            set_rate_xaxis(ax)
             ax.legend(fontsize=9)
             ax.grid(True, alpha=0.4)
 
@@ -256,15 +273,13 @@ def fig_latency_curves(df: pd.DataFrame):
                 d = sub[sub["config"] == config].sort_values("rate")
                 if d.empty:
                     continue
-                ax.plot(d["rate"], d[metric], marker="o", ms=5,
+                ax.plot(rpos(d["rate"]), d[metric], marker="o", ms=5,
                         color=col, ls=ls, lw=2, label=lbl)
 
             ax.set_title(f"{MODEL_LABELS[model]}  ·  {ylabel}", fontsize=11)
             ax.set_xlabel("Concurrency")
             ax.set_ylabel(ylabel)
-            ax.set_xscale("log")
-            ax.set_xticks([1, 50, 100, 150, 300, 400, 500, 650])
-            ax.get_xaxis().set_major_formatter(mticker.ScalarFormatter())
+            set_rate_xaxis(ax)
             ax.legend(fontsize=9)
             ax.grid(True, alpha=0.4)
 
@@ -352,16 +367,14 @@ def fig_replica_scaling(df: pd.DataFrame):
                     effs.append(t2[0] / (2 * t1[0]) * 100)
                     valid_rates.append(rate)
             if effs:
-                ax.plot(valid_rates, effs, marker="o", ms=5,
+                ax.plot([RATE_POS[r] for r in valid_rates], effs, marker="o", ms=5,
                         color=col, ls=ls, lw=2, label=CONFIG_LABELS[config])
 
         ax.axhline(100, color="gray", ls=":", lw=1.5, label="ideal (100%)")
         ax.set_title(MODEL_LABELS[model], fontsize=11)
         ax.set_xlabel("Concurrency")
         ax.set_ylabel("Scaling efficiency (%)")
-        ax.set_xscale("log")
-        ax.set_xticks(rates)
-        ax.get_xaxis().set_major_formatter(mticker.ScalarFormatter())
+        set_rate_xaxis(ax)
         ax.set_ylim(0, 155)
         ax.text(0.97, 0.97, ">100%: EPP prefix-cache\nrouting concentrates\nsimilar requests per replica",
                 transform=ax.transAxes, fontsize=8, va="top", ha="right",
@@ -424,9 +437,9 @@ def fig_kv_cache_pressure(df: pd.DataFrame):
             d = sub[sub["config"] == config].sort_values("rate")
             if d.empty:
                 continue
-            ax.plot(d["rate"], d["avg_kv"], marker="o", ms=5,
+            ax.plot(rpos(d["rate"]), d["avg_kv"], marker="o", ms=5,
                     color=col, ls=ls, lw=2, label=f"{lbl} (avg)")
-            ax.fill_between(d["rate"], d["avg_kv"], d["max_kv"],
+            ax.fill_between(rpos(d["rate"]), d["avg_kv"], d["max_kv"],
                             alpha=0.12, color=col)
 
         blocks = BLOCK_COUNTS.get(model, {})
@@ -444,9 +457,7 @@ def fig_kv_cache_pressure(df: pd.DataFrame):
         ax.set_title(MODEL_LABELS[model], fontsize=11)
         ax.set_xlabel("Concurrency")
         ax.set_ylabel("GPU KV cache usage (%)")
-        ax.set_xscale("log")
-        ax.set_xticks(sorted(sub["rate"].unique()))
-        ax.get_xaxis().set_major_formatter(mticker.ScalarFormatter())
+        set_rate_xaxis(ax)
         ax.set_ylim(0, 105)
         ax.legend(fontsize=9)
         ax.grid(True, alpha=0.4)
