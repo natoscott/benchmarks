@@ -15,7 +15,7 @@ set -e
 # Configs tested (redis removed — redis ≡ valkey per prior evaluation):
 #   no-offload, native-offload, lmcache-local, lmcache-valkey, llm-d-valkey
 
-RUNS="${RUNS:-no-offload native-offload lmcache-local lmcache-valkey llm-d-valkey}"
+RUNS="${RUNS:-no-offload native-offload native-offload-20k lmcache-local lmcache-valkey llm-d-valkey}"
 MODELS="${MODELS:-Qwen/Qwen3-0.6B Qwen/Qwen3-8B Qwen/Qwen3-14B Qwen/Qwen3-32B-AWQ}"
 REPLICAS="${REPLICAS:-1}"
 
@@ -72,6 +72,14 @@ for replicas in ${REPLICAS}; do
                 "native-offload")
                     export CONTAINER_IMAGE="ghcr.io/llm-d/llm-d-cuda:v0.4.0"
                     export VLLM_EXTRA_ARGS="--kv-transfer-config '{\"kv_connector\":\"OffloadingConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"num_cpu_blocks\":10000}}'"
+                    export VLLM_ENV_VARS=""
+                    export EPP_BACKEND_CONFIG="in-memory"
+                    export USE_LMCACHE_IMAGE=""
+                    export VLLM_PRE_CMD=""
+                    ;;
+                "native-offload-20k")
+                    export CONTAINER_IMAGE="ghcr.io/llm-d/llm-d-cuda:v0.4.0"
+                    export VLLM_EXTRA_ARGS="--kv-transfer-config '{\"kv_connector\":\"OffloadingConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"num_cpu_blocks\":20000}}'"
                     export VLLM_ENV_VARS=""
                     export EPP_BACKEND_CONFIG="in-memory"
                     export USE_LMCACHE_IMAGE=""
