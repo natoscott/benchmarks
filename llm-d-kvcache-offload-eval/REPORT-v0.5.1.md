@@ -2,6 +2,8 @@
 
 This report evaluates KV-cache offload strategies in llm-d v0.5.1 (vLLM 0.15.1) and places the results in the context of prior evaluations on v0.4.0 (vLLM 0.11.2) and v0.5.0 (vLLM 0.14.1). Two new offload paths are evaluated for the first time: filesystem offload via the `llmd_fs_connector` external module, and hierarchical CPU+filesystem offload via vLLM's `MultiConnector`.
 
+A supplementary memory-pressure suite re-ran all configurations with reduced `gpu_memory_utilization` per model (0.55–0.70 vs the default 0.9) to create KV-cache pressure across all model sizes. Results for v0.5.1 configurations under memory pressure are included in this report; v0.4.0 memory-pressure results are in REPORT-v0.4.0.md §Memory-Pressure Analysis.
+
 **Software Versions:**
 - **llm-d**: v0.5.1 (vLLM 0.15.1, GuideLLM 0.5.4)
 - **Prior baselines**: llm-d v0.5.0 (vLLM 0.14.1), llm-d v0.4.0 (vLLM 0.11.2)

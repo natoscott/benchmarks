@@ -36,7 +36,7 @@ This repository contains performance evaluations of KV-cache management strategi
 
 ### [REPORT-v0.4.0.md](REPORT-v0.4.0.md) — llm-d v0.4.0 (vLLM 0.11.2, LMCache v0.3.7)
 
-**Status:** Complete — 272 runs across 7 configurations, 4 models, 8 concurrency levels
+**Status:** Complete — 272 runs across 7 configurations + 160 memory-pressure runs (5 configs × 4 models × 8 rates, gmu=0.55–0.70)
 
 **Configurations:**
 - `no-offload`, `native-offload` (10K/20K blocks)

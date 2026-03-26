@@ -700,6 +700,80 @@ These follow-up results substantially strengthen the case for CPU KV-cache offlo
 
 ---
 
+## Memory-Pressure Analysis (Supplementary)
+
+A follow-up experiment re-ran the core v0.4.0 configurations with per-model reduced `gpu_memory_utilization` to create GPU KV-cache pressure for all model sizes, not just Qwen3-14B. The hypothesis: offload strategies should show clearer benefit when GPU KV-cache is constrained.
+
+### Configuration
+
+`gpu_memory_utilization` values were derived from the linear KV-cache scaling model, targeting approximately 85% GPU KV-cache utilisation at average load (rate=50 working set):
+
+| Model | Original gmu | Mempress gmu | GPU KV tokens (original) | GPU KV tokens (mempress) |
+|-------|:-----------:|:------------:|:------------------------:|:------------------------:|
+| Qwen3-0.6B | 0.9 | **0.55** | ~634K | ~335K |
+| Qwen3-8B | 0.9 | **0.65** | ~390K | ~215K |
+| Qwen3-14B | 0.9 | **0.70** | ~268K | ~142K |
+| Qwen3-32B-AWQ | 0.9 | **0.65** | ~207K | ~116K |
+
+Configs tested: no-offload, native-offload (10K blocks), lmcache-local, lmcache-valkey, llm-d-valkey.
+
+### Peak Throughput (tok/s)
+
+| Config | Qwen3-0.6B | Qwen3-8B | Qwen3-14B | Qwen3-32B-AWQ |
+|--------|:----------:|:--------:|:---------:|:-------------:|
+| no-offload | 437.3 | 116.3 | 66.1 | 46.9 |
+| native-offload | 401.1 (-8.3%) | 93.9 (-19.3%) | 66.1 (0.0%) | 45.9 (-2.3%) |
+| lmcache-local | 518.4 (**+18.5%**) | 105.6 (-9.2%) | 57.6 (-12.9%) | 41.6 (-11.4%) |
+| lmcache-valkey | 522.7 (**+19.5%**) | 107.7 (-7.3%) | 54.4 (-17.7%) | 41.6 (-11.4%) |
+| llm-d-valkey | 498.1 (+13.9%) | 115.2 (-0.9%) | 68.3 (+3.2%) | 46.9 (0.0%) |
+
+![Memory-Pressure Peak Throughput](analysis/v0.4.0-mempress_peak_throughput.png)
+*Figure: Peak throughput at reduced gpu_memory_utilization. Qwen3-0.6B with lmcache now exceeds the no-offload baseline.*
+
+### Change vs Original (gmu=0.9) Offload Deltas
+
+The table below shows the change in percentage-point delta (vs same-version no-offload baseline) from original to mempress:
+
+| Config | 0.6B | 8B | 14B | 32B-AWQ |
+|--------|:----:|:--:|:---:|:-------:|
+| native-offload | **+20.8 pp** | **+17.2 pp** | -0.5 pp | -1.3 pp |
+| lmcache-local | **+32.1 pp** | -3.5 pp | -24.7 pp | +1.2 pp |
+| lmcache-valkey | **+32.5 pp** | -0.9 pp | -30.7 pp | +1.2 pp |
+| llm-d-valkey | **+15.4 pp** | -1.3 pp | -6.7 pp | 0.0 pp |
+
+![Memory-Pressure Delta Heatmap](analysis/v0.4.0-mempress_delta_heatmap.png)
+*Figure: Throughput delta vs no-offload baseline across models and configurations.*
+
+### Observations
+
+**Qwen3-0.6B:** Memory pressure converts the offload penalty into a benefit for lmcache configurations. lmcache-local and lmcache-valkey shift from -13% to +18-19% (+32 pp). native-offload improves from -29.1% to -8.3% (+20.8 pp) but remains negative. llm-d-valkey improves from -1.5% to +13.9%.
+
+**Qwen3-8B:** Only native-offload shows meaningful improvement (+17.2 pp, from -36.5% to -19.3%). The offload I/O overhead still dominates even under moderate KV-cache pressure. lmcache and llm-d-valkey configurations show negligible change (±1-3.5 pp).
+
+**Qwen3-14B:** The gmu=0.70 reduction was insufficient. GPU KV-cache utilisation at peak load remained at 70-71% — nearly identical to the original (71%). All offload configs show comparable or worse deltas, suggesting the 14B model needs a more aggressive gmu reduction (approximately 0.55-0.60) to enter a different pressure regime.
+
+**Qwen3-32B-AWQ:** Performance is insensitive to gmu changes in the 0.65-0.90 range. The model is compute-bound rather than KV-cache-limited at typical serving concurrency on 2×L40S GPUs.
+
+### PCP: GPU KV-Cache Utilisation
+
+GPU KV-cache utilisation at peak concurrency did not exceed 70% for any model or configuration under mempress — the target of >80% was not achieved. The gmu reductions created moderate pressure rather than the high-utilisation regime required for a definitive result.
+
+| Config group | 0.6B | 8B | 14B | 32B-AWQ |
+|---|:---:|:---:|:---:|:---:|
+| Original gmu=0.9 (no-offload) | 36% | 63% | 71% | 2% |
+| Mempress no-offload | 21% | 44% | 70% | 7% |
+| Mempress native/llm-d-valkey | 45-48% | 42-44% | 42-44% | 2% |
+
+The Qwen3-0.6B mempress no-offload shows lower GPU KV-cache usage (21%) than the original (36%) despite higher concurrency, because the reduced allocation limits total capacity. Under offload configurations, 0.6B shows 45-48% — the offload tier is actively utilised.
+
+### Methodological Notes
+
+- Rate=1 results for Qwen3-0.6B and Qwen3-14B no-offload show identical throughput (186.7 tok/s) due to shared 10K-token prefix caching at single concurrency with 10 sample requests. These are excluded from peak throughput selection.
+- lmcache configurations replace the vLLM GPU KV-cache metric with internal LMCache storage; `vllm:gpu_cache_usage_perc` reads 0 for those configs.
+- Analysis script: `scripts/analyze-v0.4.0-mempress.py`
+
+---
+
 ## Appendix: Methodology and Data
 
 ### Benchmark Execution
