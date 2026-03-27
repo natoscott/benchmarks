@@ -10,7 +10,7 @@ characterise offload behaviour across a range of KV cache pressure levels.
 - **llm-d**: Integrated via RHOAI `LLMInferenceService` with EPP inference scheduler
 - **EPP**: `odh-llm-d-inference-scheduler-rhel9`, Valkey-backed prefix cache index
 
-**Hardware:** 2× GPU worker nodes, 8× NVIDIA H200 (140 GB HBM3e each); 160 vCPUs,
+**Hardware:** 1× GPU worker nodes, 8× NVIDIA H200 (140 GB HBM3e each); 160 vCPUs,
 1.8 TB RAM per node; 4× NVMe local storage (LVMS)
 
 **Models:**
@@ -47,32 +47,25 @@ counts, and eight concurrency levels.
    Llama and only +11% for gpt-oss-120b.
 
 3. **GPU KV cache utilisation reaches 60–90% at moderate concurrency (rate=100–150),**
-   confirming that memory pressure exists. However, the `OffloadingConnector` disables vLLM's
-   hybrid KV cache manager on initialisation ("Turning off hybrid kv cache manager because
-   `--kv-transfer-config` is set"), introducing connector overhead that exceeds the benefit of
-   the additional CPU cache capacity under the tested conditions.
+   confirming that memory pressure exists. However, connector overhead exceeds the benefit of the additional CPU cache capacity under the tested conditions.
 
 4. **gpt-oss-120b (MoE) shows larger offload overhead than Llama-3.1-70B-FP8.** The MoE
-   architecture's small per-token KV footprint yields 6.8× more GPU blocks than the dense
+   architecture's smaller per-token KV footprint yields 6.8× more GPU blocks than the dense
    FP8 model (181,691 vs 26,842), so the CPU offload capacity ratio is 11% vs 74%, while the
    connector overhead is the same in both cases.
 
 5. **Replica scaling efficiency reaches or exceeds 100% for Llama-3.1-70B-FP8 at
-   concurrency ≥ 100.** At rate=50, no-offload replicas=2 delivers 148% of 2× replicas=1
-   throughput. The EPP prefix-cache-aware routing concentrates similar-prefix requests on the
-   same replica, improving per-replica cache hit rates and enabling super-linear throughput.
+   concurrency ≥ 100.** At rate=50, no-offload replicas=2 delivers 148% of 2× replicas=1 throughput.
 
 6. **gpt-oss-120b scales to ~100% efficiency at concurrency ≥ 300** (rate=300–400), with
-   sub-linear scaling at lower concurrency due to the model's high per-replica throughput
-   leaving the second replica underutilised at low request rates.
+   sub-linear scaling at lower concurrency due to the model's high per-replica throughput leaving the second replica underutilised at low request rates.
 
 7. **CPU offload provides a throughput benefit for Llama-3.1-70B-FP8 under long-context
    workloads with reduced GPU memory allocation.** With prompt=4,096 tokens and
    gpu_memory_utilization=0.50 (reducing GPU blocks from 26,842 to ~14,440), offload delivers
    +21.4% throughput at concurrency=10 and +17.5% at concurrency=20. This identifies the
    operating conditions where recomputation cost (~350 µs at 21,760-token context) exceeds
-   the CPU fetch cost (~78 µs), making offload beneficial. gpt-oss-120b does not reach this
-   crossover at 0.50 utilisation due to its larger GPU KV pool (~131,000 blocks).
+   the CPU fetch cost (~78 µs), making offload beneficial. This crossover is not reached with gpt-oss-120b at 0.50 utilisation due to its larger GPU KV pool (~131,000 blocks).
 
 **Peak Throughput Summary:**
 
