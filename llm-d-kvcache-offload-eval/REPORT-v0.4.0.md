@@ -177,7 +177,7 @@ Understanding actual GPU and CPU memory allocation for KV-cache storage is neces
 
 ### CPU Offload Memory Allocation
 
-When CPU offload is enabled, vLLM allocates CPU memory based on configuration and available system memory:
+When CPU offload is enabled, vLLM allocates CPU memory based on configuration and required system memory:
 
 | Model | Config | Blocks Configured | CPU Memory (GiB) | Allocation Behavior |
 |-------|--------|------------------:|-----------------:|---------------------|
@@ -190,7 +190,7 @@ When CPU offload is enabled, vLLM allocates CPU memory based on configuration an
 
 **Allocation Behavior**:
 - **10K block configurations**: vLLM v0.4.0 over-allocated CPU blocks beyond the configured 10,000, matching GPU KV-cache memory capacity. For models with abundant GPU memory (0.6B: 33.92 GiB), this resulted in 39,700 actual blocks (3.97x configured). For memory-constrained models (14B: 20.58 GiB), allocation was closer to configured value (16,857 blocks, 1.69x).
-- **20K block configurations**: With 20,000 blocks configured, vLLM allocated the requested capacity (41.16 GiB for 14B, 50.80 GiB for 32B-AWQ), enabling substantial performance improvements (+16.7% for 14B, +11.9% for 32B-AWQ with LMCache). This demonstrates that adequate system memory was available and the larger allocation was respected.
+- **20K block configurations**: With 20,000 blocks configured, vLLM allocated the requested capacity (41.16 GiB for 14B, 50.80 GiB for 32B-AWQ), enabling substantial performance improvements (+16.7% for 14B, +11.9% for 32B-AWQ with LMCache).
 
 All models use 16 tokens per KV-cache block consistently.
 
@@ -271,7 +271,7 @@ Performance Co-Pilot metrics captured during benchmark execution provide insight
 *Figure: GPU utilization correlated with output token throughput at peak load*
 
 **Observations:**
-- **no-offload baseline** shows lowest GPU utilization (43.2%) but highest throughput (279.7 tok/s)
+- **no-offload baseline** shows lowest GPU utilization (43.2%) and highest throughput (279.7 tok/s)
 - **llm-d distributed indexing** maintains similar GPU efficiency (52.7%) with minimal throughput impact
 - **CPU offload configurations** show higher GPU utilization (46-52%) but lower throughput, suggesting GPU cycles spent on data transfer rather than compute
 
@@ -323,7 +323,7 @@ Prefix cache hit rates vary significantly by scenario, with some configurations 
 
 **Insights:**
 
-1. **GPU utilization inversely correlates with throughput**: Higher GPU utilization in CPU offload scenarios reflects transfer overhead rather than productive compute
+1. **GPU utilization inversely correlates with throughput**: Higher GPU utilization in CPU offload scenarios reflects transfer overhead rather than productive compute, for many cases
 
 2. **Moderate KV-cache utilization**: Utilization ranges from 29-48% across scenarios, indicating the workload uses a substantial portion of GPU KV-cache capacity without completely exhausting it
 
@@ -371,7 +371,7 @@ All scenarios show individual CPUs hitting >95% utilization during benchmark exe
 **System Pressure Metrics:**
 The test system (RHEL 9.6, kernel 5.14) supports Pressure Stall Information (PSI) metrics, but no pressure events were observed (neither memory, CPU nor I/O)) during benchmark execution. The absence of PSI pressure stalls alongside widespread per-CPU saturation (9-14 CPUs >80%) is not contradictory. PSI measures time that processes spend stalled and waiting for resources, not just resource utilization. With 48 vCPUs available, having 14 saturated CPUs still leaves 34 CPUs available for work. The saturated CPUs are actively executing work rather than blocking processes, so no pressure stalls occur. This indicates the system has sufficient CPU capacity overall, though load distribution across CPUs may be uneven.
 
-The absence of pressure stalls confirms that the system was not resource-constrained during testing. Performance differences are this likely attributable to software overhead in cache management strategies rather than hardware resource exhaustion.
+The absence of pressure stalls confirms that the system was not resource-constrained during testing. Performance differences are thus likely attributable to software overhead in cache management strategies rather than hardware resource exhaustion.
 
 #### Prefix Cache Effectiveness
 
@@ -475,7 +475,7 @@ The 14B model is the only model size that benefits from CPU offload with 10,000 
 - **LMCache local**: -12.7% (moderate degradation)
 - **LMCache distributed**: -12.7% to -12.8% (consistent degradation)
 
-The larger quantized model shows near-parity with native offload but degradation with LMCache. The 4-bit quantization reduces KV-cache memory pressure, potentially eliminating benefits of CPU offload.
+The larger quantized model shows near-parity with native offload but degradation with LMCache. The 4-bit quantization reduces KV-cache memory pressure, eliminating benefits of CPU offload.
 
 ### Performance Delta Heatmap
 
@@ -633,7 +633,7 @@ This evaluation of KV-cache management strategies across seven configurations re
 
 ### Insights
 
-1. **GPU memory availability, not model size, predicts offload benefit**: The assumption that "larger models benefit from offload" is incomplete - actual GPU KV-cache memory availability after model loading is an important factor. The 14B FP16 model (20.58 GiB available) benefits more than the 32B-AWQ model (25.40 GiB available) because quantization reduces weight size, freeing more memory for KV-cache.
+1. **GPU memory availability, not model size, predicts offload benefit**: The assumption that "larger models benefit more from offload" is incomplete - actual GPU KV-cache memory availability after model loading is an important factor. The 14B FP16 model (20.58 GiB available) benefits more than the 32B-AWQ model (25.40 GiB available) because quantization reduces weight size, freeing more memory for KV-cache.
 
 2. **Memory pressure threshold determines offload crossover**: Three zones emerge based on GPU KV-cache memory:
    - **Abundant (>26 GiB)**: 0.6B and 8B models - CPU offload is pure overhead (-5% to -36%)
@@ -706,7 +706,7 @@ A follow-up experiment re-ran the core v0.4.0 configurations with per-model redu
 
 ### Configuration
 
-`gpu_memory_utilization` values were derived from the linear KV-cache scaling model, targeting approximately 85% GPU KV-cache utilisation at average load (rate=50 working set):
+`gpu_memory_utilization` values were derived from the linear KV-cache scaling model, targeting approximately 85% GPU KV-cache utilization at average load (rate=50 working set):
 
 | Model | Original gmu | Mempress gmu | GPU KV tokens (original) | GPU KV tokens (mempress) |
 |-------|:-----------:|:------------:|:------------------------:|:------------------------:|
@@ -750,13 +750,13 @@ The table below shows the change in percentage-point delta (vs same-version no-o
 
 **Qwen3-8B:** Only native-offload shows meaningful improvement (+17.2 pp, from -36.5% to -19.3%). The offload I/O overhead still dominates even under moderate KV-cache pressure. lmcache and llm-d-valkey configurations show negligible change (±1-3.5 pp).
 
-**Qwen3-14B:** The gmu=0.70 reduction was insufficient. GPU KV-cache utilisation at peak load remained at 70-71% — nearly identical to the original (71%). All offload configs show comparable or worse deltas, suggesting the 14B model needs a more aggressive gmu reduction (approximately 0.55-0.60) to enter a different pressure regime.
+**Qwen3-14B:** The gmu=0.70 reduction was insufficient. GPU KV-cache utilization at peak load remained at 70-71% — nearly identical to the original (71%). All offload configs show comparable or worse deltas, suggesting the 14B model needs a more aggressive gmu reduction (approximately 0.55-0.60) to enter a different pressure regime.
 
 **Qwen3-32B-AWQ:** Performance is insensitive to gmu changes in the 0.65-0.90 range. The model is compute-bound rather than KV-cache-limited at typical serving concurrency on 2×L40S GPUs.
 
-### PCP: GPU KV-Cache Utilisation
+### PCP: GPU KV-Cache Utilization
 
-GPU KV-cache utilisation at peak concurrency did not exceed 70% for any model or configuration under mempress — the target of >80% was not achieved. The gmu reductions created moderate pressure rather than the high-utilisation regime required for a definitive result.
+GPU KV-cache utilization at peak concurrency did not exceed 70% for any model or configuration under mempress — the target of >80% was not achieved. The gmu reductions created moderate pressure rather than the high-utilization regime soughtr for a definitive result.
 
 | Config group | 0.6B | 8B | 14B | 32B-AWQ |
 |---|:---:|:---:|:---:|:---:|
@@ -765,12 +765,6 @@ GPU KV-cache utilisation at peak concurrency did not exceed 70% for any model or
 | Mempress native/llm-d-valkey | 45-48% | 42-44% | 42-44% | 2% |
 
 The Qwen3-0.6B mempress no-offload shows lower GPU KV-cache usage (21%) than the original (36%) despite higher concurrency, because the reduced allocation limits total capacity. Under offload configurations, 0.6B shows 45-48% — the offload tier is actively utilised.
-
-### Methodological Notes
-
-- Rate=1 results for Qwen3-0.6B and Qwen3-14B no-offload show identical throughput (186.7 tok/s) due to shared 10K-token prefix caching at single concurrency with 10 sample requests. These are excluded from peak throughput selection.
-- lmcache configurations replace the vLLM GPU KV-cache metric with internal LMCache storage; `vllm:gpu_cache_usage_perc` reads 0 for those configs.
-- Analysis script: `scripts/analyze-v0.4.0-mempress.py`
 
 ---
 
@@ -808,14 +802,6 @@ Benchmark data, analysis scripts, and visualization code are organized as follow
 - GuideLLM JSON results: `results/*/guidellm-results.json.zst`
 - PCP archives: `results/*/pcp-archives/` (compressed with zstd)
 - vLLM startup logs: `vllm-startup-logs/*.log.zst` (10 configurations, 4 models)
-
-**Generated Analysis:**
-- GuideLLM metrics: `analysis/complete_metrics.csv`, `analysis/peak_throughput_all.csv`
-- PCP metrics: `analysis/pcp_metrics_peak.csv`, `analysis/pcp_summary_stats.csv`
-- KV-cache allocations: `analysis/kvcache_allocations_actual.csv`
-- Visualizations: `analysis/*.png` (40+ charts and graphs)
-
-See [README.md](README.md) for complete documentation of analysis scripts and usage instructions.
 
 ---
 
