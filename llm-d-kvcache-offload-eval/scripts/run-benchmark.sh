@@ -124,7 +124,28 @@ if [ -n "${OLD_PCP_PODS}" ]; then
     done
 
     echo "  Waiting for new PCP pod(s) to be ready..."
-    kubectl --kubeconfig="${KUBECONFIG}" wait --for=condition=ready pod -l app.kubernetes.io/name=pcp -n "${NAMESPACE}" --timeout=600s
+    PCP_READY=""
+    for i in $(seq 1 120); do
+        PCP_READY=$(kubectl --kubeconfig="${KUBECONFIG}" get pods -n "${NAMESPACE}" \
+            -l app.kubernetes.io/name=pcp -o json 2>/dev/null | \
+            python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+for item in d.get('items', []):
+    if item.get('metadata', {}).get('deletionTimestamp'):
+        continue
+    for cond in item.get('status', {}).get('conditions', []):
+        if cond.get('type') == 'Ready' and cond.get('status') == 'True':
+            print(item['metadata']['name'])
+            sys.exit(0)
+" 2>/dev/null || true)
+        if [ -n "${PCP_READY}" ]; then break; fi
+        sleep 5
+    done
+    if [ -z "${PCP_READY}" ]; then
+        echo "ERROR: PCP pod not ready after 10 minutes"
+        exit 1
+    fi
     echo "  PCP pod(s) restarted successfully"
 
     # Capture the PCP pod hostname now — archives live in /var/log/pcp/pmlogger/<hostname>/
