@@ -14,7 +14,7 @@ characterise offload behaviour across a range of KV cache pressure levels.
 1.8 TB RAM per node; 4× NVMe local storage (LVMS)
 
 **Models:**
-- `RedHatAI/Meta-Llama-3.1-70B-Instruct-FP8` — compressed-tensors FP8 quantisation
+- `RedHatAI/Meta-Llama-3.1-70B-Instruct-FP8` — compressed-tensors FP8 quantization
 - `openai/gpt-oss-120b` — Mixture-of-Experts (MoE), MXFP4-quantised expert weights
 
 **Workload profiles:**
@@ -35,10 +35,12 @@ counts, and eight concurrency levels.
 
 **Observations:**
 
-1. **Native CPU offload reduces throughput for both models across nearly all concurrency levels.**
-   Reductions range from -2.1% to -31.1% for Llama-3.1-70B-FP8 (replicas=1) and -33.6% to
-   -64.3% for gpt-oss-120b. These results contrast with upstream llm-d evaluations
-   where CPU offload improved throughput for dense models of similar parameter counts.
+1. **CPU offload provides a throughput benefit for Llama-3.1-70B-FP8 under long-context
+   workloads with reduced GPU memory allocation.** With prompt=4,096 tokens and
+   gpu_memory_utilization=0.50 (reducing GPU blocks from 26,842 to ~14,440), offload delivers
+   +21.4% throughput at concurrency=10 and +17.5% at concurrency=20. This identifies the
+   operating conditions where recomputation cost (~350 µs at 21,760-token context) exceeds
+   the CPU fetch cost (~78 µs), making offload beneficial. This crossover is not reached with gpt-oss-120b at 0.50 utilization due to its larger GPU KV pool (~131,000 blocks).
 
 2. **GPU KV cache block counts are large relative to the 20,000 CPU blocks added by offload:**
    - Llama-3.1-70B-FP8: 26,842 GPU blocks (75% gpu-memory-utilization, FP8 weights at 33.9 GiB/GPU)
@@ -46,26 +48,13 @@ counts, and eight concurrency levels.
    The 20,000 CPU blocks added by native-offload-20k represent +74% additional capacity for
    Llama and only +11% for gpt-oss-120b.
 
-3. **GPU KV cache utilisation reaches 60–90% at moderate concurrency (rate=100–150),**
+3. **GPU KV cache utilization reaches 60–90% at moderate concurrency (rate=100–150),**
    confirming that memory pressure exists. However, connector overhead exceeds the benefit of the additional CPU cache capacity under the tested conditions.
 
 4. **gpt-oss-120b (MoE) shows larger offload overhead than Llama-3.1-70B-FP8.** The MoE
    architecture's smaller per-token KV footprint yields 6.8× more GPU blocks than the dense
    FP8 model (181,691 vs 26,842), so the CPU offload capacity ratio is 11% vs 74%, while the
    connector overhead is the same in both cases.
-
-5. **Replica scaling efficiency reaches or exceeds 100% for Llama-3.1-70B-FP8 at
-   concurrency ≥ 100.** At rate=50, no-offload replicas=2 delivers 148% of 2× replicas=1 throughput.
-
-6. **gpt-oss-120b scales to ~100% efficiency at concurrency ≥ 300** (rate=300–400), with
-   sub-linear scaling at lower concurrency due to the model's high per-replica throughput leaving the second replica underutilised at low request rates.
-
-7. **CPU offload provides a throughput benefit for Llama-3.1-70B-FP8 under long-context
-   workloads with reduced GPU memory allocation.** With prompt=4,096 tokens and
-   gpu_memory_utilization=0.50 (reducing GPU blocks from 26,842 to ~14,440), offload delivers
-   +21.4% throughput at concurrency=10 and +17.5% at concurrency=20. This identifies the
-   operating conditions where recomputation cost (~350 µs at 21,760-token context) exceeds
-   the CPU fetch cost (~78 µs), making offload beneficial. This crossover is not reached with gpt-oss-120b at 0.50 utilisation due to its larger GPU KV pool (~131,000 blocks).
 
 **Peak Throughput Summary:**
 
@@ -82,17 +71,17 @@ counts, and eight concurrency levels.
 
 ### Hardware
 
-**Worker nodes:** 2× OpenShift worker nodes on IBM Cloud
+**Worker nodes:** 1× OpenShift GPU worker node on IBM Cloud
 - **GPUs:** 8× NVIDIA H200 (140 GB HBM3e each, 1120 GB total per node)
 - **CPU:** 160 vCPUs per node
 - **RAM:** 1.8 TB per node
-- **Storage:** 4× NVMe drives in LVM volume group (~12–16 TB per node)
+- **Storage:** 8× NVMe drives in LVM volume group (~12–16 TB per node)
 - **Network:** 8× RoCE v2 interfaces per node
 
 **GPU allocation per benchmark:**
 - Tensor parallel size: 2 (2 GPUs per replica)
 - Replicas=1: 2 GPUs total
-- Replicas=2: 4 GPUs total (both replicas on same node, shared model PVC)
+- Replicas=2: 4 GPUs total
 
 ### Software
 
@@ -101,9 +90,8 @@ counts, and eight concurrency levels.
 | RHOAI | 3.3.0 |
 | vLLM | 0.13.0+rhai11 (bundled in `rhaiis/vllm-cuda-rhel9`) |
 | GuideLLM | 0.5.4 |
-| EPP scheduler | `odh-llm-d-inference-scheduler-rhel9` |
 | OpenShift | 4.20 |
-| PCP | 7.0.3 (quay.io/performancecopilot/pcp:latest) |
+| PCP | 7.0.3 |
 
 ### Model Configuration
 
@@ -116,7 +104,7 @@ counts, and eight concurrency levels.
 --kv-transfer-config '{"kv_connector":"OffloadingConnector","kv_role":"kv_both",
   "kv_connector_extra_config":{"num_cpu_blocks":20000}}'
 ```
-- Quantisation: compressed-tensors (FP8)
+- Quantization: compressed-tensors (FP8)
 - Model weights per GPU: 33.9 GiB (TP=2)
 - Available KV cache: 65.5 GiB/GPU
 - GPU blocks (no-offload): 26,842
@@ -131,7 +119,7 @@ counts, and eight concurrency levels.
 --kv-transfer-config '{"kv_connector":"OffloadingConnector","kv_role":"kv_both",
   "kv_connector_extra_config":{"num_cpu_blocks":20000}}'
 ```
-- Quantisation: MXFP4 (expert weights)
+- Quantization: MXFP4 (expert weights)
 - Model weights per GPU: 33.0 GiB (TP=2)
 - Available KV cache: 49.9 GiB/GPU
 - GPU blocks (no-offload): 181,691
@@ -235,19 +223,19 @@ gpt-oss-120b (replicas=1: 8,370 ms vs 6,530 ms no-offload) and reduces it by 15%
 Llama-3.1-70B-FP8 (replicas=1: 31,856 ms vs 37,556 ms). Mean TPOT is higher under offload for
 both models.
 
-### GPU KV Cache Utilisation
+### GPU KV Cache Utilization
 
 ![KV Cache Pressure](kv_cache_pressure.png)
 
-GPU KV cache utilisation from PCP archives (`openmetrics.vllm.vllm.kv_cache_usage_perc × 100`)
+GPU KV cache utilization from PCP archives (`openmetrics.vllm.vllm.kv_cache_usage_perc × 100`)
 shows that memory pressure is present at moderate concurrency despite the large block counts on H200.
 
-**Llama-3.1-70B-FP8:** Utilisation reaches approximately 60–80% at rate=100–150 and declines at
+**Llama-3.1-70B-FP8:** Utilization reaches approximately 60–80% at rate=100–150 and declines at
 higher rates as queue saturation limits the number of simultaneously active sequences. The offload
-configuration shows slightly different utilisation patterns, with the OffloadingConnector managing
+configuration shows slightly different utilization patterns, with the OffloadingConnector managing
 blocks through its own mechanism rather than vLLM's native hybrid KV cache manager.
 
-**gpt-oss-120b:** Despite 181,691 GPU blocks, utilisation reaches 70–90% at rate=100–150.
+**gpt-oss-120b:** Despite 181,691 GPU blocks, utilization reaches 70–90% at rate=100–150.
 The large block count does not eliminate cache pressure — the MoE model's fast token generation
 rate means more sequences complete and start within each measurement interval, cycling through
 the KV cache.
@@ -326,18 +314,18 @@ For gpt-oss-120b, both replica counts remain negative throughout, with collapse 
 
 1. **Native CPU KV cache offload reduces throughput on H200 hardware for both tested models**
    across almost all concurrency levels. The `OffloadingConnector` disables vLLM's hybrid KV
-   cache manager on initialisation, introducing connector overhead that is not offset by the
+   cache manager on initialization, introducing connector overhead that is not offset by the
    additional CPU cache capacity under these conditions.
 
 2. **The throughput reduction is larger for gpt-oss-120b (−34% to −64%) than for
-   Llama-3.1-70B-FP8 (−2% to −31%).** The MoE model's MXFP4 quantisation leaves 181,691 GPU
+   Llama-3.1-70B-FP8 (−2% to −31%).** The MoE model's MXFP4 quantization leaves 181,691 GPU
    blocks available — 6.8× more than the FP8 dense model — meaning the 20,000 CPU blocks
    represent only 11% additional capacity. The connector overhead is the same in both cases,
    but the benefit is proportionally smaller for gpt-oss-120b.
 
-3. **GPU KV cache utilisation reaches 60–90% at moderate concurrency (rate=100–150)** for
+3. **GPU KV cache utilization reaches 60–90% at moderate concurrency (rate=100–150)** for
    both models, confirming that memory pressure is present. The absence of a throughput benefit
-   from CPU offload is not explained by low GPU cache utilisation, but rather by the overhead
+   from CPU offload is not explained by low GPU cache utilization, but rather by the overhead
    of the OffloadingConnector path relative to the native KV cache manager.
 
 4. **The only configuration showing a net throughput gain from offload is Llama-3.1-70B-FP8
@@ -366,12 +354,6 @@ For gpt-oss-120b, both replica counts remain negative throughout, with collapse 
    gpu_memory_utilization=0.50, the MoE model retains ~131,000 GPU blocks, making the
    20,000 CPU blocks an 11% supplement while connector overhead applies to all KV operations.
    The recomputation-vs-fetch crossover point is not reached at tested concurrency levels.
-
-9. **The OffloadingConnector's absence of SupportsHMA integration is the primary constraint.**
-   Without it, the connector replaces vLLM's native hybrid KV cache manager for all block
-   operations, not only those that cross the GPU/CPU boundary. A connector implementing
-   SupportsHMA would reduce overhead to transfers only, materially changing the cost-benefit
-   balance for both models across more operating conditions.
 
 ---
 
