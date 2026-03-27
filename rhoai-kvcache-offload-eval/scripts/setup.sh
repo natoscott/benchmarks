@@ -6,7 +6,7 @@
 #   1. Installs the leader-worker-set operator (required for LLMInferenceService TP)
 #   2. Patches the data-science-gateway to allow routes from llm-d-pfc-cpu namespace
 #   3. Creates namespace, RBAC, PVC, HF token secret
-#   4. Deploys PCP Deployment (single pod, co-located with vLLM) and guidellm pod
+#   4. Deploys PCP Deployment (single pod, co-located with vLLM), Valkey, and guidellm pod
 #   5. Applies LLMInferenceService manifests (pods start downloading models)
 #
 # Usage:
@@ -123,13 +123,16 @@ kubectl apply -f "${MANIFESTS}/pcp-deployment.yaml"
 echo "  Waiting for PCP pod..."
 kubectl rollout status deployment/pcp -n "${NAMESPACE}" --timeout=300s
 
-# ── Step 6: guidellm pod ──────────────────────────────────────────────────────
+# ── Step 6: Valkey + guidellm pod ─────────────────────────────────────────────
 echo ""
-echo "[6/7] Deploying guidellm pod..."
+echo "[6/7] Deploying Valkey and guidellm pod..."
+kubectl apply -f "${MANIFESTS}/valkey-deployment.yaml"
 kubectl apply -f "${MANIFESTS}/guidellm-deployment.yaml"
+kubectl wait --for=condition=ready pod -l app=valkey \
+    -n "${NAMESPACE}" --timeout=120s
 kubectl wait --for=condition=ready pod -l app=guidellm \
     -n "${NAMESPACE}" --timeout=300s
-echo "  guidellm pod ready"
+echo "  Valkey and guidellm pods ready"
 
 # ── Step 7: LLMInferenceServices (model download begins) ─────────────────────
 echo ""
