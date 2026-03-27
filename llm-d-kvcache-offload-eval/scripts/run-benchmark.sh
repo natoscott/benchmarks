@@ -446,11 +446,8 @@ if [ -z "${INTERACTIVE_POD}" ]; then
 else
     # Try to reach the target through the gateway (retry for up to 60 seconds)
     for i in {1..12}; do
-        if kubectl --kubeconfig="${KUBECONFIG}" exec -n "${NAMESPACE}" "${INTERACTIVE_POD}" -- curl -sf "${TARGET}/v1/models" >/dev/null 2>&1; then
+        if kubectl --kubeconfig="${KUBECONFIG}" exec -n "${NAMESPACE}" "${INTERACTIVE_POD}" -- curl -sf "${TARGET}/health" >/dev/null 2>&1; then
             echo "  Gateway routing validated successfully"
-            # Brief pause for istio routing propagation — /v1/models can respond before
-            # /health is fully propagated, causing guidellm backend validation to fail
-            sleep 10
             break
         fi
         if [ $i -eq 12 ]; then
