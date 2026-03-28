@@ -1,0 +1,25 @@
+Run ID: 2x8xH200_rhoai-3.3-kv-stress_gpt-oss-120b_native-offload-20k_replica1_rate50
+Date: Fri 27 Mar 2026 23:49:23 UTC
+Target: https://inference-gateway.apps.psap-fire-athena.ibm.rhperfscale.org/llm-d-pfc-cpu/gpt-oss-120b
+Rate Type: concurrent
+Rate (Concurrency): 50
+Max Seconds: 120
+Prompt Tokens: 512
+Output Tokens: 512
+Prefix Tokens: 10000
+Prefix Count: 100
+Turns: 5
+Hardware: 2x8xH200
+Software: rhoai-3.3-kv-stress
+Model: openai/gpt-oss-120b
+Model Name: gpt-oss-120b
+LLMInferenceService: gpt-oss-120b
+Parameters: native-offload-20k
+Replicas: 1
+Tensor Parallel Size: 2
+GPU Memory Utilization: 0.65
+Num CPU Blocks: 20000
+VLLM Additional Args: --tensor-parallel-size 2 --gpu-memory-utilization 0.65 --max-num-seq 1024 --kv-transfer-config '{"kv_connector":"OffloadingConnector","kv_role":"kv_both","kv_connector_extra_config":{"num_cpu_blocks":20000}}'
+Namespace: llm-d-pfc-cpu
+guidellm Pod: guidellm-74fc989ff-94jd6
+PCP Pods: pcp-857674b5cf-dds6w
