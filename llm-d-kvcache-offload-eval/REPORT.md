@@ -36,7 +36,7 @@ This repository contains performance evaluations of KV-cache management strategi
 
 ### [REPORT-v0.4.0.md](REPORT-v0.4.0.md) — llm-d v0.4.0 (vLLM 0.11.2, LMCache v0.3.7)
 
-**Status:** Complete — 272 runs across 7 configurations + 160 memory-pressure runs (5 configs × 4 models × 8 rates, gmu=0.55–0.70)
+**Status:** Complete — 272 runs across 7 configurations + 192 memory-pressure runs (6 configs × 4 models × 8 rates, gmu=0.55–0.70, including native-offload-20k)
 
 **Configurations:**
 - `no-offload`, `native-offload` (10K/20K blocks)
@@ -55,7 +55,7 @@ This repository contains performance evaluations of KV-cache management strategi
 
 ## Cross-Version Summary
 
-### Native CPU Offload: v0.4.0 → v0.5.0 → v0.5.1
+### Native CPU Offload: v0.4.0 → v0.5.0 → v0.5.1 (default gmu=0.9)
 
 | Model | v0.4.0 (10k) | v0.5.0 (20k) | v0.5.1 (20k) |
 |-------|:------------:|:------------:|:------------:|
@@ -65,6 +65,21 @@ This repository contains performance evaluations of KV-cache management strategi
 | Qwen3-32B-AWQ | -1.0% | -58.4% | -58.3% |
 
 Values are % throughput delta vs same-version no-offload baseline. Block counts are not directly comparable: v0.4.0 used `num_cpu_blocks`; v0.5.0/v0.5.1 use `cpu_bytes_to_use` (API changed in vLLM 0.15.x).
+
+### Native CPU Offload at Matched Memory Pressure (gmu=0.55–0.70)
+
+Re-runs at per-model reduced `gpu_memory_utilization` to create comparable KV-cache pressure across versions:
+
+| Model | v0.4.0 nat-10k | v0.4.0 nat-20k | v0.5.1 nat-20k |
+|-------|:--------------:|:--------------:|:--------------:|
+| Qwen3-0.6B | -8.3% | +9.5% | **+22.3%** |
+| Qwen3-8B | -19.3% | -9.2% | -3.6% |
+| Qwen3-14B | 0.0% | +22.6% | +10.4% |
+| Qwen3-32B-AWQ | -2.3% | -2.3% | -33.3% |
+
+*All deltas vs same-version no-offload baseline at matched gmu. See REPORT-v0.4.0.md §Memory-Pressure Analysis and REPORT-v0.5.1.md §Memory-Pressure Analysis for full data.*
+
+External KV cache hit rates (v0.5.1 native-offload-20k at mempress gmu): 0.6B 26.9%, 8B 13.7%, 14B 8.5%, 32B-AWQ 2.2%. Equivalent v0.4.0 configurations show near-zero external cache activity.
 
 ### No-Offload Baseline Throughput (tok/s)
 
@@ -77,14 +92,14 @@ Values are % throughput delta vs same-version no-offload baseline. Block counts 
 
 ### Filesystem Offload (v0.5.1 only)
 
-| Model | fs-offload | cpu+fs-offload-20k |
-|-------|:----------:|:-----------------:|
-| Qwen3-0.6B | unstable¹ | unstable¹ |
-| Qwen3-8B | -33.6% | -33.6% |
-| Qwen3-14B | +3.6% | +7.3% |
-| Qwen3-32B-AWQ | -56.2% | -56.2% |
+| Config | Qwen3-0.6B | Qwen3-8B | Qwen3-14B | Qwen3-32B-AWQ |
+|-------|:----------:|:--------:|:---------:|:------------:|
+| fs-offload (gmu=0.9) | unstable¹ | -33.6% | +3.6% | -56.2% |
+| cpu+fs-offload-20k (gmu=0.9) | unstable¹ | -33.6% | +7.3% | -56.2% |
+| fs-offload (mempress gmu) | -58.7% | -41.8% | -40.3% | 0.0% |
+| cpu+fs-offload-20k (mempress gmu) | -85.6% | -41.8% | -40.3% | -2.1% |
 
-¹ Zero completed requests at rate≥300.
+¹ Zero completed requests at rate≥300. GPU KV-cache utilisation below 2% for all fs-offload configs at mempress gmu; external cache hit rates near zero.
 
 ---
 

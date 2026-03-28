@@ -426,10 +426,109 @@ For `SharedStorageOffloadingSpec` to serve as persistent cross-restart or cross-
 | Qwen3-8B and Qwen3-32B-AWQ: degradation under all offload | -29.9% to -58.3% depending on config |
 | Disk I/O negligible for fs-offload | ≤0.04 MB/s; storage operates via OS page cache |
 | cpu+fs-offload MultiConnector: save parallelism, load priority | Not a true tiered cache; simultaneous GPU→CPU and GPU→FS writes |
-| External cache hit rate: 0–7.5% | Expected for single-replica; no cross-instance sharing |
+| External cache hit rate: 0–7.5% at default gmu | Expected for single-replica at gmu=0.9; rises to 26.9% at gmu=0.55 (see §Memory-Pressure Analysis) |
 | Qwen3-14B no-offload regressed -11.2% vs v0.5.0 | 66.1 → 58.7 tok/s; returns to v0.4.0 level |
 | Qwen3-0.6B native-offload-20k near-parity | -2.2% vs baseline; confirms v0.5.0 recovery from v0.4.0 -29.1% |
 | libstdc++ ABI incompatibility | fs_connector wheel requires GLIBCXX_3.4.30+; RHEL9 image provides 3.4.29 |
+
+---
+
+## Memory-Pressure Analysis
+
+All four v0.5.1 configurations were re-run with per-model reduced `gpu_memory_utilization` to create GPU KV-cache pressure across all model sizes. This is the same gmu setting applied to v0.4.0 in REPORT-v0.4.0.md §Memory-Pressure Analysis, enabling direct cross-version comparison at matched memory pressure.
+
+### Configuration
+
+| Model | gmu | GPU KV tokens (gmu=0.9) | GPU KV tokens (mempress) |
+|-------|:---:|:-----------------------:|:------------------------:|
+| Qwen3-0.6B | 0.55 | ~634K | ~335K |
+| Qwen3-8B | 0.65 | ~390K | ~215K |
+| Qwen3-14B | 0.70 | ~268K | ~142K |
+| Qwen3-32B-AWQ | 0.65 | ~207K | ~116K |
+
+### Peak Throughput (tok/s)
+
+| Config | Qwen3-0.6B | Qwen3-8B | Qwen3-14B | Qwen3-32B-AWQ |
+|--------|:----------:|:--------:|:---------:|:-------------:|
+| no-offload | 526.9 | 117.3 | 71.5 | 51.2 |
+| native-offload-20k | 644.3 (+22.3%) | 113.1 (-3.6%) | 78.9 (+10.4%) | 34.1 (-33.3%) |
+| fs-offload | 217.6 (-58.7%) | 68.3 (-41.8%) | 42.7 (-40.3%) | 51.2 (0.0%) |
+| cpu+fs-offload-20k | 75.7 (-85.6%) | 68.3 (-41.8%) | 42.7 (-40.3%) | 50.1 (-2.1%) |
+
+![v0.5.1 Memory-Pressure Peak Throughput](analysis/v0.5.1-mempress_peak_throughput.png)
+*Figure: Peak throughput at reduced gpu_memory_utilization. native-offload-20k shows throughput above the mempress no-offload baseline for 0.6B and 14B.*
+
+![v0.5.1 Memory-Pressure Delta Heatmap](analysis/v0.5.1-mempress_delta_heatmap.png)
+*Figure: % throughput delta vs mempress no-offload baseline.*
+
+### External KV Cache Hit Rates
+
+`external_prefix_cache_hits_total` / `external_prefix_cache_queries_total` at peak concurrency:
+
+| Config | Qwen3-0.6B | Qwen3-8B | Qwen3-14B | Qwen3-32B-AWQ |
+|--------|:----------:|:--------:|:---------:|:-------------:|
+| native-offload-20k | **26.9%** | **13.7%** | **8.5%** | 2.2% |
+| fs-offload | ~0% | ~0% | ~0% | ~0% |
+| cpu+fs-offload-20k | ~0% | ~0% | ~0% | ~0% |
+
+native-offload-20k shows measurable external KV cache utilisation at mempress gmu values, indicating that the reduced GPU KV-cache capacity causes the `OffloadingConnector` to serve tokens from the CPU offload tier. At gmu=0.9 (§External Prefix Cache Hit Rates), the same configurations showed 0–7.5%.
+
+fs-offload and cpu+fs-offload-20k show near-zero external hit rates despite their lower throughput. GPU KV-cache utilisation for these configs is below 2% (vs 44–74% for native-offload-20k), indicating the filesystem offload path does not effectively feed the GPU KV-cache in the configuration tested.
+
+![v0.5.1 External Cache Hit Rates](analysis/v0.5.1-mempress_external_cache_hits.png)
+*Figure: External prefix KV cache hit rate at peak concurrency. native-offload-20k shows active offload utilisation under memory pressure; filesystem configs show near-zero.*
+
+### GPU KV-Cache Utilisation
+
+| Config | Qwen3-0.6B | Qwen3-8B | Qwen3-14B | Qwen3-32B-AWQ |
+|--------|:----------:|:--------:|:---------:|:-------------:|
+| no-offload | 74% | 48% | 47% | — |
+| native-offload-20k | 48% | 44% | 45% | 42% |
+| fs-offload | <2% | <2% | <2% | 4% |
+| cpu+fs-offload-20k | <2% | <2% | <2% | ~0% |
+
+![v0.5.1 GPU KV-Cache Utilisation](analysis/v0.5.1-mempress_gpu_kvcache.png)
+*Figure: GPU KV-cache utilisation at peak concurrency.*
+
+### Throughput vs Concurrency
+
+![v0.5.1 Memory-Pressure Throughput Curves](analysis/v0.5.1-mempress_throughput_curves.png)
+*Figure: Throughput vs concurrency at mempress gmu. 4-panel by model.*
+
+### Comparison: gmu=0.9 vs gmu=mempress (native-offload-20k)
+
+![gmu=0.9 vs mempress comparison](analysis/v0.5.1-mempress_vs_original.png)
+*Figure: native-offload-20k throughput at gmu=0.9 vs gmu=mempress. Memory pressure converts the 0.6B outcome from -2.2% to +22.3% and reduces the 8B overhead from -29.9% to -3.6%.*
+
+### Observations
+
+**Qwen3-0.6B:** native-offload-20k at mempress gmu shows +22.3% vs the mempress no-offload baseline, and a 26.9% external KV cache hit rate. At gmu=0.9, the same config showed -2.2% with near-zero external hits. The TTFT at rate=50 decreases from 3,273ms (no-offload) to 2,465ms (native-offload-20k).
+
+**Qwen3-8B:** native-offload-20k shows -3.6% vs no-offload at mempress gmu, compared to -29.9% at gmu=0.9 — a 26.3 pp reduction in overhead. External KV cache hit rate of 13.7% confirms active offload utilisation.
+
+**Qwen3-14B:** native-offload-20k at +10.4%. The external hit rate of 8.5% is lower than smaller models, reflecting the 14B model's slower token generation rate reducing KV write pressure per second.
+
+**Qwen3-32B-AWQ:** native-offload-20k at -33.3% — the largest throughput reduction observed across the mempress suite. Mean waiting requests at rate=50 is 38.6 and median TTFT is 27,982ms. At gmu=0.65, the GPU KV-cache token capacity (116K tokens) may be insufficient for 20K-block CPU offload to provide a net benefit at this model size.
+
+**fs-offload and cpu+fs-offload-20k:** Both show -40% to -86% throughput reduction. GPU KV-cache utilisation below 2% and near-zero external hit rates indicate the filesystem offload connector does not populate the GPU KV-cache effectively at the concurrency levels tested. This is consistent with the low disk I/O (≤0.04 MB/s) observed at gmu=0.9 — the page-cached storage path does not appear to differ materially at reduced gmu.
+
+### Cross-Version Comparison at Matched Memory Pressure
+
+The table below compares v0.4.0 and v0.5.1 native-offload configurations at the same per-model gmu values:
+
+| Model | v0.4.0 nat-10k | v0.4.0 nat-20k | v0.5.1 nat-20k |
+|-------|:--------------:|:--------------:|:--------------:|
+| Qwen3-0.6B | -8.3% | +9.5% | +22.3% |
+| Qwen3-8B | -19.3% | -9.2% | -3.6% |
+| Qwen3-14B | 0.0% | +22.6% | +10.4% |
+| Qwen3-32B-AWQ | -2.3% | -2.3% | -33.3% |
+
+*All deltas vs same-version no-offload baseline at matched gmu.*
+
+![Cross-version native offload comparison](analysis/mempress_crossversion_native_offload.png)
+*Figure: Native offload throughput delta across versions at matched memory pressure.*
+
+For 0.6B and 8B, v0.5.1 shows lower offload overhead than v0.4.0 at matched memory pressure. For 14B, v0.4.0-20k shows a larger absolute gain (+22.6%) than v0.5.1-20k (+10.4%), noting that the no-offload baselines differ (66.1 vs 71.5 tok/s). The 32B-AWQ regression at v0.5.1 (-33.3%) has no equivalent in v0.4.0 (-2.3%).
 
 ---
 
