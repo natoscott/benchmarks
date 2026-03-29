@@ -6,12 +6,12 @@
 #
 # Usage:
 #   bash scripts/download-models.sh             # download both models
-#   MODELS="RedHatAI/Meta-Llama-3.1-70B-Instruct-FP8" bash scripts/download-models.sh
+#   MODELS="meta-llama/Llama-3.1-70B-Instruct" bash scripts/download-models.sh
 set -euo pipefail
 
 export KUBECONFIG="${KUBECONFIG:-$(dirname "$0")/../kubeconfig}"
 NAMESPACE="${NAMESPACE:-llm-d-pfc-cpu}"
-MODELS="${MODELS:-RedHatAI/Meta-Llama-3.1-70B-Instruct-FP8 openai/gpt-oss-120b}"
+MODELS="${MODELS:-RedHatAI/Meta-Llama-3.1-70B-Instruct-FP8 openai/gpt-oss-120b meta-llama/Llama-3.1-70B-Instruct}"
 
 GUIDELLM_POD=$(kubectl --kubeconfig="${KUBECONFIG}" get pods -n "${NAMESPACE}" \
     -l app=guidellm --field-selector=status.phase=Running \

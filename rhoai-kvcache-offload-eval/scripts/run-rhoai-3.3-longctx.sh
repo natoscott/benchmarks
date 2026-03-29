@@ -34,7 +34,7 @@ set -euo pipefail
 
 export KUBECONFIG="${KUBECONFIG:-$(dirname "$0")/../kubeconfig}"
 export NAMESPACE="${NAMESPACE:-llm-d-pfc-cpu}"
-export HARDWARE="2x8xH200"
+export HARDWARE="1x8xH200"
 export SOFTWARE="rhoai-3.3-longctx"
 export TENSOR_PARALLEL_SIZE="2"
 export MAX_SECONDS="120"
@@ -54,7 +54,7 @@ RATE_LIST="${RATE_LIST:-1,5,10,20,50,100,200,300}"
 IFS=',' read -ra RATES <<< "${RATE_LIST}"
 
 RUNS="${RUNS:-no-offload native-offload-20k}"
-MODELS="${MODELS:-RedHatAI/Meta-Llama-3.1-70B-Instruct-FP8 openai/gpt-oss-120b}"
+MODELS="${MODELS:-RedHatAI/Meta-Llama-3.1-70B-Instruct-FP8 openai/gpt-oss-120b meta-llama/Llama-3.1-70B-Instruct}"
 REPLICAS="${REPLICAS:-1 2}"
 
 echo "=========================================="
@@ -85,10 +85,14 @@ for replicas in ${REPLICAS}; do
                 ;;
             "gpt-oss-120b")
                 export LLM_SERVICE_NAME="gpt-oss-120b"
-                # 0.50: 70 GiB reserved, ~33 GiB weights → ~37 GiB KV/GPU → ~131,000 blocks.
-                # MoE KV blocks are small so saturation arrives at rate=25-30 rather than
-                # rate=3 (Llama). The rate list still captures it at rate=50 and beyond.
+                # MoE KV blocks are small so saturation arrives at rate≈25-30.
                 export GPU_MEMORY_UTILIZATION="0.50"
+                ;;
+            "Llama-3.1-70B-Instruct")
+                export LLM_SERVICE_NAME="llama-70b-bf16"
+                # BF16: 70 GB/GPU weights. At 0.60: 84 GB reserved → 14 GB KV/GPU.
+                # Fewer GPU blocks than FP8 → saturation at lower rate → strong offload candidate.
+                export GPU_MEMORY_UTILIZATION="0.60"
                 ;;
             *)
                 echo "ERROR: Unknown model ${MODEL_NAME}"; exit 1 ;;

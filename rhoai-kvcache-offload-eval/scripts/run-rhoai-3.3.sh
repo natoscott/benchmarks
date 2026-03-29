@@ -21,7 +21,7 @@ set -euo pipefail
 
 export KUBECONFIG="${KUBECONFIG:-./kubeconfig}"
 export NAMESPACE="${NAMESPACE:-llm-d-pfc-cpu}"
-export HARDWARE="${HARDWARE:-2x8xH200}"
+export HARDWARE="${HARDWARE:-1x8xH200}"
 export SOFTWARE="${SOFTWARE:-rhoai-3.3}"
 export TENSOR_PARALLEL_SIZE="${TENSOR_PARALLEL_SIZE:-2}"
 export MAX_SECONDS="${MAX_SECONDS:-120}"
@@ -35,7 +35,7 @@ IFS=',' read -ra RATES <<< "${RATE_LIST}"
 
 # Configurations, models, and replica counts — can be overridden via environment
 RUNS="${RUNS:-no-offload native-offload-20k}"
-MODELS="${MODELS:-RedHatAI/Meta-Llama-3.1-70B-Instruct-FP8 openai/gpt-oss-120b}"
+MODELS="${MODELS:-RedHatAI/Meta-Llama-3.1-70B-Instruct-FP8 openai/gpt-oss-120b meta-llama/Llama-3.1-70B-Instruct}"
 REPLICAS="${REPLICAS:-1 2}"
 
 echo "=========================================="
@@ -67,6 +67,13 @@ for replicas in ${REPLICAS}; do
             "gpt-oss-120b")
                 export LLM_SERVICE_NAME="gpt-oss-120b"
                 export GPU_MEMORY_UTILIZATION="0.65"
+                export PROMPT_TOKENS="512"
+                export OUTPUT_TOKENS="128"
+                export PREFIX_TOKENS="10000"
+                ;;
+            "Llama-3.1-70B-Instruct")
+                export LLM_SERVICE_NAME="llama-70b-bf16"
+                export GPU_MEMORY_UTILIZATION="0.90"
                 export PROMPT_TOKENS="512"
                 export OUTPUT_TOKENS="128"
                 export PREFIX_TOKENS="10000"

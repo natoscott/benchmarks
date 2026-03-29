@@ -1,0 +1,62 @@
+# LLMInferenceService for meta-llama/Llama-3.1-70B-Instruct (BF16, original)
+# BF16 weights: ~70 GB/GPU at TP=2 — larger footprint than FP8 but native precision.
+# - TP=2: 2 H200 GPUs per replica
+# - Replicas: set by run-benchmark.sh
+#
+# H200 KV cache budget at gpu-util=0.90, TP=2:
+#   Reserved per GPU: 140 * 0.90 = 126 GB
+#   Weights per GPU:  ~70 GB  (140 GB BF16 / 2)
+#   GPU KV per GPU:   ~56 GB  → ~112 GB total GPU KV cache
+#   CPU KV (20K blks):  ~100 GB total
+#   CPU adds ~89% additional KV capacity — strong offload candidate
+#
+# Extended liveness probe (300s initial delay): BF16 70B CUDA graph capture
+# takes longer than FP8 (~3-4 min vs ~2-3 min for FP8).
+apiVersion: serving.kserve.io/v1alpha1
+kind: LLMInferenceService
+metadata:
+  name: llama-70b-bf16
+  namespace: llm-d-pfc-cpu
+spec:
+  baseRefs:
+  - name: v3-3-0-kserve-config-llm-template
+  - name: epp-scheduler-valkey
+  - name: v3-3-0-kserve-config-llm-router-route
+  model:
+    name: "meta-llama/Llama-3.1-70B-Instruct"
+    # pvc:// uses enableDirectPvcVolumeMount=true (no storage-initializer auth needed).
+    # Model must be pre-downloaded to the PVC via scripts/download-models.sh first.
+    uri: "pvc://model-storage-pvc/models/meta-llama/Llama-3.1-70B-Instruct"
+  parallelism:
+    tensor: 2
+  replicas: 1
+  template:
+    containers:
+    - name: main
+      env:
+      - name: HUGGING_FACE_HUB_TOKEN
+        valueFrom:
+          secretKeyRef:
+            name: llm-d-hf-token
+            key: HF_TOKEN
+      - name: VLLM_ADDITIONAL_ARGS
+        value: >-
+          --tensor-parallel-size 2
+          --gpu-memory-utilization 0.90
+          --max-num-seq 1024
+          --max-model-len 65536
+      livenessProbe:
+        httpGet:
+          path: /health
+          port: 8000
+          scheme: HTTPS
+        initialDelaySeconds: 300
+        periodSeconds: 10
+        failureThreshold: 3
+        timeoutSeconds: 10
+      resources:
+        requests:
+          nvidia.com/gpu: "2"
+          memory: 200Gi
+        limits:
+          nvidia.com/gpu: "2"

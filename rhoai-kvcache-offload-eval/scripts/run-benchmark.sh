@@ -30,7 +30,7 @@ GPU_MEMORY_UTILIZATION="${GPU_MEMORY_UTILIZATION:-0.80}"
 NUM_CPU_BLOCKS="${NUM_CPU_BLOCKS:-20000}"   # used for native-offload-20k
 
 # Identifiers for output directory
-HARDWARE="${HARDWARE:-2x8xH200}"
+HARDWARE="${HARDWARE:-1x8xH200}"
 SOFTWARE="${SOFTWARE:-rhoai-3.3}"
 
 # Gateway access — HTTPS via the openshift-ai-inference gateway.

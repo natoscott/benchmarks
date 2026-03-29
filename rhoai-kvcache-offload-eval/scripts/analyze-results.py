@@ -104,7 +104,7 @@ def load_guidellm_json(path: Path) -> dict:
 def parse_run_dir(name: str) -> dict:
     # 2x8xH200_rhoai-3.3_<model>_<config>_replica<N>_rate<R>
     m = re.match(
-        r"2x8xH200_rhoai-3\.3_(.+?)_(no-offload|native-offload-20k)_replica(\d+)_rate(\d+)$",
+        r"1x8xH200_rhoai-3\.3_(.+?)_(no-offload|native-offload-20k)_replica(\d+)_rate(\d+)$",
         name,
     )
     if not m:

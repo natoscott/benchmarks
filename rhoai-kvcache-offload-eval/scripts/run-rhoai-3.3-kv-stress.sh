@@ -18,7 +18,7 @@ set -euo pipefail
 
 export KUBECONFIG="${KUBECONFIG:-$(dirname "$0")/../kubeconfig}"
 export NAMESPACE="${NAMESPACE:-llm-d-pfc-cpu}"
-export HARDWARE="2x8xH200"
+export HARDWARE="1x8xH200"
 export SOFTWARE="rhoai-3.3-kv-stress"   # distinct tag — results land separately from standard runs
 export TENSOR_PARALLEL_SIZE="2"
 export MAX_SECONDS="120"
@@ -37,7 +37,7 @@ RATE_LIST="${RATE_LIST:-1,50,100,150,300,400,500,650}"
 IFS=',' read -ra RATES <<< "${RATE_LIST}"
 
 RUNS="${RUNS:-no-offload native-offload-20k}"
-MODELS="${MODELS:-RedHatAI/Meta-Llama-3.1-70B-Instruct-FP8 openai/gpt-oss-120b}"
+MODELS="${MODELS:-RedHatAI/Meta-Llama-3.1-70B-Instruct-FP8 openai/gpt-oss-120b meta-llama/Llama-3.1-70B-Instruct}"
 REPLICAS="${REPLICAS:-1 2}"
 
 echo "=========================================="
@@ -66,6 +66,10 @@ for replicas in ${REPLICAS}; do
             "gpt-oss-120b")
                 export LLM_SERVICE_NAME="gpt-oss-120b"
                 export GPU_MEMORY_UTILIZATION="0.65"
+                ;;
+            "Llama-3.1-70B-Instruct")
+                export LLM_SERVICE_NAME="llama-70b-bf16"
+                export GPU_MEMORY_UTILIZATION="0.90"
                 ;;
             *)
                 echo "ERROR: Unknown model ${MODEL_NAME}"; exit 1 ;;
