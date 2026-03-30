@@ -90,9 +90,10 @@ for replicas in ${REPLICAS}; do
                 ;;
             "Llama-3.1-70B-Instruct")
                 export LLM_SERVICE_NAME="llama-70b-bf16"
-                # BF16: 70 GB/GPU weights. At 0.60: 84 GB reserved → 14 GB KV/GPU.
-                # Fewer GPU blocks than FP8 → saturation at lower rate → strong offload candidate.
-                export GPU_MEMORY_UTILIZATION="0.60"
+                # BF16 70B uses ~113 GiB/GPU (weights + activations, TP=2).
+                # Must stay at 0.90 — model dominates regardless of workload.
+                # max-model-len=65536 in manifest ensures KV fits (12.7 GiB available).
+                export GPU_MEMORY_UTILIZATION="0.90"
                 ;;
             *)
                 echo "ERROR: Unknown model ${MODEL_NAME}"; exit 1 ;;

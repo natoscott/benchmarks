@@ -1,0 +1,25 @@
+Run ID: 1x8xH200_rhoai-3.3-longctx_Llama-3.1-70B-Instruct_no-offload_replica4_rate200
+Date: Sun 29 Mar 2026 23:39:32 UTC
+Target: https://inference-gateway.apps.psap-fire-athena.ibm.rhperfscale.org/llm-d-pfc-cpu/llama-70b-bf16
+Rate Type: concurrent
+Rate (Concurrency): 200
+Max Seconds: 120
+Prompt Tokens: 4096
+Output Tokens: 256
+Prefix Tokens: 10000
+Prefix Count: 400
+Turns: 5
+Hardware: 1x8xH200
+Software: rhoai-3.3-longctx
+Model: meta-llama/Llama-3.1-70B-Instruct
+Model Name: Llama-3.1-70B-Instruct
+LLMInferenceService: llama-70b-bf16
+Parameters: no-offload
+Replicas: 4
+Tensor Parallel Size: 2
+GPU Memory Utilization: 0.90
+Num CPU Blocks: 20000
+VLLM Additional Args: --tensor-parallel-size 2 --gpu-memory-utilization 0.90 --max-num-seq 1024
+Namespace: llm-d-pfc-cpu
+guidellm Pod: guidellm-74fc989ff-94jd6
+PCP Pods: pcp-857674b5cf-wchj6
