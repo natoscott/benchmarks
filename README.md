@@ -103,9 +103,9 @@ MultiConnector (CPU+filesystem) configurations. See
 
 ## Data Collection
 
-- **Benchmarks**: [GuideLLM](https://github.com/vllm-project/guidellm) 0.5.4
-- **Metrics**: [PCP](https://pcp.io) (Performance Co-Pilot) openmetrics PMDA
-  captures all vLLM Prometheus metrics, DCGM GPU metrics, and EPP scheduler metrics
-  at 10-second intervals during each benchmark run.
+- **Benchmarks**: [GuideLLM](https://github.com/vllm-project/guidellm)
+- **Metrics**: [PCP](https://pcp.io) (Performance Co-Pilot) Linux kernel and hardware metrics, plus openmetrics PMDA
+  captures all vLLM Prometheus metrics, DCGM GPU metrics, and EPP
+  scheduler metrics at 10-second intervals during each benchmark run.
 - **Results**: Each run directory contains `guidellm-results.json.zst`,
   `vllm-startup.log.zst`, `pcp-archives/`, and `benchmark-config.txt`.

@@ -259,55 +259,18 @@ def extract_pcp_kv_metrics(run_dir):
         import shutil; shutil.rmtree(tmpdir, ignore_errors=True)
 
 
-def extract_pcp_offload_metrics(run_dir):
-    """Extract CPU offload hit/miss counters for native-offload runs.
-
-    In vLLM, the OffloadingConnector registers its lookups through the
-    external_prefix_cache_* counters:
-      - external_prefix_cache_queries_total: blocks looked up in CPU KV cache
-      - external_prefix_cache_hits_total:    blocks found in CPU KV cache
-    These are zero for no-offload runs.
-    num_preemptions_total measures GPU KV evictions.
-    """
-    arch, tmpdir = _extract_archive(run_dir)
-    if arch is None:
-        return {}
-    try:
-        ext_q = _counter_delta(_pmrep_series(arch,
-            "openmetrics.vllm.vllm.external_prefix_cache_queries_total"))
-        ext_h = _counter_delta(_pmrep_series(arch,
-            "openmetrics.vllm.vllm.external_prefix_cache_hits_total"))
-        preempt = _counter_delta(_pmrep_series(arch,
-            "openmetrics.vllm.vllm.num_preemptions_total"))
-        pfx_q = _counter_delta(_pmrep_series(arch,
-            "openmetrics.vllm.vllm.prefix_cache_queries_total"))
-        pfx_h = _counter_delta(_pmrep_series(arch,
-            "openmetrics.vllm.vllm.prefix_cache_hits_total"))
-        return {
-            "cpu_queries": ext_q,
-            "cpu_hits":    ext_h,
-            "cpu_hit_rate": ext_h / ext_q if (not np.isnan(ext_q) and ext_q > 0) else np.nan,
-            "preemptions": preempt,
-            "gpu_pfx_queries": pfx_q,
-            "gpu_pfx_hits":    pfx_h,
-            "gpu_pfx_hit_rate": pfx_h / pfx_q if (not np.isnan(pfx_q) and pfx_q > 0) else np.nan,
-        }
-    except Exception:
-        return {}
-    finally:
-        import shutil; shutil.rmtree(tmpdir, ignore_errors=True)
 
 
 # -- Figures ------------------------------------------------------------------
 
 def fig_throughput_curves(df):
-    """3x2 grid: 3 models x 2 replica counts, standard profile."""
+    """3x3 grid: 3 models x 3 replica counts, standard profile."""
     std = df[df["profile"] == "standard"]
     models   = [m for m in MODEL_ORDER if m in std["model"].unique()]
-    replicas = [1, 2]
+    replicas = [1, 2, 4]
 
     fig, axes = plt.subplots(len(replicas), len(models),
-                             figsize=(14, 9), sharey=False)
+                             figsize=(14, 13), sharey=False)
     fig.suptitle(
         "Output Throughput vs Concurrency -- RHOAI 3.3 Standard Workload (1x8xH200)",
         fontsize=13, y=1.01
@@ -637,7 +600,7 @@ def fig_ttft_itl_comparison(df):
         ax.set_title(title_sfx, fontsize=11)
         ax.set_xlabel("")
         ax.set_ylabel(ylabel)
-        ax.tick_params(axis="x", rotation=20)
+        ax.tick_params(axis="x", rotation=40)
         ax.legend(title="Config", fontsize=9)
         ax.grid(True, axis="y", alpha=0.4)
 
@@ -647,120 +610,46 @@ def fig_ttft_itl_comparison(df):
     print("  latency_comparison.png")
 
 
-def fig_cpu_offload_hit_rates(df):
-    """CPU KV offload hit rates from PCP external_prefix_cache_* counters.
-
-    Only native-offload-20k runs have non-zero external_prefix_cache_queries.
-    Shows hit rate (blocks found in CPU cache / total CPU cache lookups) and
-    preemption counts (GPU KV evictions) for replicas=1 runs across profiles.
-    """
-    print("  Extracting CPU offload hit rates from PCP archives (slow)...")
-    offload = df[df["config"] == "native-offload-20k"]
-    records = []
-    for _, row in offload.iterrows():
-        m = extract_pcp_offload_metrics(row["run_dir"])
-        if not m:
-            continue
-        records.append({
-            "profile":  row["profile"],
-            "model":    row["model"],
-            "replicas": row["replicas"],
-            "rate":     row["rate"],
-            **m,
-        })
-
-    if not records:
-        print("  WARNING: no CPU offload PCP data found")
-        return pd.DataFrame()
-
-    pcp = pd.DataFrame(records)
-    # Save CSV for reference
-    pcp.to_csv("cpu_offload_hit_rates.csv", index=False)
-    print("  cpu_offload_hit_rates.csv")
-
-    # Plot hit rates for replicas=1 across profiles and models
-    sub = pcp[(pcp["replicas"] == 1) & pcp["cpu_hit_rate"].notna()]
-    if sub.empty:
-        return pcp
-
-    models = [m for m in MODEL_ORDER if m in sub["model"].unique()]
-    profiles = [p for p in ["standard", "kvstress", "longctx"] if p in sub["profile"].unique()]
-    n_profiles = len(profiles)
-
-    fig, axes = plt.subplots(1, n_profiles, figsize=(14, 5), sharey=True)
-    if n_profiles == 1:
-        axes = [axes]
-    fig.suptitle(
-        "CPU KV Cache Hit Rate (replicas=1) -- native-offload-20k\n"
-        "(external_prefix_cache_hits / external_prefix_cache_queries from PCP)",
-        fontsize=12
-    )
-
-    prof_rates = {"standard": RATES_STANDARD, "kvstress": RATES_STANDARD, "longctx": RATES_LONGCTX}
-    for pi, profile in enumerate(profiles):
-        ax = axes[pi]
-        psub = sub[sub["profile"] == profile]
-        for mi, model in enumerate(models):
-            d = psub[psub["model"] == model].sort_values("rate")
-            if d.empty or d["cpu_hit_rate"].isna().all():
-                continue
-            rates_ordered = prof_rates.get(profile, RATES_STANDARD)
-            rmap = {r: i for i, r in enumerate(rates_ordered)}
-            xpos = d["rate"].map(rmap)
-            ax.plot(xpos, d["cpu_hit_rate"] * 100, marker="o", ms=5, lw=2,
-                    color=PALETTE[mi], label=MODEL_LABELS[model])
-
-        ax.set_title(profile, fontsize=11)
-        ax.set_xlabel("Concurrency")
-        ax.set_ylabel("CPU KV cache hit rate (%)")
-        rates_ordered = prof_rates.get(profile, RATES_STANDARD)
-        ax.set_xticks(range(len(rates_ordered)))
-        ax.set_xticklabels(rates_ordered)
-        ax.set_xlim(-0.5, len(rates_ordered) - 0.5)
-        ax.set_ylim(0, 105)
-        ax.legend(fontsize=8)
-        ax.grid(True, alpha=0.4)
-
-    fig.tight_layout()
-    fig.savefig("cpu_offload_hit_rates.png", dpi=150, bbox_inches="tight")
-    plt.close(fig)
-    print("  cpu_offload_hit_rates.png")
-    return pcp
 
 
 def fig_longctx_throughput(df):
-    """Long-context throughput curves -- all 3 models, replicas=1."""
-    lctx = df[(df["profile"] == "longctx") & (df["replicas"] == 1)]
-    models = [m for m in MODEL_ORDER if m in lctx["model"].unique()]
+    """Long-context throughput curves -- 3 models x 3 replica counts."""
+    lctx = df[df["profile"] == "longctx"]
+    models   = [m for m in MODEL_ORDER if m in lctx["model"].unique()]
+    replicas = [1, 2, 4]
 
-    fig, axes = plt.subplots(1, len(models), figsize=(14, 6))
-    if len(models) == 1:
-        axes = [axes]
+    fig, axes = plt.subplots(len(replicas), len(models),
+                             figsize=(14, 13), sharey=False)
     fig.suptitle(
-        "Long-Context Throughput (prompt=4096 tokens, replicas=1) -- RHOAI 3.3",
-        fontsize=13
+        "Long-Context Throughput (prompt=4096 tokens) -- RHOAI 3.3 (1x8xH200)",
+        fontsize=13, y=1.01
     )
 
-    for mi, model in enumerate(models):
-        ax = axes[mi]
-        sub = lctx[lctx["model"] == model]
-        for config, lbl, col, ls in [
-            ("no-offload",         "no-offload",         COL_NO_OFFLOAD, "-"),
-            ("native-offload-20k", "native-offload-20k", COL_OFFLOAD,    "--"),
-        ]:
-            d = sub[sub["config"] == config].sort_values("rate")
-            if d.empty:
-                continue
-            util_vals = d["gpu_util"].dropna().unique()
-            util_note = f" (util={util_vals[0]:.2f})" if len(util_vals) == 1 else ""
-            ax.plot(rpos(d["rate"], "longctx"), d["gen_tok_s_mean"],
-                    marker="o", ms=5, color=col, ls=ls, lw=2, label=lbl + util_note)
-        ax.set_title(MODEL_LABELS[model], fontsize=10)
-        ax.set_xlabel("Concurrency")
-        ax.set_ylabel("Output throughput (tok/s)")
-        set_rate_xaxis(ax, "longctx")
-        ax.legend(fontsize=8)
-        ax.grid(True, alpha=0.4)
+    for ri, rep in enumerate(replicas):
+        for mi, model in enumerate(models):
+            ax = axes[ri][mi]
+            sub = lctx[(lctx["model"] == model) & (lctx["replicas"] == rep)]
+            for config, lbl, col, ls in [
+                ("no-offload",         "no-offload",         COL_NO_OFFLOAD, "-"),
+                ("native-offload-20k", "native-offload-20k", COL_OFFLOAD,    "--"),
+            ]:
+                d = sub[sub["config"] == config].sort_values("rate")
+                if d.empty:
+                    continue
+                util_vals = d["gpu_util"].dropna().unique()
+                util_note = f" (util={util_vals[0]:.2f})" if len(util_vals) == 1 else ""
+                ax.plot(rpos(d["rate"], "longctx"), d["gen_tok_s_mean"],
+                        marker="o", ms=5, color=col, ls=ls, lw=2,
+                        label=lbl + util_note)
+            ax.set_title(
+                f"{MODEL_LABELS[model]}  x  {rep} replica{'s' if rep > 1 else ''}",
+                fontsize=10
+            )
+            ax.set_xlabel("Concurrency")
+            ax.set_ylabel("Output throughput (tok/s)")
+            set_rate_xaxis(ax, "longctx")
+            ax.legend(fontsize=8)
+            ax.grid(True, alpha=0.4)
 
     fig.tight_layout()
     fig.savefig("longctx_throughput.png", dpi=150, bbox_inches="tight")
@@ -910,7 +799,6 @@ def main():
     fig_replica_scaling(df)
     fig_kv_cache_pressure(df)
     fig_ttft_itl_comparison(df)
-    fig_cpu_offload_hit_rates(df)
     fig_longctx_throughput(df)
     fig_longctx_offload_delta(df)
     save_summary_csv(df)
