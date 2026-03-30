@@ -56,7 +56,7 @@ configurations, three replica counts, and eight concurrency levels.
    configurations.** The `OffloadingConnector` disables vLLM's hybrid KV cache manager,
    introducing overhead not offset by the additional CPU cache capacity under short-context
    conditions. Replicas=2 shows small gains across all models under the standard workload
-   (+2.8% FP8, +4.1% BF16, +12.8% MoE), attributed to EPP prefix-cache-aware routing.
+   (+2.8% FP8, +4.1% BF16, +12.8% MoE).
 
 **Peak Throughput Summary -- Long-Context Workload:**
 
@@ -140,11 +140,11 @@ Adds 20,000 CPU blocks to each replica's KV storage.
 
 ### Benchmark Methodology
 
-- **Tool**: GuideLLM 0.5.4 (`--sample-requests=0` for synthetic workload)
-- **Rate type**: concurrent (fixed concurrency levels)
+- **Tool**: GuideLLM 0.5.4
+- **Rate type**: concurrent
 - **Duration**: 120 seconds per run
 - **Turns**: 5 per conversation
-- **Prefix**: 10,000 shared prefix tokens (exercises EPP prefix-cache routing)
+- **Prefix**: 10,000 shared prefix tokens
 - **Results**: 432 runs total (3 profiles x 3 models x 2 configs x 3 replicas x 8 rates)
 - **Metrics**: GuideLLM JSON results + PCP archives (openmetrics PMDA from vLLM HTTPS endpoints)
 
@@ -213,10 +213,10 @@ BF16 remains close to zero across all replica counts and concurrency levels.
 ### CPU KV Cache Hit Rates
 
 The `OffloadingConnector` registers CPU cache lookups via vLLM's
-`external_prefix_cache_queries_total` and `external_prefix_cache_hits_total` metrics, captured
-in PCP archives. These counters are non-zero only when the connector is active.
+`external_prefix_cache_queries_total` and `external_prefix_cache_hits_total` metrics.
+These counters are non-zero only when the connector is active.
 
-PCP data for FP8 longctx replicas=1 rate=10 (where the vLLM pod was freshly started at archive
+Metrics for FP8 longctx replicas=1 rate=10 (where the vLLM pod was freshly started at archive
 capture time) shows a **97.5% CPU KV cache hit rate** (2,939 hits / 3,014 queries). At
 concurrency=100 the hit rate drops to 69.2%. These hit rates directly explain the throughput
 gains at those operating points: the connector is serving blocks from CPU memory rather than
@@ -260,12 +260,6 @@ moderate-to-high concurrency.
    BF16 at concurrency=50 (no-offload), attributed to EPP concentrating similar-prefix requests
    per replica and reducing per-replica KV evictions. This effect is visible in both no-offload
    and native-offload configurations under long-context conditions.
-
-6. **The OffloadingConnector does not implement `SupportsHMA`** (confirmed in
-   `vllm/v1/kv_offload/offloading_connector.py`), causing vLLM to disable the hybrid
-   memory allocator on startup. The "Turning off hybrid kv cache manager" warning is logged
-   at each model initialisation. This is the primary source of overhead under standard and
-   kv-stress workloads where CPU blocks are rarely utilised.
 
 ---
 
