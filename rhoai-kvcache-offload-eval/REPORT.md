@@ -19,8 +19,8 @@ of KV cache pressure levels.
 - `openai/gpt-oss-120b` -- Mixture-of-Experts (MoE), MXFP4-quantised expert weights
 
 **Workload profiles:**
-- **Standard**: prompt=512 tokens, output=128 tokens, concurrency 1-650
-- **KV-stress**: prompt=512 tokens, output=512 tokens, concurrency 1-650 (4x output length)
+- **Short-context**: prompt=512 tokens, output=128 tokens, concurrency 1-650
+- **Long-output**: prompt=512 tokens, output=512 tokens, concurrency 1-650 (4x output length)
 - **Long-context**: prompt=4,096 tokens, output=256 tokens, reduced gpu_util, concurrency 1-300
 
 ---
@@ -46,16 +46,16 @@ configurations, three replica counts, and eight concurrency levels.
    (r=4). For gpt-oss-120b the pattern reverses: -9.4% (r=1), -1.7% (r=2), +22.3% (r=4).
 
 3. **GPU KV cache block counts relative to 20,000 CPU blocks vary substantially by model:**
-   - Llama-3.1-70B-FP8: 26,842 GPU blocks at 0.75 util (standard); ~14,440 at 0.50 util
+   - Llama-3.1-70B-FP8: 26,842 GPU blocks at 0.75 util (short-context); ~14,440 at 0.50 util
      (long-context) -- CPU adds +139% capacity under long-context conditions
    - Llama-3.1-70B-BF16: 22,376 GPU blocks at 0.90 util -- CPU adds +89% capacity
-   - gpt-oss-120b: 181,691 GPU blocks at 0.65 util (standard); ~131,000 at 0.50 util
+   - gpt-oss-120b: 181,691 GPU blocks at 0.65 util (short-context); ~131,000 at 0.50 util
      (long-context) -- CPU adds only +11-15% capacity
 
-4. **Under standard and kv-stress workloads, CPU offload reduces throughput for most
+4. **Under short-context and long-output workloads, CPU offload reduces throughput for most
    configurations.** The `OffloadingConnector` disables vLLM's hybrid KV cache manager,
-   introducing overhead not offset by the additional CPU cache capacity under short-context
-   conditions. Replicas=2 shows small gains across all models under the standard workload
+   introducing overhead not offset by the additional CPU cache capacity under these conditions.
+   Replicas=2 shows small gains across all models under the short-context workload
    (+2.8% FP8, +4.1% BF16, +12.8% MoE).
 
 **Peak Throughput Summary -- Long-Context Workload:**
@@ -106,7 +106,7 @@ configurations, three replica counts, and eight concurrency levels.
 **Llama-3.1-70B-FP8** (`RedHatAI/Meta-Llama-3.1-70B-Instruct-FP8`):
 ```
 --tensor-parallel-size 2
---gpu-memory-utilization 0.75   (standard/kv-stress)
+--gpu-memory-utilization 0.75   (short-context/long-output)
                          0.50   (long-context)
 --max-num-seq 1024
 ```
@@ -125,7 +125,7 @@ GPU KV cache: 358,016 tokens (22,376 blocks at 0.90 util); BF16 weights ~70 GiB/
 **gpt-oss-120b** (`openai/gpt-oss-120b`, MoE MXFP4):
 ```
 --tensor-parallel-size 2
---gpu-memory-utilization 0.65   (standard/kv-stress)
+--gpu-memory-utilization 0.65   (short-context/long-output)
                          0.50   (long-context)
 --max-num-seq 1024
 ```
@@ -222,9 +222,9 @@ concurrency=100 the hit rate drops to 69.2%. These hit rates directly explain th
 gains at those operating points: the connector is serving blocks from CPU memory rather than
 triggering recomputation.
 
-Under standard workload conditions, the GPU KV pool (26,842 blocks at 0.75 util) is large enough
+Under short-context workload conditions, the GPU KV pool (26,842 blocks at 0.75 util) is large enough
 that few blocks are evicted to CPU memory; with nothing to serve back, the connector applies
-overhead without benefit. Under kv-stress, longer output sequences fill the CPU cache faster
+overhead without benefit. Under long-output conditions, longer output sequences fill the CPU cache faster
 but the 20,000-block CPU capacity is still insufficient relative to total KV traffic at
 moderate-to-high concurrency.
 
@@ -263,15 +263,15 @@ moderate-to-high concurrency.
 
 ---
 
-## Standard and KV-Stress Workload Results
+## Short-Context and Long-Output Workload Results
 
-Under standard (prompt=512, output=128) and kv-stress (prompt=512, output=512) workloads,
+Under short-context (prompt=512, output=128) and long-output (prompt=512, output=512) workloads,
 CPU offload reduces throughput for most configurations. The GPU KV pools under these conditions
 are large enough (26,842 blocks for FP8 at 0.75 util; 181,691 blocks for MoE at 0.65 util)
 that few blocks are evicted to CPU memory. The connector applies overhead without compensating
 cache benefit.
 
-### Standard Workload
+### Short-Context Workload
 
 Concurrency 1-650. Offload impact across all nine model/replica combinations:
 
@@ -282,13 +282,13 @@ The MoE model shows the largest reductions (-30% to -64%), consistent with its s
 CPU/GPU capacity ratio (11%). The two dense models show more moderate reductions (-2% to -27%).
 
 **Replicas=2:** Small positive effects appear for all three models at low-to-moderate concurrency.
-The MoE r=2 +12.8% at concurrency=50 is the largest positive result in the standard workload.
+The MoE r=2 +12.8% at concurrency=50 is the largest positive result in the short-context workload.
 
 **Replicas=4:** Offload is negative for all models (-6.4% BF16, -26.7% FP8, -42.2% MoE).
 At r=4, all 8 H200 GPUs are fully utilised; connector overhead accumulates with higher total
 request volume.
 
-**Peak Throughput -- Standard Workload:**
+**Peak Throughput -- Short-Context Workload:**
 
 | Model | Replicas | no-offload | native-offload-20k | Offload delta |
 |-------|:--------:|:----------:|:------------------:|:-------------:|
@@ -328,13 +328,13 @@ Dense models (FP8, BF16) show super-linear scaling at concurrency=50 for replica
 to approximately 100% at replicas=4. gpt-oss-120b scaling efficiency increases from ~50% at
 low concurrency to ~100% at moderate-to-high concurrency.
 
-### KV-Stress Workload (output=512)
+### Long-Output Workload (output=512)
 
-Concurrency 1-650. KV-stress results are uniformly negative across all models and replica counts.
+Concurrency 1-650. Long-output results are uniformly negative across all models and replica counts.
 
 ![KV-Stress Heatmap](kvstress_impact_heatmap.png)
 
-**Peak Throughput -- KV-Stress:**
+**Peak Throughput -- Long-Output Workload:**
 
 | Model | Replicas | no-offload | native-offload-20k | Offload delta |
 |-------|:--------:|:----------:|:------------------:|:-------------:|
@@ -350,7 +350,7 @@ Concurrency 1-650. KV-stress results are uniformly negative across all models an
 
 FP8 replicas=2 at -0.4% is the only near-neutral result. Increasing output token count raises
 per-sequence KV footprint without increasing the recomputation cost advantage needed for offload
-benefit. The FP8 replicas=1 kv-stress result (-48.3%) is substantially worse than the standard
+benefit. The FP8 replicas=1 long-output result (-48.3%) is substantially worse than the short-context
 workload (-8.6%), indicating that connector overhead scales with output token volume.
 
 ### GPU KV Cache Utilisation
@@ -359,8 +359,8 @@ workload (-8.6%), indicating that connector overhead scales with output token vo
 
 GPU KV cache utilisation from PCP archives confirms cache pressure is present at moderate
 concurrency under standard workload conditions. Llama-3.1-70B-FP8 and gpt-oss-120b reach
-60-90% at concurrency=100-150. Llama-3.1-70B-BF16 with 22,376 GPU blocks at 0.90 utilisation
-saturates at lower concurrency than the FP8 model.
+60-90% at concurrency=100-150 under short-context workload conditions. Llama-3.1-70B-BF16
+with 22,376 GPU blocks at 0.90 utilisation saturates at lower concurrency than the FP8 model.
 
 ---
 

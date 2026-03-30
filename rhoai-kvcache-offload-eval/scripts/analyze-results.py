@@ -272,7 +272,7 @@ def fig_throughput_curves(df):
     fig, axes = plt.subplots(len(replicas), len(models),
                              figsize=(14, 13), sharey=False)
     fig.suptitle(
-        "Output Throughput vs Concurrency -- RHOAI 3.3 Standard Workload (1x8xH200)",
+        "Output Throughput vs Concurrency -- RHOAI 3.3 Short-Context Workload (1x8xH200)",
         fontsize=13, y=1.01
     )
 
@@ -343,7 +343,7 @@ def fig_offload_impact_heatmap(df):
         cbar_kws={"label": "Throughput delta (%)", "shrink": 0.7},
     )
     ax.set_title(
-        "Native CPU Offload Throughput Impact -- Standard Workload\n"
+        "Native CPU Offload Throughput Impact -- Short-Context Workload\n"
         "(native-offload-20k vs no-offload; positive = higher throughput with offload)",
         fontsize=12
     )
@@ -394,7 +394,7 @@ def fig_kvstress_heatmap(df):
         cbar_kws={"label": "Throughput delta (%)", "shrink": 0.7},
     )
     ax.set_title(
-        "Native CPU Offload Throughput Impact -- KV-Stress Workload (output=512)\n"
+        "Native CPU Offload Throughput Impact -- Long-Output Workload (output=512)\n"
         "(native-offload-20k vs no-offload; positive = higher throughput with offload)",
         fontsize=12
     )
@@ -414,7 +414,7 @@ def fig_latency_curves(df):
 
     fig, axes = plt.subplots(2, len(models), figsize=(14, 10))
     fig.suptitle(
-        "Latency vs Concurrency (replicas=1) -- RHOAI 3.3 Standard Workload",
+        "Latency vs Concurrency (replicas=1) -- RHOAI 3.3 Short-Context Workload",
         fontsize=13, y=1.01
     )
     metrics_labels = [
@@ -455,7 +455,7 @@ def fig_replica_scaling(df):
 
     fig, axes = plt.subplots(1, len(models), figsize=(14, 6))
     fig.suptitle(
-        "Replica Scaling Efficiency -- RHOAI 3.3 Standard Workload",
+        "Replica Scaling Efficiency -- RHOAI 3.3 Short-Context Workload",
         fontsize=13
     )
 
@@ -579,7 +579,7 @@ def fig_ttft_itl_comparison(df):
 
     fig, axes = plt.subplots(1, 2, figsize=(14, 6))
     fig.suptitle(
-        "Mean Latency (concurrency >= 50, standard workload) by Model, Config, Replica Count",
+        "Mean Latency (concurrency >= 50, short-context workload) by Model, Config, Replica Count",
         fontsize=12
     )
     for ki, (metric, ylabel, title_sfx) in enumerate([
