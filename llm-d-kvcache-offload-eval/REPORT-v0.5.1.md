@@ -26,6 +26,8 @@ A supplementary memory-pressure suite re-ran all configurations with reduced `gp
 - **fs-offload**: Filesystem offload via `SharedStorageOffloadingSpec` (`llmd_fs_connector` wheel), IBM VPC block PVC
 - **cpu+fs-offload-20k**: CPU+filesystem hierarchical offload via `MultiConnector`
 
+**When offloading wins:** At default gmu=0.9, all four offload configurations deliver throughput gains for Qwen3-14B (+3.6% to +14.5%). Under memory pressure (reduced gmu), native-offload-20k reaches +22.3% for Qwen3-0.6B and +10.4% for Qwen3-14B, with external KV cache hit rates of 26.9% and 10.4% respectively confirming active offload utilisation. The v0.5.1 native-offload-20k reduces Qwen3-8B overhead from -36.5% (v0.4.0 native-10k, gmu=0.9) to -3.6% at matched memory pressure.
+
 **Peak Throughput (gmu=0.9):**
 
 | Model | no-offload | native-offload-20k | fs-offload | cpu+fs-offload-20k |
@@ -55,10 +57,10 @@ A supplementary memory-pressure suite re-ran all configurations with reduced `gp
 |-----------|---------|
 | llm-d | v0.5.1 |
 | vLLM | 0.15.1 (bundled in llm-d-cuda:v0.5.1) |
-| GuideLLM | latest |
+| GuideLLM | 0.5.4 |
 | llmd_fs_connector | 0.15.1 (external wheel) |
-| OpenShift | 4.x (SNO) |
-| PCP | 7.x |
+| OpenShift | 4.22.0 (SNO) |
+| PCP | 7.0.3 |
 
 ### Workload
 
@@ -406,8 +408,8 @@ native-offload-20k shows measurable external KV cache utilisation at mempress gm
 
 fs-offload and cpu+fs-offload-20k show near-zero external hit rates despite their lower throughput. GPU KV-cache utilisation for these configs is below 2% (vs 44–74% for native-offload-20k), indicating the filesystem offload path does not effectively feed the GPU KV-cache in the configuration tested.
 
-![v0.5.1 External Cache Hit Rates](analysis/v0.5.1-mempress_external_cache_hits.png)
-*Figure: External prefix KV cache hit rate at peak concurrency. native-offload-20k shows active offload utilisation under memory pressure; filesystem configs show near-zero.*
+![v0.5.1 External Cache Hit Rates (mempress gmu)](analysis/v0.5.1-mempress_external_cache_hits.png)
+*Figure: External prefix KV cache hit rate at mempress gmu values. native-offload-20k reaches 8–27% (vs near-zero at gmu=0.9), confirming the offload path is actively serving cached KV data. Filesystem configs remain near-zero under pressure.*
 
 ### GPU KV-Cache Utilisation
 

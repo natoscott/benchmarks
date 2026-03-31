@@ -45,6 +45,8 @@ This repository contains performance evaluations of KV-cache management strategi
 
 ## Cross-Version Summary
 
+CPU KV-cache offload provides throughput gains when GPU KV-cache is constrained. On 2× NVIDIA L40S, Qwen3-14B FP16 is the naturally constrained model at default gmu=0.9 (20.58 GiB GPU KV-cache). Reducing `gpu_memory_utilization` creates pressure for all model sizes and reveals broader offload benefit. v0.5.1 (vLLM 0.15.1) substantially reduces offload overhead vs v0.4.0 (vLLM 0.11.2) at matched memory pressure conditions.
+
 ### Native CPU Offload: v0.4.0 → v0.5.0 → v0.5.1 (default gmu=0.9)
 
 | Model | v0.4.0 (10k) | v0.5.0 (20k) | v0.5.1 (20k) |

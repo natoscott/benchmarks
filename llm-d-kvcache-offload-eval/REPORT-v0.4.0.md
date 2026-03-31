@@ -4,12 +4,14 @@
 
 Performance evaluation of KV-cache management strategies in llm-d v0.4.0 (vLLM 0.11.2) across two areas:
 
-1. **llm-d EPP distributed KV-block indexing**: baseline GPU-only vs Redis/Valkey-backed distributed indexing for cache-aware request routing
+1. **llm-d EPP distributed KV-block indexing**: baseline GPU-only vs Valkey-backed distributed indexing for cache-aware request routing
 2. **CPU KV-cache offload**: vLLM native offloading vs LMCache (local CPU and Valkey backends)
 
 Supplementary memory-pressure runs repeated key configurations with per-model reduced `gpu_memory_utilization` (0.55–0.70 vs default 0.9) to create GPU KV-cache pressure across all model sizes, including a 20K CPU-block native-offload configuration.
 
-**Results at a glance (peak throughput, gmu=0.9):**
+**When offloading wins:** CPU KV-cache offload provides throughput gains when GPU KV-cache is constrained relative to the workload's working set. At default gmu=0.9, Qwen3-14B (20.58 GiB GPU KV-cache) is the naturally constrained model on this hardware: LMCache delivers +11–13% and adequate CPU block provisioning flips Qwen3-32B-AWQ from -12.7% to +11.9%. Under reduced gmu (memory-pressure runs), all models reach a constrained regime: native-offload-20k reaches +9.5% (0.6B) and +22.6% (14B); LMCache reaches +18–19% (0.6B).
+
+**Peak throughput at gmu=0.9:**
 
 | Config | Qwen3-0.6B | Qwen3-8B | Qwen3-14B | Qwen3-32B-AWQ |
 |--------|:----------:|:--------:|:---------:|:-------------:|
@@ -340,10 +342,7 @@ The higher waiting queue counts for llm-d configurations suggest that distribute
 
 #### Prefix Cache Effectiveness
 
-![Prefix Cache Hit Rates](analysis/pcp_prefix_cache_hits.png)
-*Figure: Prefix cache hit rate percentage by scenario*
-
-Prefix cache hit rates vary significantly by scenario, with some configurations showing substantially higher cache effectiveness. This metric correlates with the shared prefix workload design (10K-token prefixes) and demonstrates the value of prefix caching for multi-turn conversations.
+See §GPU Prefix Cache Hit Rates in Performance Results.
 
 #### Summary Statistics by Scenario
 
@@ -482,7 +481,7 @@ GPU KV-cache utilisation at peak concurrency:
 GPU KV-cache utilisation at peak concurrency ranges from 21% (Qwen3-0.6B no-offload) to 70% (Qwen3-14B no-offload). Qwen3-0.6B mempress no-offload shows lower GPU KV-cache usage (21%) than the original gmu=0.9 run (36%) because the reduced allocation limits total capacity.
 
 ![GPU KV-Cache Utilisation](analysis/v0.4.0-mempress_gpu_kvcache_util.png)
-*Figure: GPU KV-cache utilisation at peak concurrency, original vs mempress.*
+*Figure: GPU KV-cache utilisation at peak concurrency under memory-pressure gmu values.*
 
 ### Observations
 
