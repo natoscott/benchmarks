@@ -211,9 +211,12 @@ BF16 remains close to zero across all replica counts and concurrency levels.
 
 ![Long-Context Latency](longctx_latency.png)
 
-At the operating points where offload delivers throughput gains, TTFT p90 and TPOT p50 are
-maintained or reduced alongside the throughput improvement. The tail latency benefit (p90) is most pronounced for gpt-oss-120b r=4,
-where recomputation avoidance has the greatest impact on the slowest requests.
+The figure shows % change in TTFT p90 and TPOT p50 (native-offload-20k vs no-offload) across
+concurrency levels for the four configurations with positive throughput impact. Negative values
+indicate reduced latency with offload. At the low-to-moderate concurrency operating points where
+offload delivers throughput gains, both metrics are at or below zero. The TTFT p90 benefit is
+most pronounced for gpt-oss-120b r=4, where recomputation avoidance has the greatest impact on
+the slowest requests (-16.7% at concurrency=50).
 
 | Config | Concurrency | Throughput delta | TTFT p90 | TPOT p50 |
 |--------|:-----------:|:----------------:|:--------:|:--------:|

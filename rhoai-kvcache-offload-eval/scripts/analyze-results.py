@@ -736,12 +736,14 @@ def fig_longctx_offload_delta(df):
 
 
 def fig_longctx_latency(df):
-    """TTFT and TPOT for long-context runs -- configs with positive offload impact.
+    """Latency delta plot for long-context -- configs with positive offload impact.
 
-    Shows FP8 at all three replica counts and MoE at replicas=4, the four
-    configurations where native-offload-20k delivers throughput gains.
+    Shows % change in TTFT p90 and TPOT p50 (native-offload-20k vs no-offload)
+    for FP8 at all three replica counts and MoE at replicas=4. Negative values
+    indicate reduced latency with offload.
     """
     lctx = df[df["profile"] == "longctx"]
+    rates = sorted(lctx["rate"].unique())
 
     panels = [
         ("Meta-Llama-3.1-70B-Instruct-FP8", 1, "Llama-3.1-70B-FP8  r=1"),
@@ -750,29 +752,36 @@ def fig_longctx_latency(df):
         ("gpt-oss-120b",                    4, "GPT-OSS-120B (MoE)  r=4"),
     ]
     metrics = [
-        ("ttft_ms_p90", "TTFT p90 (s)",  1000),
-        ("tpot_ms_p50", "TPOT p50 (s)", 1000),
+        ("ttft_ms_p90", "TTFT p90 change (%)"),
+        ("tpot_ms_p50", "TPOT p50 change (%)"),
     ]
+    metric_colors = [PALETTE[0], PALETTE[1]]
 
     fig, axes = plt.subplots(len(metrics), len(panels), figsize=(14, 8), sharey=False)
     fig.suptitle(
-        "Long-Context Latency -- Configurations with Positive Offload Impact (1x8xH200)",
-        fontsize=13, y=1.01
+        "Long-Context Latency Delta (native-offload-20k vs no-offload)\n"
+        "Negative = latency reduced with offload",
+        fontsize=13, y=1.02
     )
 
-    for ki, (metric, ylabel, divisor) in enumerate(metrics):
+    for ki, (metric, ylabel) in enumerate(metrics):
         for pi, (model, rep, title) in enumerate(panels):
             ax = axes[ki][pi]
-            sub = lctx[(lctx["model"] == model) & (lctx["replicas"] == rep)]
-            for config, lbl, col, ls in [
-                ("no-offload",         "no-offload",         COL_NO_OFFLOAD, "-"),
-                ("native-offload-20k", "native-offload-20k", COL_OFFLOAD,    "--"),
-            ]:
-                d = sub[sub["config"] == config].sort_values("rate")
-                if d.empty:
-                    continue
-                ax.plot(rpos(d["rate"], "longctx"), d[metric] / divisor,
-                        marker="o", ms=5, color=col, ls=ls, lw=2, label=lbl)
+            base    = lctx[(lctx["model"]==model) & (lctx["config"]=="no-offload")         & (lctx["replicas"]==rep)]
+            offload = lctx[(lctx["model"]==model) & (lctx["config"]=="native-offload-20k") & (lctx["replicas"]==rep)]
+            deltas, valid_r = [], []
+            for rate in rates:
+                b = base[base["rate"]==rate][metric].values
+                o = offload[offload["rate"]==rate][metric].values
+                if len(b) and len(o) and b[0] > 0:
+                    deltas.append((o[0] - b[0]) / b[0] * 100)
+                    valid_r.append(rate)
+            if deltas:
+                ax.plot([RPOS_LONGCTX[r] for r in valid_r], deltas,
+                        marker="o", ms=5, color=metric_colors[ki], lw=2)
+            ax.axhline(0, color="black", ls="--", lw=1.0, alpha=0.5)
+            ax.fill_between(range(len(RATES_LONGCTX)), -50, 0, alpha=0.05,
+                            color="green", label="latency reduced")
             if ki == 0:
                 ax.set_title(title, fontsize=10)
             ax.set_xlabel("Concurrency")
