@@ -750,8 +750,8 @@ def fig_longctx_latency(df):
         ("gpt-oss-120b",                    4, "GPT-OSS-120B (MoE)  r=4"),
     ]
     metrics = [
-        ("ttft_ms_p90", "TTFT p90 (ms)"),
-        ("tpot_ms_p50", "TPOT p50 (ms)"),
+        ("ttft_ms_p90", "TTFT p90 (s)",  1000),
+        ("tpot_ms_p50", "TPOT p50 (s)", 1000),
     ]
 
     fig, axes = plt.subplots(len(metrics), len(panels), figsize=(14, 8), sharey=False)
@@ -760,7 +760,7 @@ def fig_longctx_latency(df):
         fontsize=13, y=1.01
     )
 
-    for ki, (metric, ylabel) in enumerate(metrics):
+    for ki, (metric, ylabel, divisor) in enumerate(metrics):
         for pi, (model, rep, title) in enumerate(panels):
             ax = axes[ki][pi]
             sub = lctx[(lctx["model"] == model) & (lctx["replicas"] == rep)]
@@ -771,7 +771,7 @@ def fig_longctx_latency(df):
                 d = sub[sub["config"] == config].sort_values("rate")
                 if d.empty:
                     continue
-                ax.plot(rpos(d["rate"], "longctx"), d[metric],
+                ax.plot(rpos(d["rate"], "longctx"), d[metric] / divisor,
                         marker="o", ms=5, color=col, ls=ls, lw=2, label=lbl)
             if ki == 0:
                 ax.set_title(title, fontsize=10)
