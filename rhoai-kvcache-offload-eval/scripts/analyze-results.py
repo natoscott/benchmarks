@@ -750,8 +750,8 @@ def fig_longctx_latency(df):
         ("gpt-oss-120b",                    4, "GPT-OSS-120B (MoE)  r=4"),
     ]
     metrics = [
-        ("ttft_ms_mean", "TTFT mean (ms)"),
-        ("tpot_ms_p50",  "TPOT p50 (ms)"),
+        ("ttft_ms_p90", "TTFT p90 (ms)"),
+        ("tpot_ms_p50", "TPOT p50 (ms)"),
     ]
 
     fig, axes = plt.subplots(len(metrics), len(panels), figsize=(14, 8), sharey=False)
@@ -789,7 +789,7 @@ def fig_longctx_latency(df):
 
 def save_summary_csv(df):
     cols = ["profile", "model", "config", "replicas", "rate", "gpu_util",
-            "gen_tok_s_mean", "ttft_ms_p50", "ttft_ms_mean",
+            "gen_tok_s_mean", "ttft_ms_p50", "ttft_ms_p90", "ttft_ms_mean",
             "itl_ms_p50", "tpot_ms_p50", "tpot_ms_mean", "req_s_mean",
             "completed", "errors", "duration_s"]
     df[cols].sort_values(["profile", "model", "replicas", "config", "rate"]).to_csv(

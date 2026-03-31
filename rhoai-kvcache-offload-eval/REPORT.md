@@ -211,20 +211,21 @@ BF16 remains close to zero across all replica counts and concurrency levels.
 
 ![Long-Context Latency](longctx_latency.png)
 
-At the operating points where offload delivers throughput gains, TTFT and TPOT are maintained
-or reduced alongside the throughput improvement. The connector serves blocks from CPU memory
-rather than triggering recomputation, which reduces per-token compute time and lowers queue
-depth, benefiting both metrics simultaneously.
+At the operating points where offload delivers throughput gains, TTFT p90 and TPOT p50 are
+maintained or reduced alongside the throughput improvement. The connector serves blocks from
+CPU memory rather than triggering recomputation, which reduces per-token compute time and
+lowers queue depth. The tail latency benefit (p90) is most pronounced for gpt-oss-120b r=4,
+where recomputation avoidance has the greatest impact on the slowest requests.
 
-| Config | Concurrency | Throughput delta | TTFT mean | TPOT p50 |
-|--------|:-----------:|:----------------:|:---------:|:--------:|
-| FP8 r=1 | 10 | +21.4% | 3,188 ms → 2,658 ms (-16.7%) | 48.0 ms → 42.2 ms (-12.1%) |
-| FP8 r=2 | 20 | +9.8% | 2,274 ms → 2,029 ms (-10.8%) | 57.7 ms → 52.3 ms (-9.3%) |
-| FP8 r=4 | 50 | +3.3% | 3,214 ms → 3,160 ms (-1.7%) | 84.0 ms → 84.1 ms (+0.1%) |
-| MoE r=4 | 50 | +22.3% | 2,791 ms → 2,441 ms (-12.6%) | 16.9 ms → 15.2 ms (-10.1%) |
+| Config | Concurrency | Throughput delta | TTFT p90 | TPOT p50 |
+|--------|:-----------:|:----------------:|:--------:|:--------:|
+| FP8 r=1 | 10 | +21.4% | 5,461 ms → 5,040 ms (-7.7%) | 48.0 ms → 42.2 ms (-12.1%) |
+| FP8 r=2 | 20 | +9.8% | 4,696 ms → 4,484 ms (-4.5%) | 57.7 ms → 52.3 ms (-9.3%) |
+| FP8 r=4 | 50 | +3.3% | 7,868 ms → 7,597 ms (-3.4%) | 84.0 ms → 84.1 ms (+0.1%) |
+| MoE r=4 | 50 | +22.3% | 5,166 ms → 4,305 ms (-16.7%) | 16.9 ms → 15.2 ms (-10.1%) |
 
 The pattern reverses where offload reduces throughput. For gpt-oss-120b replicas=1 at
-concurrency=50 (-47.8% throughput), TTFT rises from 8,737 ms to 16,840 ms (+92.8%) and
+concurrency=50 (-47.8% throughput), TTFT p90 rises from 13,892 ms to 28,057 ms (+102%) and
 TPOT p50 from 60.5 ms to 105.1 ms (+73.5%). Latency and throughput degrade together,
 consistent with connector overhead dominating when the CPU cache provides minimal benefit.
 
@@ -260,9 +261,10 @@ moderate-to-high concurrency.
    +9.8% at r=2, both at low-to-moderate concurrency). PCP archives confirm 97.5% CPU cache
    hit rate at the r=1 peak operating point (concurrency=10), directly linking cache hit rate
    to throughput gain. Benefit decreases at replicas=4 (+3.3%) as per-replica GPU KV pools
-   together approach or exceed the per-replica CPU pool. At all three replica counts, TTFT
-   and TPOT are maintained or reduced alongside the throughput gains: FP8 r=1 at concurrency=10
-   shows TTFT -16.7% (3,188 ms → 2,658 ms) and TPOT -12.1% (48.0 ms → 42.2 ms).
+   together approach or exceed the per-replica CPU pool. At all three replica counts, TTFT p90
+   and TPOT p50 are maintained or reduced alongside the throughput gains: FP8 r=1 at
+   concurrency=10 shows TTFT p90 -7.7% (5,461 ms → 5,040 ms) and TPOT p50 -12.1%
+   (48.0 ms → 42.2 ms).
 
 3. **gpt-oss-120b at replicas=4 under long-context workload shows +22.3% throughput with
    offload** at concurrency=50. At r=1 and r=2 the MoE model shows small negative offload
