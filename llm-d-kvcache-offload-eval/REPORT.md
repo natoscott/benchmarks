@@ -14,21 +14,16 @@ This repository contains performance evaluations of KV-cache management strategi
 
 ### [REPORT-v0.5.1.md](REPORT-v0.5.1.md) — llm-d v0.5.1 (vLLM 0.15.1) ← current
 
-**Status:** Complete — 128 runs across 4 configurations, 4 models, 8 concurrency levels
+**Status:** Complete — 128 runs (4 configs × 4 models × 8 rates) + 128 memory-pressure runs (gmu=0.55–0.70)
 
-**Configurations:**
-- `no-offload` — GPU-only KV-cache (baseline)
-- `native-offload-20k` — CPU offload via `OffloadingConnector` / `CPUOffloadingSpec`
-- `fs-offload` — Filesystem offload via `SharedStorageOffloadingSpec` (llmd_fs_connector 0.15.1)
-- `cpu+fs-offload-20k` — Hierarchical CPU+filesystem via `MultiConnector`
+**Configurations:** `no-offload`, `native-offload-20k`, `fs-offload`, `cpu+fs-offload-20k`
 
-**Observations:**
-- Qwen3-14B benefits from all offload configurations: +14.5% (native-20k), +7.3% (cpu+fs), +3.6% (fs)
-- Qwen3-0.6B fs-offload unstable at sustained concurrency (zero completions at rate≥300)
-- Disk I/O negligible for filesystem offload runs (≤0.04 MB/s); IBM VPC block PVC operates via OS page cache
-- MultiConnector writes to CPU and filesystem simultaneously; reads prioritise CPU over filesystem
-- Qwen3-14B no-offload regressed -11.2% from v0.5.0 to v0.5.1 (66.1→58.7 tok/s)
-- libstdc++ ABI incompatibility: llmd_fs_connector requires GLIBCXX_3.4.30+; RHEL9 image provides 3.4.29
+- Qwen3-14B: +14.5% (native-20k), +7.3% (cpu+fs), +3.6% (fs) vs no-offload baseline
+- Qwen3-0.6B: native-offload-20k -2.2%; fs-offload deadlocks at rate≥300 ([issue #457](https://github.com/llm-d/llm-d-kv-cache/issues/457))
+- Qwen3-8B and Qwen3-32B-AWQ: -29.9% to -58.3% under all offload configs
+- Disk I/O ≤0.04 MB/s for all filesystem offload runs (page-cache-backed PVC)
+- Qwen3-14B no-offload: 66.1→58.7 tok/s regression from v0.5.0 (-11.2%)
+- libstdc++ ABI incompatibility ([issue #445](https://github.com/llm-d/llm-d-kv-cache/issues/445))
 
 **Supersedes:** REPORT-v0.5.0.md
 
@@ -36,20 +31,15 @@ This repository contains performance evaluations of KV-cache management strategi
 
 ### [REPORT-v0.4.0.md](REPORT-v0.4.0.md) — llm-d v0.4.0 (vLLM 0.11.2, LMCache v0.3.7)
 
-**Status:** Complete — 272 runs across 7 configurations + 192 memory-pressure runs (6 configs × 4 models × 8 rates, gmu=0.55–0.70, including native-offload-20k)
+**Status:** Complete — 272 runs (7 configs × 4 models × 8 rates) + 192 memory-pressure runs (6 configs × 4 models × 8 rates, gmu=0.55–0.70, including native-offload-20k)
 
-**Configurations:**
-- `no-offload`, `native-offload` (10K/20K blocks)
-- `lmcache-local`, `lmcache-redis`, `lmcache-valkey`
-- `llm-d-redis`, `llm-d-valkey` (EPP distributed KV-block indexing)
+**Configurations:** `no-offload`, `native-offload` (10K/20K blocks), `lmcache-local`, `lmcache-valkey`, `llm-d-valkey`
 
-**Observations:**
-- GPU KV-cache memory availability after model loading determines offload effectiveness
-- Qwen3-14B (20.58 GiB GPU KV-cache) benefits from CPU offload (+12–17% with LMCache)
-- Qwen3-0.6B (33.92 GiB GPU KV-cache) shows degradation under all offload strategies (-13% to -29%)
+- Qwen3-14B (20.58 GiB GPU KV-cache): +0.6% to +13% with offload at gmu=0.9; +22.6% with native-offload-20k under memory pressure
+- Qwen3-0.6B (33.92 GiB GPU KV-cache): -13% to -29% at gmu=0.9; lmcache flips to +18-19% under memory pressure
 - llm-d EPP distributed KV-block indexing within ±2% of baseline for all models
-- Redis and Valkey perform identically for both EPP indexing and LMCache storage
-- vLLM native offload underperforms LMCache at all model sizes in v0.4.0
+- Valkey and Redis perform identically; Redis dropped from ongoing benchmark plans
+- vLLM native offload underperforms LMCache for all model sizes
 
 ---
 

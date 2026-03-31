@@ -19,7 +19,7 @@ Supplementary memory-pressure runs repeated key configurations with per-model re
 | lmcache-valkey | -13.0% | -6.5% | +13.0% | -12.7% |
 | llm-d-valkey | -1.5% | +0.4% | +10.0% | -0.1% |
 
-**Hardware note:** Results are specific to 2× NVIDIA L40S (48 GB total VRAM), 48 vCPUs, IBM Cloud. GPU KV-cache memory after model loading ranges from 20.58 GiB (Qwen3-14B FP16) to 33.92 GiB (Qwen3-0.6B), which determines which models experience KV-cache pressure under this workload.
+**Hardware note:** Results are specific to 2× NVIDIA L40S (48 GB total VRAM), 48 vCPUs, IBM Cloud. GPU KV-cache memory after model loading ranges from 20.58 GiB (Qwen3-14B FP16) to 33.92 GiB (Qwen3-0.6B) - this determines which models experience KV-cache pressure under this workload.
 
 ---
 
