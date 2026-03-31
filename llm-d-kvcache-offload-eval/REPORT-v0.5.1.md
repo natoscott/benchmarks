@@ -221,7 +221,7 @@ All offload configurations show throughput above the no-offload baseline at rate
 No-offload peaks at rate=1 (51.2 tok/s). All offload configurations degrade throughput by -56 to -58%. The optimal concurrency shifts from rate=1 to rate=50–100 under offload. At rate=1, all offload configs show approximately 2× higher TTFT and 7–8× higher ITL vs no-offload (TTFT: 0.10 s baseline vs 0.21 s offload; ITL: 18.3 ms vs 145–148 ms).
 
 ![Performance Delta Heatmap](analysis/v0.5.1_delta_heatmap.png)
-*Figure: Throughput delta (%) vs no-offload baseline. Rows are offload configurations, columns are model sizes. Qwen3-14B (green column) shows positive delta across all offload types. All other models (red) show degradation under offload.*
+*Figure: Throughput delta (%) vs no-offload baseline (magma colormap; lighter = positive, darker = negative). Qwen3-14B shows positive delta across all offload configurations; all other models show negative delta.*
 
 ### Latency Analysis
 
