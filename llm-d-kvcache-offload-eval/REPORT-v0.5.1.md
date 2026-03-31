@@ -391,8 +391,6 @@ All four v0.5.1 configurations were re-run with per-model reduced `gpu_memory_ut
 ![v0.5.1 Memory-Pressure Peak Throughput](analysis/v0.5.1-mempress_peak_throughput.png)
 *Figure: Peak throughput at reduced gpu_memory_utilization. native-offload-20k shows throughput above the mempress no-offload baseline for 0.6B and 14B.*
 
-![v0.5.1 Memory-Pressure Delta Heatmap](analysis/v0.5.1-mempress_delta_heatmap.png)
-*Figure: % throughput delta vs mempress no-offload baseline.*
 
 ### GPU KV-Cache Utilisation
 
