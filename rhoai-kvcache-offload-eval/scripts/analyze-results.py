@@ -735,6 +735,58 @@ def fig_longctx_offload_delta(df):
     print("  longctx_offload_delta.png")
 
 
+def fig_longctx_latency(df):
+    """TTFT and TPOT for long-context runs -- configs with positive offload impact.
+
+    Shows FP8 at all three replica counts and MoE at replicas=4, the four
+    configurations where native-offload-20k delivers throughput gains.
+    """
+    lctx = df[df["profile"] == "longctx"]
+
+    panels = [
+        ("Meta-Llama-3.1-70B-Instruct-FP8", 1, "Llama-3.1-70B-FP8  r=1"),
+        ("Meta-Llama-3.1-70B-Instruct-FP8", 2, "Llama-3.1-70B-FP8  r=2"),
+        ("Meta-Llama-3.1-70B-Instruct-FP8", 4, "Llama-3.1-70B-FP8  r=4"),
+        ("gpt-oss-120b",                    4, "GPT-OSS-120B (MoE)  r=4"),
+    ]
+    metrics = [
+        ("ttft_ms_mean", "TTFT mean (ms)"),
+        ("tpot_ms_p50",  "TPOT p50 (ms)"),
+    ]
+
+    fig, axes = plt.subplots(len(metrics), len(panels), figsize=(14, 8), sharey=False)
+    fig.suptitle(
+        "Long-Context Latency -- Configurations with Positive Offload Impact (1x8xH200)",
+        fontsize=13, y=1.01
+    )
+
+    for ki, (metric, ylabel) in enumerate(metrics):
+        for pi, (model, rep, title) in enumerate(panels):
+            ax = axes[ki][pi]
+            sub = lctx[(lctx["model"] == model) & (lctx["replicas"] == rep)]
+            for config, lbl, col, ls in [
+                ("no-offload",         "no-offload",         COL_NO_OFFLOAD, "-"),
+                ("native-offload-20k", "native-offload-20k", COL_OFFLOAD,    "--"),
+            ]:
+                d = sub[sub["config"] == config].sort_values("rate")
+                if d.empty:
+                    continue
+                ax.plot(rpos(d["rate"], "longctx"), d[metric],
+                        marker="o", ms=5, color=col, ls=ls, lw=2, label=lbl)
+            if ki == 0:
+                ax.set_title(title, fontsize=10)
+            ax.set_xlabel("Concurrency")
+            ax.set_ylabel(ylabel)
+            set_rate_xaxis(ax, "longctx")
+            ax.legend(fontsize=8)
+            ax.grid(True, alpha=0.4)
+
+    fig.tight_layout()
+    fig.savefig("longctx_latency.png", dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print("  longctx_latency.png")
+
+
 def save_summary_csv(df):
     cols = ["profile", "model", "config", "replicas", "rate", "gpu_util",
             "gen_tok_s_mean", "ttft_ms_p50", "ttft_ms_mean",
@@ -801,6 +853,7 @@ def main():
     fig_ttft_itl_comparison(df)
     fig_longctx_throughput(df)
     fig_longctx_offload_delta(df)
+    fig_longctx_latency(df)
     save_summary_csv(df)
 
     print_peak_summary(df)
