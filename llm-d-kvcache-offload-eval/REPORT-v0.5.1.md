@@ -265,10 +265,7 @@ Latency measured at rate=50 for 0.6B, 8B, and 14B; rate=1 for 32B-AWQ (which ach
 
 Disk I/O was measured from PCP `disk.dev.*` metrics during all fs-offload and cpu+fs-offload benchmark runs.
 
-![Disk I/O](analysis/v0.5.1_pcp_disk_io.png)
-*Figure: Disk read and write throughput (MB/s) during fs-offload and cpu+fs-offload benchmark runs vs no-offload baseline. Values are near-zero across all runs.*
-
-Peak observed disk I/O across all 64 filesystem-offload runs: **0.04 MB/s write, 0.03 MB/s read**. No-offload baseline shows similar background I/O (0.04 MB/s write for Qwen3-32B-AWQ).
+PCP `disk.dev.*` metrics confirm no storage I/O attributable to the filesystem offload connector across all 64 fs-offload and cpu+fs-offload runs (peak 0.04 MB/s write, indistinguishable from no-offload background).
 
 The negligible disk I/O indicates that the IBM VPC block PVC is operating as a page-cache-backed filesystem during the 120-second benchmark window. KV cache blocks written to `/kvcache/kv-cache/` reside in OS page cache rather than reaching physical storage. As a result, the fs-offload path behaves as an additional CPU memory tier rather than a persistent storage tier during these benchmarks.
 
@@ -321,15 +318,6 @@ GPU KV cache utilization at peak:
 
 Qwen3-0.6B fs-offload shows near-zero GPU KV cache usage, confirming blocks are being offloaded to the filesystem path.
 
-### External Prefix Cache Hit Rates
-
-![External Cache Hits](analysis/v0.5.1_pcp_external_hits.png)
-*Figure: External prefix cache hit rate (hits/queries) by configuration and model. All values are below 8%, consistent with single-replica deployment where cross-instance cache sharing is inactive.*
-
-The `vllm:external_prefix_cache_hits_total` and `vllm:external_prefix_cache_queries_total` metrics capture KV connector activity. Hit rates across all configurations and models: 0–7.5%. Qwen3-8B cpu+fs-offload-20k at rate=50 shows the highest rate (7.5%).
-
-For the cpu+fs-offload-20k configuration, the external hit metric aggregates hits from both the CPU and filesystem sub-connectors without distinguishing between them. Attributing hits to specific tiers would require additional instrumentation not currently exposed by `MultiConnector`.
-
 ---
 
 ## API and Configuration Changes from v0.4.0 / v0.5.0
@@ -362,7 +350,7 @@ Third-party specs are loaded via Python import from `spec_module_path`, making t
 
 ### GuideLLM
 
-The `--sample-requests` flag was removed from the guidellm command per PR #591. This eliminates per-request sample data from the JSON output, reducing file sizes substantially at high concurrency (rate=650 files reduced from ~69 MB to ~4 MB).
+`--sample-requests=0` is set in the guidellm command ([vllm-project/guidellm#591](https://github.com/vllm-project/guidellm/pull/591)). This eliminates per-request sample data from the JSON output, reducing file sizes substantially at high concurrency (rate=650 files reduced from ~69 MB to ~4 MB).
 
 ---
 
@@ -372,14 +360,7 @@ The `--sample-requests` flag was removed from the guidellm command per PR #591. 
 
 The `llmd_fs_connector` v0.15.1 wheel requires `GLIBCXX_3.4.30` (GCC 12+). The `llm-d-cuda:v0.5.1` image is RHEL 9-based and provides only `GLIBCXX_3.4.29` (GCC 11). Workaround used in these benchmarks: `LD_PRELOAD` of the Nsight Compute-bundled `libstdc++.so.6` (`GLIBCXX_3.4.33`).
 
-See [llm-d-kv-cache issue #445](https://github.com/llm-d/llm-d-kv-cache/issues/445) for status and upstream fix options.
-
-### Filesystem Offload Deployment Notes
-
-For `SharedStorageOffloadingSpec` to serve as persistent cross-restart or cross-instance cache:
-1. The storage backend must be `ReadWriteMany` (RWX) for multi-instance sharing. The IBM VPC block PVC used here is `ReadWriteOnce` (RWO), limiting the setup to single-pod use.
-2. Latency-sensitive deployments should account for the difference between page-cached (hot) and cold storage reads. These benchmarks only characterise the page-cached case.
-3. The connector does not manage storage eviction. An external evictor (e.g., the PVC evictor from the llm-d-kv-cache repository) is required for bounded storage growth.
+See [llm-d-kv-cache issue #445](https://github.com/llm-d/llm-d-kv-cache/issues/445).
 
 ---
 
@@ -525,15 +506,6 @@ PCP daemon collects at 10-second intervals (pcp-zeroconf package, default config
 - `nvidia.*` (GPU utilization, memory, power via DCGM)
 - `disk.dev.*` (disk I/O per device)
 - `kernel.all.cpu.*` (CPU utilization)
-
-### Analysis
-
-Analysis script: `scripts/analyze-v0.5.1.py`
-
-Output files:
-- `analysis/v0.5.1_throughput_all.csv` — raw throughput per run and concurrency level
-- `analysis/v0.5.1_pcp_metrics.csv` — PCP metrics extracted per run
-- `analysis/v0.5.1_summary.csv` — peak throughput and PCP metrics per configuration
 
 ### Data Files
 
