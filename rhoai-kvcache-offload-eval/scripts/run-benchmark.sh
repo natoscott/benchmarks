@@ -279,6 +279,11 @@ echo "Benchmark duration: $(( END_TIME - START_TIME ))s"
 # ── Collect guidellm results ──────────────────────────────────────────────────
 echo "Downloading guidellm results..."
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Brief wait then show what guidellm actually wrote so we can locate the output.
+sleep 5
+echo "  Contents of /models in guidellm pod:"
+kubectl --kubeconfig="${KUBECONFIG}" exec -n "${NAMESPACE}" "${GUIDELLM_POD}" -- \
+    find /models -maxdepth 2 -name "*.json" -newer /tmp 2>/dev/null || true
 "${SCRIPT_DIR}/../../scripts/transfer-large-file-chunked.sh" \
     "${KUBECONFIG}" "${NAMESPACE}" "${GUIDELLM_POD}" \
     "/models/benchmark.json" "${OUTPUT_DIR}/guidellm-results.json"
@@ -313,7 +318,7 @@ for PCP_POD in ${PCP_PODS}; do
         sh -c 'ls -1 /var/log/pcp/pmlogger/$(hostname)/[0-9]* 2>/dev/null | grep -E "\.[0-9]+$" | head -20' \
     | while read -r archive_path; do
         archive_file=$(basename "${archive_path}")
-        timeout --signal=KILL 60 sh -c \
+        timeout --signal=KILL 300 sh -c \
             "kubectl --kubeconfig='${KUBECONFIG}' exec -n '${NAMESPACE}' '${PCP_POD}' \
              -- cat '${archive_path}' > '${OUTPUT_DIR}/pcp-archives/${POD_NODE}/${archive_file}'" || \
             echo "  Warning: failed to copy ${archive_file}"

@@ -1,6 +1,9 @@
 #!/bin/bash
 # Chunked file transfer using base64 encoding for reliability over kubectl exec.
 # kubectl exec truncates large binary streams unpredictably; base64 (ASCII) is safe.
+#
+# Chunks are written to a fresh mktemp -d in the pod to avoid any stale chunk
+# collisions on persistent storage between runs.
 
 set -euo pipefail
 
@@ -9,7 +12,7 @@ NAMESPACE="${2:?NAMESPACE required}"
 POD="${3:?POD required}"
 REMOTE_FILE="${4:?REMOTE_FILE required}"
 LOCAL_FILE="${5:?LOCAL_FILE required}"
-CHUNK_SIZE_MB="${6:-5}"  # Default 5MB chunks
+CHUNK_SIZE_MB="${6:-1}"  # Default 1MB chunks
 
 echo "Chunked file transfer (base64):"
 echo "  Remote: ${REMOTE_FILE}"
@@ -25,18 +28,25 @@ CHUNK_SIZE_BYTES=$((CHUNK_SIZE_MB * 1024 * 1024))
 NUM_CHUNKS=$(( (FILE_SIZE + CHUNK_SIZE_BYTES - 1) / CHUNK_SIZE_BYTES ))
 echo "  Chunks needed: ${NUM_CHUNKS}"
 
-# Create temp directory for chunks
-CHUNK_DIR=$(mktemp -d)
-trap "rm -rf '${CHUNK_DIR}'" EXIT
+# Create a fresh temp directory in the pod for chunks -- avoids stale chunk
+# collisions on persistent storage (e.g. PCP pmlogger volumes across pod restarts).
+REMOTE_CHUNK_DIR=$(kubectl --kubeconfig="${KUBECONFIG}" exec -n "${NAMESPACE}" "${POD}" -- \
+    sh -c "mktemp -d")
 
-# Split file in pod into chunks
+# Local temp dir for reassembly
+LOCAL_CHUNK_DIR=$(mktemp -d)
+trap "rm -rf '${LOCAL_CHUNK_DIR}'; \
+      kubectl --kubeconfig='${KUBECONFIG}' exec -n '${NAMESPACE}' '${POD}' -- \
+      sh -c 'rm -rf ${REMOTE_CHUNK_DIR}' 2>/dev/null || true" EXIT
+
+# Split file into the fresh temp dir in the pod
 echo "Splitting file in pod..."
 kubectl --kubeconfig="${KUBECONFIG}" exec -n "${NAMESPACE}" "${POD}" -- \
-    sh -c "split -b ${CHUNK_SIZE_BYTES} -d -a 4 '${REMOTE_FILE}' '${REMOTE_FILE}.chunk.'"
+    sh -c "split -b ${CHUNK_SIZE_BYTES} -d -a 4 '${REMOTE_FILE}' '${REMOTE_CHUNK_DIR}/chunk.'"
 
 # Get list of chunks with their sizes
 CHUNK_INFO=$(kubectl --kubeconfig="${KUBECONFIG}" exec -n "${NAMESPACE}" "${POD}" -- \
-    sh -c "stat -c '%n %s' '${REMOTE_FILE}'.chunk.* 2>/dev/null | sort")
+    sh -c "stat -c '%n %s' '${REMOTE_CHUNK_DIR}'/chunk.* 2>/dev/null | sort")
 
 if [ -z "${CHUNK_INFO}" ]; then
     echo "ERROR: No chunks created"
@@ -57,9 +67,9 @@ while IFS=' ' read -r CHUNK EXPECTED_CHUNK_SIZE; do
     SUCCESS=0
     for attempt in 1 2 3; do
         kubectl --kubeconfig="${KUBECONFIG}" exec -n "${NAMESPACE}" "${POD}" -- \
-            base64 "${CHUNK}" | base64 -d > "${CHUNK_DIR}/${CHUNK_NAME}" 2>/dev/null || true
+            base64 "${CHUNK}" | base64 -d > "${LOCAL_CHUNK_DIR}/${CHUNK_NAME}" 2>/dev/null || true
 
-        LOCAL_CHUNK_SIZE=$(stat -c '%s' "${CHUNK_DIR}/${CHUNK_NAME}" 2>/dev/null || echo 0)
+        LOCAL_CHUNK_SIZE=$(stat -c '%s' "${LOCAL_CHUNK_DIR}/${CHUNK_NAME}" 2>/dev/null || echo 0)
         if [ "${LOCAL_CHUNK_SIZE}" -eq "${EXPECTED_CHUNK_SIZE}" ]; then
             SUCCESS=1
             break
@@ -77,7 +87,8 @@ done <<< "${CHUNK_INFO}"
 
 # Reassemble chunks locally
 echo "Reassembling file..."
-cat "${CHUNK_DIR}"/*.chunk.* > "${LOCAL_FILE}"
+mkdir -p "$(dirname "${LOCAL_FILE}")"
+cat "${LOCAL_CHUNK_DIR}"/chunk.* > "${LOCAL_FILE}"
 
 # Verify final file size
 LOCAL_SIZE=$(stat -c '%s' "${LOCAL_FILE}")
@@ -87,10 +98,4 @@ if [ "${LOCAL_SIZE}" -ne "${FILE_SIZE}" ]; then
 fi
 
 echo "File transferred successfully (${LOCAL_SIZE} bytes)"
-
-# Clean up chunks in pod
-echo "Cleaning up chunks in pod..."
-kubectl --kubeconfig="${KUBECONFIG}" exec -n "${NAMESPACE}" "${POD}" -- \
-    sh -c "rm -f '${REMOTE_FILE}'.chunk.*" 2>/dev/null || true
-
 echo "Transfer complete!"

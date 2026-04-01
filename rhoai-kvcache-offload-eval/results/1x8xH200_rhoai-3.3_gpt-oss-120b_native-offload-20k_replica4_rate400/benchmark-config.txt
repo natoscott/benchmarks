@@ -1,5 +1,5 @@
 Run ID: 1x8xH200_rhoai-3.3_gpt-oss-120b_native-offload-20k_replica4_rate400
-Date: Fri 27 Mar 2026 11:06:26 UTC
+Date: Wed 01 Apr 2026 04:35:20 UTC
 Target: https://inference-gateway.apps.psap-fire-athena.ibm.rhperfscale.org/llm-d-pfc-cpu/gpt-oss-120b
 Rate Type: concurrent
 Rate (Concurrency): 400
@@ -21,5 +21,5 @@ GPU Memory Utilization: 0.65
 Num CPU Blocks: 20000
 VLLM Additional Args: --tensor-parallel-size 2 --gpu-memory-utilization 0.65 --max-num-seq 1024 --kv-transfer-config '{"kv_connector":"OffloadingConnector","kv_role":"kv_both","kv_connector_extra_config":{"num_cpu_blocks":20000}}'
 Namespace: llm-d-pfc-cpu
-guidellm Pod: guidellm-74fc989ff-94jd6
-PCP Pods: pcp-857674b5cf-qmlmq
+guidellm Pod: guidellm-7bd5bb67cc-hb4gg
+PCP Pods: pcp-857674b5cf-5tg9d
