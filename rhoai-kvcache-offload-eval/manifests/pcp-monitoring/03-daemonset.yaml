@@ -1,0 +1,159 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: pcp-monitoring
+  namespace: pcp-monitoring
+  labels:
+    app.kubernetes.io/name: pcp-monitoring
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: pcp-monitoring
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: pcp-monitoring
+    spec:
+      serviceAccountName: pcp-monitoring
+
+      # hostNetwork binds pmcd (44321) and pmproxy (44322) directly on each
+      # node's IP, enabling `pmrep --host <node-ip>` from anywhere that can
+      # reach the node (including `oc port-forward` from a laptop).
+      hostNetwork: true
+      hostPID: true
+      dnsPolicy: ClusterFirstWithHostNet
+
+      tolerations:
+      # Run on master/control-plane nodes too.
+      - key: node-role.kubernetes.io/master
+        operator: Exists
+        effect: NoSchedule
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+
+      initContainers:
+      # Install the nvidia PMDA if GPU devices are present on this node.
+      # The init container writes the pmcd.conf entry into a shared emptyDir;
+      # on non-GPU nodes the PMDA entry is omitted entirely (cleaner than a
+      # graceful-failure load at runtime, though either approach works).
+      - name: pcp-setup
+        image: quay.io/performancecopilot/pcp:latest
+        command: ["/bin/sh", "-c"]
+        args:
+        - |
+          set -e
+          # Start from the image's default pmcd config
+          cp -a /etc/pcp/. /pcp-config/
+          mkdir -p /pcp-config/pmcd
+
+          # nvidia PMDA: enable if any GPU device is present on this node.
+          # pmdanvidia uses dlopen() for NVML -- the library path below covers
+          # the GPU operator driver-container layout; adjust if needed.
+          if ls /dev/nvidia0 2>/dev/null; then
+            echo "GPU node detected, installing nvidia PMDA"
+            export LD_LIBRARY_PATH=/run/nvidia/driver/usr/lib64:/usr/local/nvidia/lib64:${LD_LIBRARY_PATH}
+            cd /var/lib/pcp/pmdas/nvidia
+            # Install writes the PMDA entry into /etc/pcp/pmcd/pmcd.conf
+            echo "" | ./Install 2>&1 | grep -v "^Updating"
+            # Copy the updated config to our shared volume
+            cp /etc/pcp/pmcd/pmcd.conf /pcp-config/pmcd/pmcd.conf
+          else
+            echo "No GPU devices found on this node, skipping nvidia PMDA"
+          fi
+
+          # openmetrics PMDA for DCGM -- configure URL for GPU nodes only.
+          if ls /dev/nvidia0 2>/dev/null; then
+            mkdir -p /pcp-config/pmda-openmetrics
+            cat > /pcp-config/pmda-openmetrics/dcgm.url << 'URL'
+          http://localhost:9400/metrics
+          URL
+            echo "Configured openmetrics PMDA for DCGM at localhost:9400"
+          fi
+        securityContext:
+          privileged: true
+        volumeMounts:
+        - name: pcp-config
+          mountPath: /pcp-config
+        - name: host-dev
+          mountPath: /dev
+
+      containers:
+      - name: pcp
+        image: quay.io/performancecopilot/pcp:latest
+        env:
+        - name: PCP_SERVICES
+          value: "pmcd,pmlogger,pmproxy"
+        # Expose pmcd (44321) and pmproxy (44322) -- visible via hostNetwork.
+        ports:
+        - name: pmcd
+          containerPort: 44321
+          hostPort: 44321
+          protocol: TCP
+        - name: pmproxy
+          containerPort: 44322
+          hostPort: 44322
+          protocol: TCP
+        securityContext:
+          privileged: true
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        volumeMounts:
+        # Config from init container (includes nvidia PMDA if GPU present)
+        - name: pcp-config
+          mountPath: /etc/pcp
+        # Host kernel interfaces for hardware/kernel PMDAs
+        - name: host-proc
+          mountPath: /proc
+          readOnly: true
+        - name: host-sys
+          mountPath: /sys
+          readOnly: true
+        # GPU device files for pmdanvidia
+        - name: host-dev
+          mountPath: /dev
+        # NVML library -- GPU operator driver-container path.
+        # Symlinked to /run/nvidia on most OCP+GPU operator deployments.
+        - name: nvidia-driver
+          mountPath: /run/nvidia
+          readOnly: true
+        # Alternative NVML path used by some GPU operator configurations.
+        - name: nvidia-local
+          mountPath: /usr/local/nvidia
+          readOnly: true
+        # Persistent archive storage: hostPath so archives survive pod restarts
+        # and are accessible directly on the node for tools like pmlogger_check.
+        - name: pcp-logs
+          mountPath: /var/log/pcp
+
+      volumes:
+      - name: pcp-config
+        emptyDir: {}
+      - name: host-proc
+        hostPath:
+          path: /proc
+      - name: host-sys
+        hostPath:
+          path: /sys
+      - name: host-dev
+        hostPath:
+          path: /dev
+      - name: nvidia-driver
+        hostPath:
+          path: /run/nvidia
+          type: DirectoryOrCreate
+      - name: nvidia-local
+        hostPath:
+          path: /usr/local/nvidia
+          type: DirectoryOrCreate
+      - name: pcp-logs
+        hostPath:
+          path: /var/log/pcp
+          type: DirectoryOrCreate
