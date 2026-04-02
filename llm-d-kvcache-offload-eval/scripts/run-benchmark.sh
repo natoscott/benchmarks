@@ -279,7 +279,7 @@ if [ "${USE_LMCACHE_IMAGE}" = "true" ]; then
 
     # Build args array with all lmcache arguments
     # All lmcache configs use --kv-transfer-config and --enable-prefix-caching
-    VLLM_ARGS_ARRAY='["serve","'${MODEL}'","--tensor-parallel-size","'${TENSOR_PARALLEL_SIZE}'","--port","8000","--max-num-seq","1024","--kv-transfer-config","{\"kv_connector\":\"LMCacheConnectorV1\",\"kv_role\":\"kv_both\"}","--enable-prefix-caching"]'
+    VLLM_ARGS_ARRAY='["serve","'${MODEL}'","--tensor-parallel-size","'${TENSOR_PARALLEL_SIZE}'","--port","8000","--max-num-seq","1024","--gpu-memory-utilization","'${GPU_MEMORY_UTILIZATION}'","--kv-transfer-config","{\"kv_connector\":\"LMCacheConnectorV1\",\"kv_role\":\"kv_both\"}","--enable-prefix-caching"]'
 else
     # llm-d images use bash -c with exec vllm serve
     BASE_VLLM_ARGS="exec vllm serve ${MODEL} --tensor-parallel-size ${TENSOR_PARALLEL_SIZE} --port 8000 --max-num-seq 1024 --gpu-memory-utilization ${GPU_MEMORY_UTILIZATION}"
