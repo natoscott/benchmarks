@@ -8,7 +8,6 @@ offload evaluations on NVIDIA GPU hardware.
 ```
 benchmarks/
 ├── llm-d-kvcache-offload-eval/   # llm-d v0.4.0–v0.5.1 KV cache offload (L40S)
-├── rhoai-kvcache-offload-eval/   # RHOAI 3.3 KV cache offload (H200)
 ├── vllm-kvcache-cpu-offload-eval/# vLLM upstream CPU offload benchmarks
 └── scripts/                      # Shared analysis utilities
 ```
@@ -88,12 +87,6 @@ rm -rf "$tmpdir"
 ```
 
 ## Benchmark Scenarios
-
-### rhoai-kvcache-offload-eval
-
-RHOAI 3.3 (vLLM 0.13.0+rhai11) on 1×8×H200. Evaluates `OffloadingConnector`
-CPU KV cache offload across three workload profiles, three models, and three
-replica counts. See [rhoai-kvcache-offload-eval/REPORT.md](rhoai-kvcache-offload-eval/REPORT.md).
 
 ### llm-d-kvcache-offload-eval
 
