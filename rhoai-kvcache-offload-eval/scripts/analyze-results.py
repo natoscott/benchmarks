@@ -736,11 +736,12 @@ def fig_longctx_offload_delta(df):
 
 
 def fig_longctx_latency(df):
-    """Latency delta plot for long-context -- configs with positive offload impact.
+    """Latency delta plot for long-context -- FP8 configs with positive offload impact.
 
     Shows % change in TTFT p90 and TPOT p50 (native-offload-20k vs no-offload)
-    for FP8 at all three replica counts and MoE at replicas=4. Negative values
-    indicate reduced latency with offload.
+    for FP8 at all three replica counts. Negative values indicate reduced latency
+    with offload. MoE is excluded: corrected data shows no positive offload impact
+    for gpt-oss-120b under long-context conditions.
     """
     lctx = df[df["profile"] == "longctx"]
     rates = sorted(lctx["rate"].unique())
@@ -749,7 +750,6 @@ def fig_longctx_latency(df):
         ("Meta-Llama-3.1-70B-Instruct-FP8", 1, "Llama-3.1-70B-FP8  r=1"),
         ("Meta-Llama-3.1-70B-Instruct-FP8", 2, "Llama-3.1-70B-FP8  r=2"),
         ("Meta-Llama-3.1-70B-Instruct-FP8", 4, "Llama-3.1-70B-FP8  r=4"),
-        ("gpt-oss-120b",                    4, "GPT-OSS-120B (MoE)  r=4"),
     ]
     metrics = [
         ("ttft_ms_p90", "TTFT p90 change (%)"),
@@ -757,9 +757,9 @@ def fig_longctx_latency(df):
     ]
     metric_colors = [PALETTE[0], PALETTE[1]]
 
-    fig, axes = plt.subplots(len(metrics), len(panels), figsize=(14, 8), sharey=False)
+    fig, axes = plt.subplots(len(metrics), len(panels), figsize=(11, 8), sharey=False)
     fig.suptitle(
-        "Long-Context Latency Delta (native-offload-20k vs no-offload)\n"
+        "Long-Context Latency Delta -- Llama-3.1-70B-FP8 (native-offload-20k vs no-offload)\n"
         "Negative = latency reduced with offload",
         fontsize=13, y=1.02
     )
