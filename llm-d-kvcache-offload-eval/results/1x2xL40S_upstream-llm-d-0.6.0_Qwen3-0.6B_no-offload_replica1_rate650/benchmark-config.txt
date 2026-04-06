@@ -1,0 +1,31 @@
+Run ID: 1x2xL40S_upstream-llm-d-0.6.0_Qwen3-0.6B_no-offload_replica1_rate650
+Date: Sun 05 Apr 2026 14:20:40 AEST
+Target: http://llm-d-inference-gateway-istio:80
+Rate Type: concurrent
+Rate (Concurrency): 650
+Max Seconds: 120
+Random Seed: 889
+Prompt Tokens: 128
+Output Tokens: 128
+Prefix Tokens: 10000
+Prefix Count: 1300
+Turns: 5
+Max Requests (Sample Requests): 6500
+Hardware: 1x2xL40S
+Software: upstream-llm-d-0.6.0
+Model: Qwen/Qwen3-0.6B
+Model Name: Qwen3-0.6B
+Parameters: no-offload
+GPU Memory Utilization: 0.9
+Replicas: 1
+Experiment Name: 
+Namespace: llm-d-pfc-cpu
+Interactive Pod: guidellm-855d7b69d6-8ch5l
+PCP Pods: pcp-7bfc9c778-mj8nm
+PCP Pod Count: 1
+Inference Deployment: llm-d-model-server
+vLLM Extra Args: 
+vLLM Env Vars: 
+EPP Backend: in-memory
+EPP ConfigMap: llm-d-infpool-epp
+EPP Deployment: llm-d-infpool-epp
