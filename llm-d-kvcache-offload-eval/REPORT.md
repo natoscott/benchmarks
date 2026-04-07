@@ -101,6 +101,39 @@ Re-runs at per-model reduced `gpu_memory_utilization` to create comparable KV-ca
 
 External KV cache hit rates (v0.5.1 native-offload-20k at mempress gmu): 0.6B 26.9%, 8B 13.7%, 14B 8.5%, 32B-AWQ 2.2%. Equivalent v0.4.0 configurations show near-zero external cache activity.
 
+### LMCache CPU Offload: v0.4.0 → v0.5.1 → v0.6.0 (default gmu=0.9)
+
+Values are % throughput delta vs same-version no-offload baseline. LMCache versions: v0.3.7 (v0.4.0), v0.3.15 (v0.5.1), v0.4.2 (v0.6.0).
+
+**lmcache-local:**
+
+| Model | v0.4.0 | v0.5.1 | v0.6.0 |
+|-------|:------:|:------:|:------:|
+| Qwen3-0.6B | -13.6% | -4.9% | -17.6% |
+| Qwen3-8B | -5.6% | -0.9% | -1.6% |
+| Qwen3-14B | +11.8% | +7.3% | -1.9% |
+| Qwen3-32B-AWQ | -12.7% | -56.2% | -63.8% |
+
+**lmcache-valkey:**
+
+| Model | v0.4.0 | v0.5.1 | v0.6.0 |
+|-------|:------:|:------:|:------:|
+| Qwen3-0.6B | -13.0% | -4.7% | -2.2% |
+| Qwen3-8B | -6.5% | +0.9% | -28.1%† |
+| Qwen3-14B | +13.0% | +7.3% | +1.9% |
+| Qwen3-32B-AWQ | -12.7% | -58.3% | -61.7% |
+
+†Qwen3-8B lmcache-valkey v0.6.0: -28.1% throughput with 9.4× TTFT increase at rate=50 (0.696 s → 6.555 s); Valkey round-trip latency accumulation under concurrency.
+
+### LMCache CPU Offload at Matched Memory Pressure (gmu=0.55–0.70)
+
+| Model | v0.4.0 local | v0.4.0 valkey | v0.5.1 local | v0.5.1 valkey | v0.6.0 local | v0.6.0 valkey |
+|-------|:------------:|:-------------:|:------------:|:-------------:|:------------:|:-------------:|
+| Qwen3-0.6B | +18.5% | +19.5% | -4.7% | -5.3% | -18.7% | -9.6% |
+| Qwen3-8B | -9.2% | -7.3% | +1.8% | +0.9% | 0.0% | +3.1% |
+| Qwen3-14B | -12.9% | -17.7% | -3.0% | -1.5% | -1.5% | -1.5% |
+| Qwen3-32B-AWQ | -11.4% | -11.4% | -2.1% | -2.1% | not run | not run |
+
 ### Filesystem Offload (v0.5.1 only)
 
 | Config | Qwen3-0.6B | Qwen3-8B | Qwen3-14B | Qwen3-32B-AWQ |

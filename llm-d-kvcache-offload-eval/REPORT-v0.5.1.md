@@ -596,7 +596,7 @@ For 0.6B and 8B, v0.5.1 shows lower offload overhead than v0.4.0 at matched memo
 
 Results across all v0.5.1 configurations and experiments (gmu=0.9 and memory-pressure runs):
 
-1. **Qwen3-14B** shows throughput above the no-offload baseline for all offload types at gmu=0.9: native-offload-20k +14.5%, lmcache-local +7.3%, lmcache-valkey +7.3%, cpu+fs-offload-20k +7.3%, fs-offload +3.6%. All other models show throughput reduction under all offload configurations at gmu=0.9.
+1. **Qwen3-14B** shows throughput above the no-offload baseline for all offload types at gmu=0.9: native-offload-20k +14.5%, lmcache-local +7.3%, lmcache-valkey +7.3%, cpu+fs-offload-20k +7.3%, fs-offload +3.6%. All other models show throughput reduction under all offload configurations at gmu=0.9. The identical +7.3% figure for three configurations reflects convergence to the same measured peak (62.93 tok/s at rate=50), not a data error — the three configs diverge at other concurrency levels.
 
 2. **Qwen3-14B no-offload** regressed from v0.5.0 to v0.5.1: 66.1 → 58.7 tok/s (-11.2%), returning to the v0.4.0 value. All other models are stable vs v0.5.0.
 
