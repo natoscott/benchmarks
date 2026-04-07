@@ -63,7 +63,7 @@ This repository contains performance evaluations of KV-cache management strategi
 
 ## Cross-Version Summary
 
-CPU KV-cache offload provides throughput gains when GPU KV-cache is constrained. On 2× NVIDIA L40S, Qwen3-14B FP16 is the naturally constrained model at default gmu=0.9 (20.58 GiB GPU KV-cache). Reducing `gpu_memory_utilization` creates pressure for all model sizes and reveals broader offload benefit. v0.5.1 (vLLM 0.15.1) substantially reduces offload overhead vs v0.4.0 (vLLM 0.11.2). v0.6.0 (vLLM 0.17.1) delivers large no-offload baseline gains for 0.6B and 8B models.
+CPU KV-cache offload provides throughput gains when GPU KV-cache is constrained. On 2× NVIDIA L40S, only Qwen3-14B FP16 is naturally constrained at default gmu=0.9 (20.58 GiB GPU KV-cache). Reducing `gpu_memory_utilization` creates pressure for all model sizes and provides a more complete characterisation of offload behaviour. The memory-pressure results are presented first as the primary result set; gmu=0.9 results follow as the unconstrained reference condition.
 
 ### No-Offload Baseline Throughput (tok/s)
 
@@ -74,20 +74,9 @@ CPU KV-cache offload provides throughput gains when GPU KV-cache is constrained.
 | Qwen3-14B | 58.7 | 66.1 | 58.7 | 55.5 |
 | Qwen3-32B-AWQ | 49.2 | 51.2 | 51.2 | 50.1 |
 
-### Native CPU Offload: v0.4.0 → v0.5.0 → v0.5.1 → v0.6.0 (default gmu=0.9)
+### Native CPU Offload at Matched Memory Pressure (gmu=0.55–0.70) — primary result set
 
-| Model | v0.4.0 (10k) | v0.5.0 (20k) | v0.5.1 (20k) | v0.6.0 (20k) |
-|-------|:------------:|:------------:|:------------:|:------------:|
-| Qwen3-0.6B | -29.1% | -0.3% | -2.2% | **+0.3%** |
-| Qwen3-8B | -36.5% | -26.1% | -29.9% | -6.5% |
-| Qwen3-14B | +0.6% | -1.6% | **+14.5%** | +1.9% |
-| Qwen3-32B-AWQ | -1.0% | -58.4% | -58.3% | -63.8% |
-
-Values are % throughput delta vs same-version no-offload baseline. Block counts are not directly comparable: v0.4.0 used `num_cpu_blocks`; v0.5.0+ use `cpu_bytes_to_use` (API changed in vLLM 0.15.x).
-
-### Native CPU Offload at Matched Memory Pressure (gmu=0.55–0.70)
-
-Re-runs at per-model reduced `gpu_memory_utilization` to create comparable KV-cache pressure across versions:
+Per-model reduced `gpu_memory_utilization` creates comparable KV-cache pressure across all model sizes and versions:
 
 | Model | v0.4.0 nat-10k | v0.4.0 nat-20k | v0.5.1 nat-20k | v0.6.0 nat-20k |
 |-------|:--------------:|:--------------:|:--------------:|:--------------:|
@@ -101,6 +90,28 @@ Re-runs at per-model reduced `gpu_memory_utilization` to create comparable KV-ca
 
 External KV cache hit rates (v0.5.1 native-offload-20k at mempress gmu): 0.6B 26.9%, 8B 13.7%, 14B 8.5%, 32B-AWQ 2.2%. Equivalent v0.4.0 configurations show near-zero external cache activity.
 
+### LMCache CPU Offload at Matched Memory Pressure (gmu=0.55–0.70) — primary result set
+
+| Model | v0.4.0 local | v0.4.0 valkey | v0.5.1 local | v0.5.1 valkey | v0.6.0 local | v0.6.0 valkey |
+|-------|:------------:|:-------------:|:------------:|:-------------:|:------------:|:-------------:|
+| Qwen3-0.6B | +18.5% | +19.5% | -4.7% | -5.3% | -18.7% | -9.6% |
+| Qwen3-8B | -9.2% | -7.3% | +1.8% | +0.9% | 0.0% | +3.1% |
+| Qwen3-14B | -12.9% | -17.7% | -3.0% | -1.5% | -1.5% | -1.5% |
+| Qwen3-32B-AWQ | -11.4% | -11.4% | -2.1% | -2.1% | not run | not run |
+
+### Native CPU Offload: v0.4.0 → v0.5.0 → v0.5.1 → v0.6.0 (default gmu=0.9)
+
+At gmu=0.9 only Qwen3-14B is GPU KV-cache constrained on this hardware; other models show overhead from offload rather than benefit.
+
+| Model | v0.4.0 (10k) | v0.5.0 (20k) | v0.5.1 (20k) | v0.6.0 (20k) |
+|-------|:------------:|:------------:|:------------:|:------------:|
+| Qwen3-0.6B | -29.1% | -0.3% | -2.2% | **+0.3%** |
+| Qwen3-8B | -36.5% | -26.1% | -29.9% | -6.5% |
+| Qwen3-14B | +0.6% | -1.6% | **+14.5%** | +1.9% |
+| Qwen3-32B-AWQ | -1.0% | -58.4% | -58.3% | -63.8% |
+
+Values are % throughput delta vs same-version no-offload baseline. Block counts are not directly comparable: v0.4.0 used `num_cpu_blocks`; v0.5.0+ use `cpu_bytes_to_use` (API changed in vLLM 0.15.x).
+
 ### LMCache CPU Offload: v0.4.0 → v0.5.1 → v0.6.0 (default gmu=0.9)
 
 Values are % throughput delta vs same-version no-offload baseline. LMCache versions: v0.3.7 (v0.4.0), v0.3.15 (v0.5.1), v0.4.2 (v0.6.0).
@@ -113,15 +124,6 @@ Values are % throughput delta vs same-version no-offload baseline. LMCache versi
 | Qwen3-32B-AWQ | -12.7% | -12.7% | -56.2% | -58.3% | -63.8% | -61.7% |
 
 †Qwen3-8B lmcache-valkey v0.6.0: -28.1% throughput with 9.4× TTFT increase at rate=50 (0.696 s → 6.555 s); Valkey round-trip latency accumulation under concurrency.
-
-### LMCache CPU Offload at Matched Memory Pressure (gmu=0.55–0.70)
-
-| Model | v0.4.0 local | v0.4.0 valkey | v0.5.1 local | v0.5.1 valkey | v0.6.0 local | v0.6.0 valkey |
-|-------|:------------:|:-------------:|:------------:|:-------------:|:------------:|:-------------:|
-| Qwen3-0.6B | +18.5% | +19.5% | -4.7% | -5.3% | -18.7% | -9.6% |
-| Qwen3-8B | -9.2% | -7.3% | +1.8% | +0.9% | 0.0% | +3.1% |
-| Qwen3-14B | -12.9% | -17.7% | -3.0% | -1.5% | -1.5% | -1.5% |
-| Qwen3-32B-AWQ | -11.4% | -11.4% | -2.1% | -2.1% | not run | not run |
 
 ### Filesystem Offload (v0.5.1 only)
 
