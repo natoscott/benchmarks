@@ -105,23 +105,12 @@ External KV cache hit rates (v0.5.1 native-offload-20k at mempress gmu): 0.6B 26
 
 Values are % throughput delta vs same-version no-offload baseline. LMCache versions: v0.3.7 (v0.4.0), v0.3.15 (v0.5.1), v0.4.2 (v0.6.0).
 
-**lmcache-local:**
-
-| Model | v0.4.0 | v0.5.1 | v0.6.0 |
-|-------|:------:|:------:|:------:|
-| Qwen3-0.6B | -13.6% | -4.9% | -17.6% |
-| Qwen3-8B | -5.6% | -0.9% | -1.6% |
-| Qwen3-14B | +11.8% | +7.3% | -1.9% |
-| Qwen3-32B-AWQ | -12.7% | -56.2% | -63.8% |
-
-**lmcache-valkey:**
-
-| Model | v0.4.0 | v0.5.1 | v0.6.0 |
-|-------|:------:|:------:|:------:|
-| Qwen3-0.6B | -13.0% | -4.7% | -2.2% |
-| Qwen3-8B | -6.5% | +0.9% | -28.1%† |
-| Qwen3-14B | +13.0% | +7.3% | +1.9% |
-| Qwen3-32B-AWQ | -12.7% | -58.3% | -61.7% |
+| Model | v0.4.0 local | v0.4.0 valkey | v0.5.1 local | v0.5.1 valkey | v0.6.0 local | v0.6.0 valkey |
+|-------|:------------:|:-------------:|:------------:|:-------------:|:------------:|:-------------:|
+| Qwen3-0.6B | -13.6% | -13.0% | -4.9% | -4.7% | -17.6% | -2.2% |
+| Qwen3-8B | -5.6% | -6.5% | -0.9% | +0.9% | -1.6% | -28.1%† |
+| Qwen3-14B | +11.8% | +13.0% | +7.3% | +7.3% | -1.9% | +1.9% |
+| Qwen3-32B-AWQ | -12.7% | -12.7% | -56.2% | -58.3% | -63.8% | -61.7% |
 
 †Qwen3-8B lmcache-valkey v0.6.0: -28.1% throughput with 9.4× TTFT increase at rate=50 (0.696 s → 6.555 s); Valkey round-trip latency accumulation under concurrency.
 
