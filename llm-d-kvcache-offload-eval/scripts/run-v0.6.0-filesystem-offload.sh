@@ -21,10 +21,13 @@ export INFERENCE_DEPLOYMENT="${INFERENCE_DEPLOYMENT:-llm-d-model-server}"
 export TENSOR_PARALLEL_SIZE="${TENSOR_PARALLEL_SIZE:-2}"
 export GPUS_PER_REPLICA="${TENSOR_PARALLEL_SIZE}"
 
-# llmd_fs_connector wheel — v0.18.0, built for vLLM 0.17.1 (llm-d-cuda:v0.6.0 / Python 3.12)
-FS_WHEEL_PATH="/data/llmd_fs_connector-0.18.0-cp312-cp312-linux_x86_64.whl"
+# llmd_fs_connector wheel — v0.18.0 built with -static-libstdc++ (llm-d-kv-cache PR#498).
+# Statically links libstdc++ to avoid GLIBCXX_3.4.30 runtime dependency missing in
+# llm-d-cuda:v0.6.0. No LD_PRELOAD workaround required.
+# Staged on model-storage-pvc as /data/llmd_fs_connector-0.18-cp312-cp312-linux_x86_64.whl
+# (copied from the -static- named artifact with valid wheel filename for pip).
+FS_WHEEL_PATH="/data/llmd_fs_connector-0.18-cp312-cp312-linux_x86_64.whl"
 FS_PACKAGES_DIR="/tmp/llmd_packages"
-NSIGHT_LIBSTDCPP="/opt/nvidia/nsight-compute/2025.2.1/host/linux-desktop-glibc_2_11_3-x64/libstdc++.so.6"
 
 # ---------------------------------------------------------------------------
 # One-time setup: ensure kvcache-storage-pvc is mounted
@@ -80,16 +83,16 @@ for replicas in ${REPLICAS}; do
             case "${run}" in
                 "fs-offload")
                     export CONTAINER_IMAGE="ghcr.io/llm-d/llm-d-cuda:v0.6.0"
-                    export VLLM_EXTRA_ARGS="--kv-transfer-config '{\"kv_connector\":\"OffloadingConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"spec_name\":\"SharedStorageOffloadingSpec\",\"shared_storage_path\":\"/kvcache/kv-cache/\",\"block_size\":256,\"threads_per_gpu\":64,\"spec_module_path\":\"llmd_fs_backend.spec\"}}' --distributed-executor-backend mp"
-                    export VLLM_ENV_VARS="PYTHONHASHSEED=42 PYTHONPATH=${FS_PACKAGES_DIR} LD_PRELOAD=${NSIGHT_LIBSTDCPP}"
+                    export VLLM_EXTRA_ARGS="--kv-transfer-config '{\"kv_connector\":\"OffloadingConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"spec_name\":\"SharedStorageOffloadingSpec\",\"shared_storage_path\":\"/kvcache/kv-cache/\",\"block_size\":256,\"threads_per_gpu\":128,\"spec_module_path\":\"llmd_fs_backend.spec\"}}' --distributed-executor-backend mp"
+                    export VLLM_ENV_VARS="PYTHONHASHSEED=42 PYTHONPATH=${FS_PACKAGES_DIR}"
                     export EPP_BACKEND_CONFIG="in-memory"
                     export USE_LMCACHE_IMAGE=""
                     export VLLM_PRE_CMD="pip3.12 install --quiet --target ${FS_PACKAGES_DIR} ${FS_WHEEL_PATH} && mkdir -p /kvcache/kv-cache"
                     ;;
                 "cpu+fs-offload-20k")
                     export CONTAINER_IMAGE="ghcr.io/llm-d/llm-d-cuda:v0.6.0"
-                    export VLLM_EXTRA_ARGS="--kv-transfer-config '{\"kv_connector\":\"MultiConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"connectors\":[{\"kv_connector\":\"OffloadingConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"cpu_bytes_to_use\":${CPU_BYTES_20K}}},{\"kv_connector\":\"OffloadingConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"spec_name\":\"SharedStorageOffloadingSpec\",\"shared_storage_path\":\"/kvcache/kv-cache/\",\"block_size\":256,\"threads_per_gpu\":64,\"spec_module_path\":\"llmd_fs_backend.spec\"}}]}}' --distributed-executor-backend mp"
-                    export VLLM_ENV_VARS="PYTHONHASHSEED=42 PYTHONPATH=${FS_PACKAGES_DIR} LD_PRELOAD=${NSIGHT_LIBSTDCPP}"
+                    export VLLM_EXTRA_ARGS="--kv-transfer-config '{\"kv_connector\":\"MultiConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"connectors\":[{\"kv_connector\":\"OffloadingConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"cpu_bytes_to_use\":${CPU_BYTES_20K}}},{\"kv_connector\":\"OffloadingConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"spec_name\":\"SharedStorageOffloadingSpec\",\"shared_storage_path\":\"/kvcache/kv-cache/\",\"block_size\":256,\"threads_per_gpu\":128,\"spec_module_path\":\"llmd_fs_backend.spec\"}}]}}' --distributed-executor-backend mp"
+                    export VLLM_ENV_VARS="PYTHONHASHSEED=42 PYTHONPATH=${FS_PACKAGES_DIR}"
                     export EPP_BACKEND_CONFIG="in-memory"
                     export USE_LMCACHE_IMAGE=""
                     export VLLM_PRE_CMD="pip3.12 install --quiet --target ${FS_PACKAGES_DIR} ${FS_WHEEL_PATH} && mkdir -p /kvcache/kv-cache"
