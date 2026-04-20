@@ -1,0 +1,75 @@
+=== WRITE TEST ===
+pvc-write: (g=0): rw=write, bs=(R) 1024KiB-1024KiB, (W) 1024KiB-1024KiB, (T) 1024KiB-1024KiB, ioengine=libaio, iodepth=64
+...
+fio-3.41
+Starting 4 processes
+pvc-write: Laying out IO file (1 file / 3072MiB)
+pvc-write: Laying out IO file (1 file / 3072MiB)
+pvc-write: Laying out IO file (1 file / 3072MiB)
+pvc-write: Laying out IO file (1 file / 3072MiB)
+
+pvc-write: (groupid=0, jobs=4): err= 0: pid=5: Mon Apr 20 21:48:50 2026
+  write: IOPS=992, BW=993MiB/s (1041MB/s)(58.4GiB/60254msec); 0 zone resets
+    slat (usec): min=38, max=257038, avg=239.92, stdev=5336.53
+    clat (msec): min=6, max=523, avg=257.61, stdev=98.69
+     lat (msec): min=6, max=524, avg=257.85, stdev=98.55
+    clat percentiles (msec):
+     |  1.00th=[   28],  5.00th=[   75], 10.00th=[  121], 20.00th=[  176],
+     | 30.00th=[  211], 40.00th=[  249], 50.00th=[  271], 60.00th=[  288],
+     | 70.00th=[  305], 80.00th=[  321], 90.00th=[  380], 95.00th=[  430],
+     | 99.00th=[  489], 99.50th=[  498], 99.90th=[  510], 99.95th=[  510],
+     | 99.99th=[  518]
+   bw (  KiB/s): min=552960, max=1591296, per=100.00%, avg=1016490.04, stdev=57072.32, samples=480
+   iops        : min=  540, max= 1554, avg=992.65, stdev=55.73, samples=480
+  lat (msec)   : 10=0.04%, 20=0.44%, 50=2.37%, 100=4.85%, 250=33.10%
+  lat (msec)   : 500=58.86%, 750=0.34%
+  cpu          : usr=2.25%, sys=0.39%, ctx=23433, majf=0, minf=942
+  IO depths    : 1=0.1%, 2=0.1%, 4=0.1%, 8=0.1%, 16=0.1%, 32=0.2%, >=64=99.6%
+     submit    : 0=0.0%, 4=100.0%, 8=0.0%, 16=0.0%, 32=0.0%, 64=0.0%, >=64=0.0%
+     complete  : 0=0.0%, 4=100.0%, 8=0.0%, 16=0.0%, 32=0.0%, 64=0.1%, >=64=0.0%
+     issued rwts: total=0,59815,0,0 short=0,0,0,0 dropped=0,0,0,0
+     latency   : target=0, window=0, percentile=100.00%, depth=64
+
+Run status group 0 (all jobs):
+  WRITE: bw=993MiB/s (1041MB/s), 993MiB/s-993MiB/s (1041MB/s-1041MB/s), io=58.4GiB (62.7GB), run=60254-60254msec
+
+Disk stats (read/write):
+  vdd: ios=0/60167, sectors=0/122193976, merge=0/224, ticks=0/15213314, in_queue=15213313, util=99.88%
+=== READ TEST ===
+pvc-read: (g=0): rw=read, bs=(R) 1024KiB-1024KiB, (W) 1024KiB-1024KiB, (T) 1024KiB-1024KiB, ioengine=libaio, iodepth=64
+...
+fio-3.41
+Starting 4 processes
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+
+pvc-read: (groupid=0, jobs=4): err= 0: pid=13: Mon Apr 20 21:50:06 2026
+  read: IOPS=985, BW=986MiB/s (1034MB/s)(58.0GiB/60262msec)
+    slat (usec): min=2, max=434, avg= 9.26, stdev=15.73
+    clat (usec): min=708, max=521281, avg=259562.36, stdev=28176.62
+     lat (usec): min=713, max=521291, avg=259571.62, stdev=28170.57
+    clat percentiles (msec):
+     |  1.00th=[   31],  5.00th=[  262], 10.00th=[  262], 20.00th=[  262],
+     | 30.00th=[  262], 40.00th=[  262], 50.00th=[  262], 60.00th=[  264],
+     | 70.00th=[  264], 80.00th=[  264], 90.00th=[  264], 95.00th=[  264],
+     | 99.00th=[  264], 99.50th=[  268], 99.90th=[  443], 99.95th=[  468],
+     | 99.99th=[  518]
+   bw (  KiB/s): min=868352, max=2123776, per=100.00%, avg=1009373.87, stdev=29583.29, samples=480
+   iops        : min=  848, max= 2074, avg=985.72, stdev=28.89, samples=480
+  lat (usec)   : 750=0.01%, 1000=0.02%
+  lat (msec)   : 2=0.15%, 4=0.22%, 10=0.55%, 20=0.03%, 50=0.05%
+  lat (msec)   : 100=0.09%, 250=0.26%, 500=98.60%, 750=0.03%
+  cpu          : usr=0.05%, sys=0.25%, ctx=38873, majf=0, minf=169
+  IO depths    : 1=0.1%, 2=0.1%, 4=0.1%, 8=0.1%, 16=0.1%, 32=0.2%, >=64=99.6%
+     submit    : 0=0.0%, 4=100.0%, 8=0.0%, 16=0.0%, 32=0.0%, 64=0.0%, >=64=0.0%
+     complete  : 0=0.0%, 4=100.0%, 8=0.0%, 16=0.0%, 32=0.0%, 64=0.1%, >=64=0.0%
+     issued rwts: total=59396,0,0,0 short=0,0,0,0 dropped=0,0,0,0
+     latency   : target=0, window=0, percentile=100.00%, depth=64
+
+Run status group 0 (all jobs):
+   READ: bw=986MiB/s (1034MB/s), 986MiB/s-986MiB/s (1034MB/s-1034MB/s), io=58.0GiB (62.3GB), run=60262-60262msec
+
+Disk stats (read/write):
+  vdd: ios=59311/13, sectors=121468928/280, merge=0/22, ticks=15367360/94, in_queue=15367454, util=99.88%

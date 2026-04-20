@@ -1,0 +1,132 @@
+=== WRITE TEST ===
+pvc-write: (g=0): rw=write, bs=(R) 1024KiB-1024KiB, (W) 1024KiB-1024KiB, (T) 1024KiB-1024KiB, ioengine=libaio, iodepth=64
+...
+fio-3.41
+Starting 64 processes
+
+pvc-write: (groupid=0, jobs=64): err= 0: pid=5: Mon Apr 20 18:51:36 2026
+  write: IOPS=756, BW=757MiB/s (794MB/s)(62.1GiB/83978msec); 0 zone resets
+    slat (usec): min=758, max=27248k, avg=84010.37, stdev=907776.31
+    clat (usec): min=6, max=79986k, avg=5283345.05, stdev=16549386.57
+     lat (msec): min=163, max=79988, avg=5367.36, stdev=16714.02
+    clat percentiles (msec):
+     |  1.00th=[  167],  5.00th=[  174], 10.00th=[  180], 20.00th=[  192],
+     | 30.00th=[  203], 40.00th=[  215], 50.00th=[  226], 60.00th=[  247],
+     | 70.00th=[  321], 80.00th=[  439], 90.00th=[10134], 95.00th=[17113],
+     | 99.00th=[17113], 99.50th=[17113], 99.90th=[17113], 99.95th=[17113],
+     | 99.99th=[17113]
+   bw (  MiB/s): min=  127, max=20061, per=100.00%, avg=2077.57, stdev=82.00, samples=3689
+   iops        : min=  127, max=20056, avg=2076.91, stdev=81.97, samples=3689
+  lat (usec)   : 10=0.03%, 20=0.07%, 50=0.01%
+  lat (msec)   : 250=60.64%, 500=22.64%, 750=4.49%, 1000=0.90%, 2000=0.24%
+  lat (msec)   : >=2000=10.98%
+  cpu          : usr=0.13%, sys=4.04%, ctx=739691, majf=0, minf=34748
+  IO depths    : 1=0.1%, 2=0.2%, 4=0.4%, 8=0.8%, 16=1.6%, 32=3.2%, >=64=93.7%
+     submit    : 0=0.0%, 4=100.0%, 8=0.0%, 16=0.0%, 32=0.0%, 64=0.0%, >=64=0.0%
+     complete  : 0=0.0%, 4=99.9%, 8=0.0%, 16=0.0%, 32=0.0%, 64=0.1%, >=64=0.0%
+     issued rwts: total=0,63551,0,0 short=0,0,0,0 dropped=0,0,0,0
+     latency   : target=0, window=0, percentile=100.00%, depth=64
+
+Run status group 0 (all jobs):
+  WRITE: bw=757MiB/s (794MB/s), 757MiB/s-757MiB/s (794MB/s-794MB/s), io=62.1GiB (66.6GB), run=83978-83978msec
+
+Disk stats (read/write):
+  vdd: ios=64/7086, sectors=512/16931248, merge=0/74, ticks=259/10910636, in_queue=10910896, util=99.38%
+=== READ TEST ===
+pvc-read: (g=0): rw=read, bs=(R) 1024KiB-1024KiB, (W) 1024KiB-1024KiB, (T) 1024KiB-1024KiB, ioengine=libaio, iodepth=64
+...
+fio-3.41
+Starting 64 processes
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+
+pvc-read: (groupid=0, jobs=64): err= 0: pid=73: Mon Apr 20 19:27:56 2026
+  read: IOPS=87, BW=87.2MiB/s (91.4MB/s)(6104MiB/70030msec)
+    slat (usec): min=105, max=10193k, avg=678035.51, stdev=2337060.74
+    clat (usec): min=8, max=48631k, avg=29640651.75, stdev=12173337.21
+     lat (msec): min=1039, max=49527, avg=30318.69, stdev=11988.54
+    clat percentiles (usec):
+     |  1.00th=[      22],  5.00th=[10133439], 10.00th=[10267657],
+     | 20.00th=[17112761], 30.00th=[17112761], 40.00th=[17112761],
+     | 50.00th=[17112761], 60.00th=[17112761], 70.00th=[17112761],
+     | 80.00th=[17112761], 90.00th=[17112761], 95.00th=[17112761],
+     | 99.00th=[17112761], 99.50th=[17112761], 99.90th=[17112761],
+     | 99.95th=[17112761], 99.99th=[17112761]
+   bw (  MiB/s): min= 1315, max= 2081, per=100.00%, avg=1580.11, stdev=13.84, samples=197
+   iops        : min= 1314, max= 2081, avg=1578.97, stdev=13.85, samples=197
+  lat (usec)   : 10=0.43%, 20=0.57%, 50=0.05%
+  lat (msec)   : 2000=0.13%, >=2000=98.82%
+  cpu          : usr=0.00%, sys=0.06%, ctx=1313, majf=0, minf=2748
+  IO depths    : 1=1.0%, 2=2.1%, 4=4.2%, 8=8.4%, 16=16.8%, 32=33.6%, >=64=33.9%
+     submit    : 0=0.0%, 4=100.0%, 8=0.0%, 16=0.0%, 32=0.0%, 64=0.0%, >=64=0.0%
+     complete  : 0=0.0%, 4=97.0%, 8=0.0%, 16=0.0%, 32=0.0%, 64=3.0%, >=64=0.0%
+     issued rwts: total=6104,0,0,0 short=0,0,0,0 dropped=0,0,0,0
+     latency   : target=0, window=0, percentile=100.00%, depth=64
+
+Run status group 0 (all jobs):
+   READ: bw=87.2MiB/s (91.4MB/s), 87.2MiB/s-87.2MiB/s (91.4MB/s-91.4MB/s), io=6104MiB (6401MB), run=70030-70030msec
+
+Disk stats (read/write):
+  vdd: ios=6944/4, sectors=14404096/104, merge=198/9, ticks=61144621/302, in_queue=61144924, util=99.87%

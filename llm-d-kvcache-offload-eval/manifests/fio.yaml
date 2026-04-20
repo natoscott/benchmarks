@@ -1,0 +1,52 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kvcache-storage-fio-6kiops-q256
+  namespace: llm-d-pfc-cpu
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: fio
+        image: nixery.dev/shell/fio
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            mkdir -p /data/fio && \
+            echo "=== WRITE TEST ===" && \
+            fio --name=pvc-write \
+              --directory=/data/fio \
+              --direct=1 \
+              --rw=write \
+              --bs=1M \
+              --ioengine=libaio \
+              --iodepth=64 \
+              --numjobs=4 \
+              --size=3G \
+              --runtime=60 \
+              --time_based \
+              --group_reporting && \
+            rm -rf /data/fio && mkdir -p /data/fio && \
+            echo "=== READ TEST ===" && \
+            fio --name=pvc-read \
+              --directory=/data/fio \
+              --direct=1 \
+              --rw=read \
+              --bs=1M \
+              --ioengine=libaio \
+              --iodepth=64 \
+              --numjobs=4 \
+              --size=3G \
+              --runtime=60 \
+              --time_based \
+              --group_reporting && \
+            rm -rf /data/fio
+        volumeMounts:
+        - name: kvcache-storage
+          mountPath: /data
+      volumes:
+      - name: kvcache-storage
+        persistentVolumeClaim:
+          claimName: kvcache-storage-pvc

@@ -1,0 +1,194 @@
+=== WRITE TEST ===
+pvc-write: (g=0): rw=write, bs=(R) 1024KiB-1024KiB, (W) 1024KiB-1024KiB, (T) 1024KiB-1024KiB, ioengine=libaio, iodepth=64
+...
+fio-3.41
+Starting 64 processes
+pvc-write: Laying out IO file (1 file / 3072MiB)
+pvc-write: Laying out IO file (1 file / 3072MiB)
+pvc-write: Laying out IO file (1 file / 3072MiB)
+pvc-write: Laying out IO file (1 file / 3072MiB)
+pvc-write: Laying out IO file (1 file / 3072MiB)
+pvc-write: Laying out IO file (1 file / 3072MiB)
+pvc-write: Laying out IO file (1 file / 3072MiB)
+pvc-write: Laying out IO file (1 file / 3072MiB)
+pvc-write: Laying out IO file (1 file / 3072MiB)
+pvc-write: Laying out IO file (1 file / 3072MiB)
+pvc-write: Laying out IO file (1 file / 3072MiB)
+pvc-write: Laying out IO file (1 file / 3072MiB)
+pvc-write: Laying out IO file (1 file / 3072MiB)
+pvc-write: Laying out IO file (1 file / 3072MiB)
+pvc-write: Laying out IO file (1 file / 3072MiB)
+pvc-write: Laying out IO file (1 file / 3072MiB)
+pvc-write: Laying out IO file (1 file / 3072MiB)
+pvc-write: Laying out IO file (1 file / 3072MiB)
+pvc-write: Laying out IO file (1 file / 3072MiB)
+pvc-write: Laying out IO file (1 file / 3072MiB)
+pvc-write: Laying out IO file (1 file / 3072MiB)
+pvc-write: Laying out IO file (1 file / 3072MiB)
+pvc-write: Laying out IO file (1 file / 3072MiB)
+pvc-write: Laying out IO file (1 file / 3072MiB)
+pvc-write: Laying out IO file (1 file / 3072MiB)
+pvc-write: Laying out IO file (1 file / 3072MiB)
+pvc-write: Laying out IO file (1 file / 3072MiB)
+pvc-write: Laying out IO file (1 file / 3072MiB)
+pvc-write: Laying out IO file (1 file / 3072MiB)
+pvc-write: Laying out IO file (1 file / 3072MiB)
+pvc-write: Laying out IO file (1 file / 3072MiB)
+pvc-write: Laying out IO file (1 file / 3072MiB)
+pvc-write: Laying out IO file (1 file / 3072MiB)
+pvc-write: Laying out IO file (1 file / 3072MiB)
+pvc-write: Laying out IO file (1 file / 3072MiB)
+pvc-write: Laying out IO file (1 file / 3072MiB)
+pvc-write: Laying out IO file (1 file / 3072MiB)
+pvc-write: Laying out IO file (1 file / 3072MiB)
+pvc-write: Laying out IO file (1 file / 3072MiB)
+pvc-write: Laying out IO file (1 file / 3072MiB)
+pvc-write: Laying out IO file (1 file / 3072MiB)
+pvc-write: Laying out IO file (1 file / 3072MiB)
+pvc-write: Laying out IO file (1 file / 3072MiB)
+pvc-write: Laying out IO file (1 file / 3072MiB)
+pvc-write: Laying out IO file (1 file / 3072MiB)
+pvc-write: Laying out IO file (1 file / 3072MiB)
+pvc-write: Laying out IO file (1 file / 3072MiB)
+pvc-write: Laying out IO file (1 file / 3072MiB)
+pvc-write: Laying out IO file (1 file / 3072MiB)
+pvc-write: Laying out IO file (1 file / 3072MiB)
+pvc-write: Laying out IO file (1 file / 3072MiB)
+pvc-write: Laying out IO file (1 file / 3072MiB)
+pvc-write: Laying out IO file (1 file / 3072MiB)
+pvc-write: Laying out IO file (1 file / 3072MiB)
+pvc-write: Laying out IO file (1 file / 3072MiB)
+pvc-write: Laying out IO file (1 file / 3072MiB)
+pvc-write: Laying out IO file (1 file / 3072MiB)
+pvc-write: Laying out IO file (1 file / 3072MiB)
+pvc-write: Laying out IO file (1 file / 3072MiB)
+pvc-write: Laying out IO file (1 file / 3072MiB)
+pvc-write: Laying out IO file (1 file / 3072MiB)
+pvc-write: Laying out IO file (1 file / 3072MiB)
+pvc-write: Laying out IO file (1 file / 3072MiB)
+pvc-write: Laying out IO file (1 file / 3072MiB)
+
+pvc-write: (groupid=0, jobs=64): err= 0: pid=5: Mon Apr 20 21:38:12 2026
+  write: IOPS=889, BW=890MiB/s (933MB/s)(53.0GiB/60995msec); 0 zone resets
+    slat (usec): min=36, max=4184.4k, avg=260.26, stdev=18009.14
+    clat (msec): min=21, max=10269, avg=4601.40, stdev=2263.69
+     lat (msec): min=21, max=10269, avg=4601.66, stdev=2263.62
+    clat percentiles (msec):
+     |  1.00th=[   99],  5.00th=[  321], 10.00th=[  634], 20.00th=[ 2735],
+     | 30.00th=[ 4665], 40.00th=[ 5000], 50.00th=[ 5000], 60.00th=[ 5067],
+     | 70.00th=[ 5403], 80.00th=[ 5604], 90.00th=[ 7282], 95.00th=[ 8490],
+     | 99.00th=[10134], 99.50th=[10268], 99.90th=[10268], 99.95th=[10268],
+     | 99.99th=[10268]
+   bw (  MiB/s): min=  617, max=10008, per=100.00%, avg=5847.31, stdev=49.88, samples=1114
+   iops        : min=  617, max=10006, avg=5846.23, stdev=49.87, samples=1114
+  lat (msec)   : 50=0.08%, 100=0.94%, 250=2.81%, 500=3.96%, 750=4.13%
+  lat (msec)   : 1000=2.66%, 2000=4.84%, >=2000=80.57%
+  cpu          : usr=0.18%, sys=0.04%, ctx=6438, majf=0, minf=624
+  IO depths    : 1=0.1%, 2=0.2%, 4=0.5%, 8=0.9%, 16=1.9%, 32=3.8%, >=64=92.6%
+     submit    : 0=0.0%, 4=100.0%, 8=0.0%, 16=0.0%, 32=0.0%, 64=0.0%, >=64=0.0%
+     complete  : 0=0.0%, 4=99.9%, 8=0.0%, 16=0.0%, 32=0.0%, 64=0.1%, >=64=0.0%
+     issued rwts: total=0,54272,0,0 short=0,0,0,0 dropped=0,0,0,0
+     latency   : target=0, window=0, percentile=100.00%, depth=64
+
+Run status group 0 (all jobs):
+  WRITE: bw=890MiB/s (933MB/s), 890MiB/s-890MiB/s (933MB/s-933MB/s), io=53.0GiB (56.9GB), run=60995-60995msec
+
+Disk stats (read/write):
+  vdd: ios=5414/53189, sectors=11087872/108564608, merge=0/3784, ticks=3335729/155224938, in_queue=158560668, util=100.00%
+=== READ TEST ===
+pvc-read: (g=0): rw=read, bs=(R) 1024KiB-1024KiB, (W) 1024KiB-1024KiB, (T) 1024KiB-1024KiB, ioengine=libaio, iodepth=64
+...
+fio-3.41
+Starting 64 processes
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+pvc-read: Laying out IO file (1 file / 3072MiB)
+
+pvc-read: (groupid=0, jobs=64): err= 0: pid=73: Mon Apr 20 21:43:23 2026
+  read: IOPS=985, BW=985MiB/s (1033MB/s)(61.8GiB/64195msec)
+    slat (usec): min=2, max=2832.6k, avg=259.92, stdev=20530.00
+    clat (msec): min=4, max=8364, avg=4053.05, stdev=773.28
+     lat (msec): min=4, max=8364, avg=4053.31, stdev=773.51
+    clat percentiles (msec):
+     |  1.00th=[   40],  5.00th=[ 2635], 10.00th=[ 4144], 20.00th=[ 4178],
+     | 30.00th=[ 4178], 40.00th=[ 4178], 50.00th=[ 4178], 60.00th=[ 4212],
+     | 70.00th=[ 4212], 80.00th=[ 4212], 90.00th=[ 4212], 95.00th=[ 4212],
+     | 99.00th=[ 5470], 99.50th=[ 6141], 99.90th=[ 8087], 99.95th=[ 8154],
+     | 99.99th=[ 8356]
+   bw (  MiB/s): min=  445, max= 7414, per=100.00%, avg=4660.50, stdev=42.10, samples=1809
+   iops        : min=  440, max= 7412, avg=4660.15, stdev=42.10, samples=1809
+  lat (msec)   : 10=0.01%, 20=0.08%, 50=0.94%, 100=0.06%, 250=0.22%
+  lat (msec)   : 500=0.40%, 750=0.38%, 1000=0.40%, 2000=1.54%, >=2000=95.96%
+  cpu          : usr=0.00%, sys=0.05%, ctx=24121, majf=0, minf=35340
+  IO depths    : 1=0.1%, 2=0.2%, 4=0.4%, 8=0.8%, 16=1.6%, 32=3.2%, >=64=93.6%
+     submit    : 0=0.0%, 4=100.0%, 8=0.0%, 16=0.0%, 32=0.0%, 64=0.0%, >=64=0.0%
+     complete  : 0=0.0%, 4=99.9%, 8=0.0%, 16=0.0%, 32=0.0%, 64=0.1%, >=64=0.0%
+     issued rwts: total=63261,0,0,0 short=0,0,0,0 dropped=0,0,0,0
+     latency   : target=0, window=0, percentile=100.00%, depth=64
+
+Run status group 0 (all jobs):
+   READ: bw=985MiB/s (1033MB/s), 985MiB/s-985MiB/s (1033MB/s-1033MB/s), io=61.8GiB (66.3GB), run=64195-64195msec
+
+Disk stats (read/write):
+  vdd: ios=63873/13, sectors=129533952/360, merge=0/32, ticks=256457927/307, in_queue=256458234, util=99.87%
