@@ -4,10 +4,10 @@ metadata:
   name: kvcache-storage-pvc
   namespace: llm-d-pfc-cpu
   annotations:
-    # Maximum IOPS for KV cache offload
-    ibm.io/iops: "64000"
-    # Maximum throughput for KV cache offload
-    ibm.io/throughput: "1024"
+    # Maximum IOPS for 256 GiB custom Gen1 volume in au-syd (6000 IOPS = 1024 MB/s / 8192 Mbps).
+    # IBM Cloud rejects values above 6000 for this capacity. The original annotation of
+    # 64000 was out of range and silently fell back to 400 IOPS (105 MB/s) at provision time.
+    ibm.io/iops: "6000"
 spec:
   accessModes:
     - ReadWriteOnce
