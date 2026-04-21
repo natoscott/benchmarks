@@ -95,7 +95,21 @@ for replicas in ${REPLICAS}; do
                     export VLLM_ENV_VARS="PYTHONHASHSEED=42 PYTHONPATH=${FS_PACKAGES_DIR}"
                     export EPP_BACKEND_CONFIG="in-memory"
                     export USE_LMCACHE_IMAGE=""
-                    export VLLM_PRE_CMD="pip3.12 install --quiet --target ${FS_PACKAGES_DIR} ${FS_WHEEL_PATH} && mkdir -p /kvcache/kv-cache"
+                    # Workaround for vLLM 0.17.1 bug: MultiConnector registers duplicate Prometheus
+                    # metrics (one per sub-connector). Inject sitecustomize.py via PYTHONPATH so
+                    # prometheus_client silently ignores duplicate registrations at startup.
+                    export VLLM_PRE_CMD="pip3.12 install --quiet --target ${FS_PACKAGES_DIR} ${FS_WHEEL_PATH} && mkdir -p /kvcache/kv-cache && python3.12 -c \"
+import sys, pathlib
+sc = pathlib.Path('${FS_PACKAGES_DIR}/sitecustomize.py')
+sc.write_text('''
+import prometheus_client.registry as _r
+_orig = _r.CollectorRegistry.register
+def _safe(self, c):
+    try: _orig(self, c)
+    except ValueError: pass
+_r.CollectorRegistry.register = _safe
+''')
+\""
                     ;;
                 *)
                     echo "Unknown configuration: ${run}"
