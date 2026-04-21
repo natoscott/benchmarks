@@ -1,0 +1,31 @@
+Run ID: 1x2xL40S_upstream-llm-d-0.6.0_Qwen3-0.6B_fs-offload_replica1_rate400
+Date: Tue 21 Apr 2026 09:16:22 AEST
+Target: http://llm-d-inference-gateway-istio:80
+Rate Type: concurrent
+Rate (Concurrency): 400
+Max Seconds: 120
+Random Seed: 889
+Prompt Tokens: 128
+Output Tokens: 128
+Prefix Tokens: 10000
+Prefix Count: 800
+Turns: 5
+Max Requests (Sample Requests): 4000
+Hardware: 1x2xL40S
+Software: upstream-llm-d-0.6.0
+Model: Qwen/Qwen3-0.6B
+Model Name: Qwen3-0.6B
+Parameters: fs-offload
+GPU Memory Utilization: 0.9
+Replicas: 1
+Experiment Name: 
+Namespace: llm-d-pfc-cpu
+Interactive Pod: guidellm-855d7b69d6-nmjnv
+PCP Pods: pcp-7bfc9c778-zfr7f
+PCP Pod Count: 1
+Inference Deployment: llm-d-model-server
+vLLM Extra Args: --kv-transfer-config '{"kv_connector":"OffloadingConnector","kv_role":"kv_both","kv_connector_extra_config":{"spec_name":"SharedStorageOffloadingSpec","shared_storage_path":"/kvcache/kv-cache/","block_size":256,"threads_per_gpu":128,"spec_module_path":"llmd_fs_backend.spec"}}' --distributed-executor-backend mp
+vLLM Env Vars: PYTHONHASHSEED=42 PYTHONPATH=/tmp/llmd_packages
+EPP Backend: in-memory
+EPP ConfigMap: llm-d-infpool-epp
+EPP Deployment: llm-d-infpool-epp
