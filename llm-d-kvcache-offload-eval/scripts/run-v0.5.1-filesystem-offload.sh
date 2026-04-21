@@ -17,7 +17,7 @@ set -e
 # Configs:
 #   fs-offload  - GPU → filesystem (SharedStorageOffloadingSpec via llmd_fs_connector)
 
-RUNS="${RUNS:-cpu+fs-offload-20k}"
+RUNS="${RUNS:-fs-offload cpu+fs-offload-20k}"
 MODELS="${MODELS:-Qwen/Qwen3-0.6B Qwen/Qwen3-8B Qwen/Qwen3-14B Qwen/Qwen3-32B-AWQ}"
 REPLICAS="${REPLICAS:-1}"
 
