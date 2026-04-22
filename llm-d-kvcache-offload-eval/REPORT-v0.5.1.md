@@ -41,20 +41,18 @@ At default gpu_memory_utilization=0.9, only Qwen3-14B has insufficient GPU KV-ca
 | fs-offload | -58.7% | -41.8% | -40.3% | 0.0% |
 | cpu+fs-offload-20k | -85.6% | -41.8% | -40.3% | -2.1% |
 
-Under memory pressure, native-offload-20k reaches +22.3% for Qwen3-0.6B and +10.4% for Qwen3-14B. LMCache shows near-zero overhead for 8B (+1.8%) and 32B-AWQ (-2.1%) and modest negative deltas for 0.6B and 14B. Filesystem offload shows -40% to -86% at mempress gmu.
+Under memory pressure, native-offload-20k reaches +22.3% for Qwen3-0.6B and +10.4% for Qwen3-14B. LMCache shows near-zero overhead for 8B (+1.8%) and 32B-AWQ (-2.1%) and modest negative deltas for 0.6B and 14B. Mempress fs-offload runs used `threads_per_gpu=64`; see §Filesystem Offload Analysis for the impact of this parameter.
 
 **Peak Throughput at default gpu_memory_utilization=0.9 (unconstrained conditions):**
 
 | Model | no-offload | native-offload-20k | lmcache-local | lmcache-valkey | fs-offload | cpu+fs-offload-20k |
 |-------|:----------:|:------------------:|:-------------:|:--------------:|:----------:|:-----------------:|
-| Qwen3-0.6B | 636.8 tok/s | 622.9 (-2.2%) | 605.9 (-4.9%) | 606.9 (-4.7%) | 268.8¹ (-57.8%) | 211.2¹ (-66.8%) |
-| Qwen3-8B | 114.1 tok/s | 80.0 (-29.9%) | 113.1 (-0.9%) | 115.2 (+0.9%) | 75.7 (-33.6%) | 75.7 (-33.6%) |
-| Qwen3-14B | 58.7 tok/s | 67.2 (+14.5%) | 62.9 (+7.3%) | 62.9 (+7.3%) | 60.8 (+3.6%) | 62.9 (+7.3%) |
-| Qwen3-32B-AWQ | 51.2 tok/s | 21.3 (-58.3%) | 22.4 (-56.2%) | 21.3 (-58.3%) | 22.4 (-56.2%) | 22.4 (-56.2%) |
+| Qwen3-0.6B | 636.8 tok/s | 622.9 (-2.2%) | 605.9 (-4.9%) | 606.9 (-4.7%) | **842.7 (+32.3%)** | **854.4 (+34.2%)** |
+| Qwen3-8B | 114.1 tok/s | 80.0 (-29.9%) | 113.1 (-0.9%) | 115.2 (+0.9%) | **212.3 (+86.0%)** | **188.8 (+65.4%)** |
+| Qwen3-14B | 58.7 tok/s | 67.2 (+14.5%) | 62.9 (+7.3%) | 62.9 (+7.3%) | **183.5 (+212.7%)** | **169.6 (+189.1%)** |
+| Qwen3-32B-AWQ | 51.2 tok/s | 21.3 (-58.3%) | 22.4 (-56.2%) | 21.3 (-58.3%) | 22.4 (-56.2%) | 21.3 (-58.3%) |
 
-¹ *Qwen3-0.6B fs-offload and cpu+fs-offload peaks occur at rate=1 (single-request); sustained throughput at rate=50 is 85.3 tok/s and 25.6 tok/s respectively. These configurations show zero completed requests at rate=300 and rate=500, indicating instability at sustained load.*
-
-At gmu=0.9, all four vLLM-native offload configurations deliver throughput gains for Qwen3-14B (+3.6% to +14.5%); LMCache also gains for 14B (+7.3% both backends). LMCache shows near-zero overhead for 8B (-0.9%/+0.9%) at gmu=0.9, a marked improvement from v0.4.0 (-5.6%/-6.5%).
+At gmu=0.9 with `threads_per_gpu=128`, fs-offload and cpu+fs-offload-20k deliver substantial throughput gains for 0.6B, 8B, and 14B. The gains are driven by high external KV cache hit rates (52–57% for 8B and 14B) which eliminate prefill computation for the 10,000-token shared prefix. Qwen3-32B-AWQ shows throughput reduction under all offload configurations at gmu=0.9. LMCache shows near-zero overhead for 8B (-0.9%/+0.9%) at gmu=0.9, a marked improvement from v0.4.0 (-5.6%/-6.5%).
 
 ---
 
@@ -66,7 +64,7 @@ At gmu=0.9, all four vLLM-native offload configurations deliver throughput gains
 - **GPUs**: 2× NVIDIA L40S (24 GB VRAM each, 48 GB total)
   - Tensor Parallelism: 2 GPUs per model
 - **CPU**: 48 vCPUs
-- **Storage**: IBM VPC block PVC (256 GiB, `ibmc-vpc-block-custom`, 64K IOPS) mounted at `/kvcache` for filesystem offload
+- **Storage**: IBM VPC block PVC (256 GiB, `ibmc-vpc-block-custom`, 6,000 IOPS) mounted at `/kvcache` for filesystem offload
 
 ### Software
 
@@ -126,7 +124,7 @@ vllm serve <model> --tensor-parallel-size 2 --port 8000 --max-num-seq 1024 \
   --kv-transfer-config '{"kv_connector":"OffloadingConnector","kv_role":"kv_both",
     "kv_connector_extra_config":{"spec_name":"SharedStorageOffloadingSpec",
       "shared_storage_path":"/kvcache/kv-cache/","block_size":256,
-      "threads_per_gpu":64,"spec_module_path":"llmd_fs_backend.spec"}}'
+      "threads_per_gpu":128,"spec_module_path":"llmd_fs_backend.spec"}}'
 ```
 
 Runtime workarounds required:
@@ -149,7 +147,7 @@ vllm serve <model> --tensor-parallel-size 2 --port 8000 --max-num-seq 1024 \
       {"kv_connector":"OffloadingConnector","kv_role":"kv_both",
        "kv_connector_extra_config":{"spec_name":"SharedStorageOffloadingSpec",
          "shared_storage_path":"/kvcache/kv-cache/","block_size":256,
-         "threads_per_gpu":64,"spec_module_path":"llmd_fs_backend.spec"}}
+         "threads_per_gpu":128,"spec_module_path":"llmd_fs_backend.spec"}}
     ]}}'
 ```
 
@@ -281,22 +279,20 @@ At gmu=0.9, most models are not GPU KV-cache limited on this hardware. Only Qwen
 |-------|--------|:------------:|:------------:|:-----------:|
 | **Qwen3-0.6B** | no-offload | 636.8 | 50 | — |
 | | native-offload-20k | 622.9 | 50 | -2.2% |
-| | fs-offload | 268.8¹ | 1 | -57.8% |
-| | cpu+fs-offload-20k | 211.2¹ | 1 | -66.8% |
+| | fs-offload | 842.7 | 50 | +32.3% |
+| | cpu+fs-offload-20k | 854.4 | 50 | +34.2% |
 | **Qwen3-8B** | no-offload | 114.1 | 50 | — |
 | | native-offload-20k | 80.0 | 50 | -29.9% |
-| | fs-offload | 75.7 | 100 | -33.6% |
-| | cpu+fs-offload-20k | 75.7 | 50 | -33.6% |
+| | fs-offload | 212.3 | 50 | +86.0% |
+| | cpu+fs-offload-20k | 188.8 | 50 | +65.4% |
 | **Qwen3-14B** | no-offload | 58.7 | 50 | — |
 | | native-offload-20k | 67.2 | 50 | +14.5% |
-| | fs-offload | 60.8 | 50 | +3.6% |
-| | cpu+fs-offload-20k | 62.9 | 50 | +7.3% |
+| | fs-offload | 183.5 | 50 | +212.7% |
+| | cpu+fs-offload-20k | 169.6 | 50 | +189.1% |
 | **Qwen3-32B-AWQ** | no-offload | 51.2 | 1 | — |
 | | native-offload-20k | 21.3 | 100 | -58.3% |
 | | fs-offload | 22.4 | 50 | -56.2% |
-| | cpu+fs-offload-20k | 22.4 | 50 | -56.2% |
-
-¹ *See Qwen3-0.6B section below.*
+| | cpu+fs-offload-20k | 21.3 | 100 | -58.3% |
 
 ![Peak Throughput](analysis/v0.5.1_peak_throughput.png)
 *Figure: Peak output token throughput by model and configuration. Qwen3-14B is the only model showing throughput above baseline for any offload configuration.*
@@ -304,27 +300,23 @@ At gmu=0.9, most models are not GPU KV-cache limited on this hardware. Only Qwen
 ### Throughput vs Concurrency
 
 ![Throughput Curves](analysis/v0.5.1_throughput_curves.png)
-*Figure: Output token throughput vs concurrency level for all four models across four configurations. Each panel shows one model. Qwen3-0.6B fs-offload and cpu+fs-offload curves show zero throughput at rate=300 and rate=500 (connector instability). Qwen3-32B-AWQ peaks at rate=1 for no-offload, while offload configurations shift the optimum to rate=50–100.*
+*Figure: Output token throughput vs concurrency level for all four models across four configurations. Each panel shows one model. Qwen3-32B-AWQ peaks at rate=1 for no-offload, while offload configurations shift the optimum to rate=50–100.*
 
 #### Qwen3-0.6B
 
-native-offload-20k tracks the baseline closely at all concurrency levels (-2.2% at peak). The fs-offload and cpu+fs-offload-20k configurations show throughput at rate=1 (268.8 and 211.2 tok/s respectively) but drop to 85.3 and 25.6 tok/s at rate=50, and produce zero successful requests at rate=300 and rate=500.
-
-**Failure mechanism at rate≥300:** vLLM does not crash. The API server process remains alive (`/health` returns 200 OK) but the EngineCore deadlocks: filesystem I/O worker threads saturate under write pressure and cannot drain the shared memory broadcast queue used by `--distributed-executor-backend mp`. The EngineCore stalls after 60 seconds waiting for broadcast acknowledgement; the gateway returns HTTP 503 for all subsequent requests. At rate=150, 39 requests completed before the deadlock; at rate=300 and rate=500, zero requests complete (53,000–54,000 errored with `503 Service Unavailable`). The deadlock does not occur for larger models, where slower token generation reduces KV block write pressure.
-
-See [llm-d-kvcache issue #457](https://github.com/llm-d/llm-d-kv-cache/issues/457) and `BUG-shm-broadcast-deadlock.md` for full reproduction details and root cause analysis.
+native-offload-20k tracks the baseline closely at all concurrency levels (-2.2% at peak). fs-offload reaches 842.7 tok/s at rate=50 (+32.3%) and cpu+fs-offload-20k reaches 854.4 tok/s (+34.2%). External prefix hit rates are modest (2.0% for fs-offload), but TTFT at rate=50 drops from 0.718 s (no-offload) to 0.199 s (fs-offload) — a 72% reduction — consistent with prefix KV retrieval avoiding prefill computation for some requests.
 
 #### Qwen3-8B
 
-native-offload-20k, fs-offload, and cpu+fs-offload-20k all converge to similar throughput levels at rate=50 (80.0, 75.7, 75.7 tok/s). The overhead profile is -29.9% to -33.6% vs baseline. At rate=50, fs-offload shows elevated ITL (804.7 ms vs 260.8 ms baseline), consistent with request queue depth (34.6 mean waiting requests vs 1.4 for baseline).
+fs-offload reaches 212.3 tok/s at rate=50 (+86.0% vs baseline), with external prefix hit rate of 52.6% at peak. cpu+fs-offload-20k reaches 188.8 tok/s (+65.4%). native-offload-20k shows -29.9%. TTFT at rate=50 for fs-offload is 3.969 s vs 10.861 s for no-offload (63% reduction), driven by cache hits on the 10,000-token shared prefix eliminating most of the prefill latency.
 
 #### Qwen3-14B
 
-All offload configurations show throughput above the no-offload baseline at rate=50. native-offload-20k achieves the highest gain (+14.5%). Latency metrics at rate=50 are within 7% across all four configurations (TTFT 22–23.5 s, ITL 304–326 ms).
+fs-offload reaches 183.5 tok/s at rate=50 (+212.7% vs baseline of 58.7 tok/s), with external prefix hit rate of 57.3%. cpu+fs-offload-20k reaches 169.6 tok/s (+189.1%). native-offload-20k achieves +14.5%. TTFT at rate=50 for fs-offload drops from 22.634 s to 8.803 s (61% reduction). ITL drops from 325.7 ms to 76.1 ms (77% reduction). The filesystem KV cache provides the most pronounced throughput lift for Qwen3-14B, where prefill for the long shared prefix is most expensive relative to model capacity.
 
 #### Qwen3-32B-AWQ
 
-No-offload peaks at rate=1 (51.2 tok/s). All offload configurations degrade throughput by -56 to -58%. The optimal concurrency shifts from rate=1 to rate=50–100 under offload. At rate=1, all offload configs show approximately 2× higher TTFT and 7–8× higher ITL vs no-offload (TTFT: 0.10 s baseline vs 0.21 s offload; ITL: 18.3 ms vs 145–148 ms).
+No-offload peaks at rate=1 (51.2 tok/s). All offload configurations degrade throughput by -56 to -58%. The optimal concurrency shifts from rate=1 to rate=50–100 under offload. At rate=1, all offload configs show approximately 2× higher TTFT and 7–8× higher ITL vs no-offload (TTFT: 0.10 s baseline vs 0.21 s offload; ITL: 18.3 ms vs 135–150 ms).
 
 ![Performance Delta Heatmap](analysis/v0.5.1_delta_heatmap.png)
 *Figure: Throughput delta (%) vs no-offload baseline (magma colormap; lighter = positive, darker = negative). Qwen3-14B shows positive delta across all offload configurations; all other models show negative delta.*
@@ -342,28 +334,28 @@ Latency measured at rate=50 for 0.6B, 8B, and 14B; rate=1 for 32B-AWQ (which ach
 
 | Model | no-offload | native-offload-20k | fs-offload | cpu+fs-offload-20k |
 |-------|:----------:|:-----------------:|:----------:|:-----------------:|
-| Qwen3-0.6B | 0.72 s | 0.69 s | 3.64 s | 0.29 s² |
-| Qwen3-8B | 10.9 s | 19.0 s | 9.5 s | 25.9 s |
-| Qwen3-14B | 22.6 s | 23.4 s | 23.5 s | 22.0 s |
+| Qwen3-0.6B | 0.718 s | 0.690 s | **0.199 s** | **0.196 s** |
+| Qwen3-8B | 10.861 s | 18.960 s | **3.969 s** | 4.670 s |
+| Qwen3-14B | 22.634 s | 23.412 s | **8.803 s** | 9.056 s |
 
 **TTFT at rate=1 (Qwen3-32B-AWQ):** 0.10 s (no-offload) → 0.21 s (all offload configs, +2×)
 
-² *Qwen3-0.6B cpu+fs-offload-20k at rate=50: anomalously low TTFT (0.29 s) and ITL (11.1 ms) with only 25.6 tok/s throughput, indicating a large fraction of requests are erroring or being dropped.*
+For 0.6B, 8B, and 14B, fs-offload and cpu+fs-offload-20k reduce TTFT substantially vs no-offload — a direct consequence of cache hits on the 10,000-token shared prefix eliminating recomputation.
 
 #### Inter-Token Latency (ITL)
 
 ![ITL Comparison](analysis/v0.5.1_latency_itl.png)
-*Figure: Median ITL at peak-throughput concurrency. Qwen3-8B fs-offload shows 804.7 ms ITL (3× the no-offload 260.8 ms), the largest relative deviation observed. Qwen3-14B ITL is within 7% across all configurations.*
+*Figure: Median ITL at peak-throughput concurrency. Qwen3-14B fs-offload shows 76.1 ms ITL vs 325.7 ms no-offload (77% reduction). Qwen3-32B-AWQ shows elevated ITL under all offload configs (+7–8× vs baseline).*
 
 **ITL at rate=50:**
 
 | Model | no-offload | native-offload-20k | fs-offload | cpu+fs-offload-20k |
 |-------|:----------:|:-----------------:|:----------:|:-----------------:|
-| Qwen3-0.6B | 67.1 ms | 69.0 ms | 65.8 ms | 11.1 ms² |
-| Qwen3-8B | 260.8 ms | 343.2 ms (+32%) | 804.7 ms (+208%) | 206.7 ms (-21%) |
-| Qwen3-14B | 325.7 ms | 310.0 ms (-5%) | 306.4 ms (-6%) | 304.0 ms (-7%) |
+| Qwen3-0.6B | 67.1 ms | 69.0 ms | **49.6 ms** | **48.2 ms** |
+| Qwen3-8B | 260.8 ms | 343.2 ms (+32%) | **123.9 ms (-52%)** | 138.5 ms (-47%) |
+| Qwen3-14B | 325.7 ms | 310.0 ms (-5%) | **76.1 ms (-77%)** | **76.3 ms (-77%)** |
 
-**ITL at rate=1 (Qwen3-32B-AWQ):** 18.3 ms (no-offload) → 145–148 ms (all offload configs, +7–8×)
+**ITL at rate=1 (Qwen3-32B-AWQ):** 18.3 ms (no-offload) → 134.7 ms (fs-offload, +7.4×), 149.9 ms (cpu+fs-offload, +8.2×)
 
 ---
 
@@ -457,31 +449,44 @@ The 0.6B model shows a 23–25 pp regression from v0.4.0 to v0.5.1 at mempress: 
 
 ## Filesystem Offload Analysis
 
+### threads_per_gpu Parameter
+
+The `threads_per_gpu` parameter controls the number of I/O worker threads per GPU in `SharedStorageOffloadingSpec`. The gmu=0.9 runs reported here used `threads_per_gpu=128`. The mempress runs (§Memory-Pressure Analysis) used `threads_per_gpu=64`. The difference is significant: at 64 threads, fs-offload throughput for 0.6B at gmu=0.9 was below baseline; at 128 threads, it reaches +32.3%. The higher thread count reduces I/O queuing at peak concurrency and prevents shared-memory broadcast starvation in `--distributed-executor-backend mp` (see `BUG-shm-broadcast-deadlock.md`).
+
 ### Storage I/O Characterisation
 
-Disk I/O was measured from PCP `disk.dev.*` metrics during all fs-offload and cpu+fs-offload benchmark runs.
+Disk I/O was measured from PCP `disk.dev.*` metrics during all gmu=0.9 fs-offload and cpu+fs-offload benchmark runs.
 
-PCP `disk.dev.*` metrics confirm no storage I/O attributable to the filesystem offload connector across all 64 fs-offload and cpu+fs-offload runs (peak 0.04 MB/s write, indistinguishable from no-offload background).
+| Config | Disk Read (MB/s) | Disk Write (MB/s) |
+|--------|:----------------:|:-----------------:|
+| Qwen3-0.6B fs-offload | 0.03 | 0.48 |
+| Qwen3-8B fs-offload | ~0 | 0.23 |
+| Qwen3-14B fs-offload | ~0 | 0.26 |
+| Qwen3-32B-AWQ fs-offload | ~0 | 0.33 |
 
-The negligible disk I/O indicates that the IBM VPC block PVC is operating as a page-cache-backed filesystem during the 120-second benchmark window. KV cache blocks written to `/kvcache/kv-cache/` reside in OS page cache rather than reaching physical storage. As a result, the fs-offload path behaves as an additional CPU memory tier rather than a persistent storage tier during these benchmarks.
+Write I/O is present at 0.23–0.48 MB/s across models, confirming KV cache blocks are reaching the PVC. Read I/O is near zero for 8B, 14B, and 32B-AWQ, indicating that reads are served from OS page cache (blocks written earlier in the run remain warm in the page cache for 120-second windows). Qwen3-0.6B shows 0.03 MB/s read, consistent with some cold reads on the first few requests before the cache warms.
 
-This has two implications:
-1. The performance comparison between native-offload-20k (explicit CPU allocation) and fs-offload (filesystem-backed, effectively page-cache-backed) measures implementation overhead differences, not storage tier differences.
-2. For deployments targeting persistent cross-restart or cross-instance KV cache reuse (the primary use case for `SharedStorageOffloadingSpec`), longer-running workloads or explicit cache flushing would be required to bypass the page cache.
+The low read I/O does not mean the filesystem cache is ineffective: the 52–57% external prefix hit rates for 8B and 14B confirm blocks are being served, just from the page-cache layer of the PVC filesystem rather than from physical storage. For deployments targeting persistent cross-restart or cross-instance KV reuse, the OS page cache would need to be bypassed (O_DIRECT) or the workload run long enough to fill physical storage.
 
-### Qwen3-0.6B EngineCore Deadlock
+### External Prefix Cache Hit Rates
 
-At rate=300 and rate=500, vLLM's multiprocess EngineCore deadlocks under the combined load of high-concurrency requests and filesystem KV connector I/O. The API server process remains alive (HTTP 503 responses are returned by the gateway rather than connection failures). The failure is a shared memory broadcast queue starvation in `--distributed-executor-backend mp`: filesystem I/O worker threads block before they can drain the broadcast queue, causing the EngineCore to wait indefinitely for worker acknowledgement. The effect is total request failure (53,000+ 503 errors) for the full 120-second benchmark window. See the Qwen3-0.6B section under Throughput vs Concurrency for the full event sequence, and the accompanying bug report (`BUG-shm-broadcast-deadlock.md`) for reproduction steps.
+| Model | fs-offload ext. hit | cpu+fs-offload ext. hit |
+|-------|:-------------------:|:-----------------------:|
+| Qwen3-0.6B | 2.0% | 1.3% |
+| Qwen3-8B | 52.6% | 48.2% |
+| Qwen3-14B | 57.3% | — |
+| Qwen3-32B-AWQ | 1.7% | — |
+
+High hit rates for 8B and 14B reflect the shared 10,000-token prefix structure: once the prefix KV blocks are cached, subsequent requests retrieve them from the filesystem rather than recomputing. The 0.6B model's low hit rate reflects faster generation — at rate=50, fewer requests are queued waiting for prefix blocks at any given instant.
 
 ### MultiConnector (cpu+fs-offload-20k) Behaviour
 
-The `MultiConnector` implementation writes to both CPU and filesystem simultaneously and reads from CPU first (priority ordering). In these single-replica benchmarks:
+The `MultiConnector` implementation writes to both CPU and filesystem simultaneously and reads from CPU first (priority ordering). With `threads_per_gpu=128`:
 
-- **Qwen3-14B**: cpu+fs-offload-20k (+7.3%) falls between fs-offload (+3.6%) and native-offload-20k (+14.5%)
-- **Qwen3-8B**: cpu+fs-offload-20k (-33.6%) and fs-offload (-33.6%) are identical at peak
-- **Qwen3-32B-AWQ**: all three offload configs show identical throughput (-56 to -58%)
-
-External prefix cache hit rates (the vLLM metric tracking KV connector hits) ranged from 0–7.5% across all configurations and models, with Qwen3-8B cpu+fs-offload-20k showing the highest at 7.5%. These low rates are expected in a single-replica deployment where the primary use of the external cache is intra-request KV reuse, not cross-instance sharing.
+- **Qwen3-0.6B**: cpu+fs-offload-20k (+34.2%) slightly exceeds fs-offload (+32.3%)
+- **Qwen3-8B**: fs-offload (+86.0%) outperforms cpu+fs-offload-20k (+65.4%); the parallel write to CPU adds overhead that reduces the net throughput advantage
+- **Qwen3-14B**: fs-offload (+212.7%) outperforms cpu+fs-offload-20k (+189.1%)
+- **Qwen3-32B-AWQ**: both configurations show -56 to -58% vs baseline (unchanged)
 
 ---
 
@@ -613,7 +618,7 @@ See [llm-d-kv-cache issue #445](https://github.com/llm-d/llm-d-kv-cache/issues/4
 
 Results across all v0.5.1 configurations and experiments (gmu=0.9 and memory-pressure runs):
 
-1. **Qwen3-14B** shows throughput above the no-offload baseline for all offload types at gmu=0.9: native-offload-20k +14.5%, lmcache-local +7.3%, lmcache-valkey +7.3%, cpu+fs-offload-20k +7.3%, fs-offload +3.6%. All other models show throughput reduction under all offload configurations at gmu=0.9. The identical +7.3% figure for three configurations reflects convergence to the same measured peak (62.93 tok/s at rate=50), not a data error — the three configs diverge at other concurrency levels.
+1. **Qwen3-14B** shows throughput above the no-offload baseline for all offload types at gmu=0.9: fs-offload +212.7%, cpu+fs-offload-20k +189.1%, native-offload-20k +14.5%, lmcache-local +7.3%, lmcache-valkey +7.3%. **Qwen3-0.6B and Qwen3-8B** also show throughput above baseline under fs-offload and cpu+fs-offload-20k at gmu=0.9 (+32–86%), driven by high external prefix KV cache hit rates. **Qwen3-32B-AWQ** shows throughput reduction under all offload configurations at gmu=0.9 (-56 to -58%).
 
 2. **Qwen3-14B no-offload** regressed from v0.5.0 to v0.5.1: 66.1 → 58.7 tok/s (-11.2%), returning to the v0.4.0 value. All other models are stable vs v0.5.0.
 
@@ -627,9 +632,9 @@ Results across all v0.5.1 configurations and experiments (gmu=0.9 and memory-pre
 
 7. **LMCache mempress improvements for 8B, 14B, 32B-AWQ**: vs v0.4.0 at matched gmu, v0.5.1 lmcache-valkey improves by +8.2 pp (8B), +16.2 pp (14B), and +9.3 pp (32B-AWQ).
 
-8. **Filesystem offload disk I/O**: ≤0.04 MB/s across all 64 fs-offload runs. The IBM VPC block PVC operates via OS page cache during 120-second benchmark windows.
+8. **Filesystem offload disk I/O** (gmu=0.9, threads_per_gpu=128): 0.23–0.48 MB/s write across models; read near zero (page-cache hits). External prefix hit rates of 52–57% for 8B and 14B confirm the cache is effective. Reads from physical storage are minimal for 120-second workloads.
 
-9. **Qwen3-0.6B fs-offload deadlock** at rate≥300: 53,000+ HTTP 503 errors, 0 completions. EngineCore shared-memory broadcast queue starvation under high KV write pressure. ([issue #457](https://github.com/llm-d/llm-d-kv-cache/issues/457))
+9. **threads_per_gpu=128 eliminates the EngineCore deadlock** observed with threads_per_gpu=64 at rate≥300 for Qwen3-0.6B. All 8 rates completed successfully in the gmu=0.9 re-runs. The mempress runs (threads_per_gpu=64) retain the old behaviour; those results are not re-run. See `BUG-shm-broadcast-deadlock.md` for the root-cause analysis.
 
 10. **Memory-pressure results** (matched gmu, native-offload-20k): 0.6B +22.3%, 8B -3.6%, 14B +10.4%, 32B-AWQ -33.3% vs mempress no-offload baseline. The 32B-AWQ regression has no equivalent in v0.4.0 (-2.3% at matched pressure).
 
@@ -669,7 +674,7 @@ PCP daemon collects at 10-second intervals (pcp-zeroconf package, default config
 
 ---
 
-*Report updated April 2026 to include LMCache v0.3.15 results (64 runs gmu=0.9, 64 runs mempress)*
+*Report updated April 2026 to include LMCache v0.3.15 results and re-run filesystem offload results (threads_per_gpu=128)*
 *Initial report generated from benchmark runs completed March 2026*
 *Analysis framework: Performance Co-Pilot + GuideLLM*
 *System: Single Node OpenShift on IBM Cloud with 2× NVIDIA L40S GPUs*

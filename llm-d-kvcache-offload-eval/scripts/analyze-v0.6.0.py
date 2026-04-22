@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Comprehensive analysis of llm-d v0.6.0 KV cache offload benchmarks.
 
-Analyzes benchmark runs across 4 configs x 4 models x 8 rates (gmu=0.9)
+Analyzes benchmark runs across 6 configs x 4 models x 8 rates (gmu=0.9)
 and mempress configs x 3 models x 8 rates. Generates visualizations and
 summary statistics for report writing.
 """
@@ -31,7 +31,8 @@ OUTPUT_DIR.mkdir(exist_ok=True)
 
 MODELS = ['Qwen3-0.6B', 'Qwen3-8B', 'Qwen3-14B', 'Qwen3-32B-AWQ']
 MODELS_MEMPRESS = ['Qwen3-0.6B', 'Qwen3-8B', 'Qwen3-14B']  # 32B-AWQ offload not run
-CONFIGS = ['no-offload', 'native-offload-20k', 'lmcache-local', 'lmcache-valkey']
+CONFIGS = ['no-offload', 'native-offload-20k', 'lmcache-local', 'lmcache-valkey',
+           'fs-offload', 'cpu+fs-offload-20k']
 RATES = [1, 50, 100, 150, 300, 400, 500, 650]
 
 CONFIG_LABELS = {
@@ -39,6 +40,8 @@ CONFIG_LABELS = {
     'native-offload-20k': 'Native Offload (20k)',
     'lmcache-local':      'LMCache Local',
     'lmcache-valkey':     'LMCache Valkey',
+    'fs-offload':         'FS Offload',
+    'cpu+fs-offload-20k': 'CPU+FS Offload (20k)',
 }
 
 # ── Historical baselines from prior reports ──────────────────────────────────
@@ -69,6 +72,15 @@ V051_GMU09 = {
     ('Qwen3-8B',      'lmcache-valkey'):     115.2,
     ('Qwen3-14B',     'lmcache-valkey'):      62.9,
     ('Qwen3-32B-AWQ', 'lmcache-valkey'):      21.3,
+    # fs-offload results (re-run with threads_per_gpu=128)
+    ('Qwen3-0.6B',    'fs-offload'):         842.7,
+    ('Qwen3-8B',      'fs-offload'):         212.3,
+    ('Qwen3-14B',     'fs-offload'):         183.5,
+    ('Qwen3-32B-AWQ', 'fs-offload'):          22.4,
+    ('Qwen3-0.6B',    'cpu+fs-offload-20k'): 854.4,
+    ('Qwen3-8B',      'cpu+fs-offload-20k'): 188.8,
+    ('Qwen3-14B',     'cpu+fs-offload-20k'): 169.6,
+    ('Qwen3-32B-AWQ', 'cpu+fs-offload-20k'):  21.3,
 }
 
 # v0.5.1 mempress peak throughput (tok/s)
@@ -358,7 +370,8 @@ def plot_throughput_curves_gmu09(df, output_file):
 def plot_delta_heatmap(peak_df, output_file):
     """Figure 3: Heatmap of throughput delta (%) vs no-offload baseline at gmu=0.9. magma colormap."""
     gmu09 = peak_df[~peak_df['is_mempress']]
-    offload_configs = ['native-offload-20k', 'lmcache-local', 'lmcache-valkey']
+    offload_configs = ['native-offload-20k', 'lmcache-local', 'lmcache-valkey',
+                       'fs-offload', 'cpu+fs-offload-20k']
 
     matrix = []
     annot = []
@@ -390,9 +403,9 @@ def plot_delta_heatmap(peak_df, output_file):
         columns=MODELS
     )
 
-    fig, ax = plt.subplots(figsize=(14, 6))
+    fig, ax = plt.subplots(figsize=(14, 8))
     sns.heatmap(df_heat, annot=annot, fmt='', cmap='magma',
-                center=0, vmin=-60, vmax=20,
+                center=0, vmin=-70, vmax=220,
                 cbar_kws={'label': '% vs no-offload baseline'},
                 ax=ax, linewidths=0.5)
     ax.set_title('Throughput % Delta vs No-Offload Baseline: llm-d v0.6.0 (gmu=0.9)',
@@ -782,15 +795,55 @@ def print_lmcache_crossversion(peak_df):
         print()
 
 
+def print_fs_crossversion(peak_df):
+    """Table 6: Cross-version fs-offload and cpu+fs-offload comparison."""
+    gmu09 = peak_df[~peak_df['is_mempress']]
+    fs_cfgs = ['fs-offload', 'cpu+fs-offload-20k']
+
+    print()
+    print("=" * 105)
+    print("TABLE 6: FILESYSTEM OFFLOAD CROSS-VERSION (v0.5.1 → v0.6.0, gmu=0.9)")
+    print("=" * 105)
+    print(f"{'Model':<20} {'Config':<24} {'v0.5.1':>10} {'v0.5.1 vs nooff':>16} {'v0.6.0':>10} {'v0.6.0 vs nooff':>16} {'Delta':>10}")
+    print("-" * 105)
+
+    for config in fs_cfgs:
+        for model in MODELS:
+            v051 = V051_GMU09.get((model, config), np.nan)
+            v051_nooff = V051_GMU09.get((model, 'no-offload'), np.nan)
+            row = gmu09[(gmu09['model'] == model) & (gmu09['config'] == config)]
+            v060 = row['throughput'].values[0] if len(row) > 0 else np.nan
+            nooff_row = gmu09[(gmu09['model'] == model) & (gmu09['config'] == 'no-offload')]
+            v060_nooff = nooff_row['throughput'].values[0] if len(nooff_row) > 0 else np.nan
+
+            v051_s = f'{v051:.1f}' if not np.isnan(v051) else 'N/A'
+            v060_s = f'{v060:.1f}' if not np.isnan(v060) else 'N/A'
+
+            if not np.isnan(v051) and not np.isnan(v051_nooff) and v051_nooff > 0:
+                d051_nooff = f'{(v051 - v051_nooff) / v051_nooff * 100:+.1f}%'
+            else:
+                d051_nooff = 'N/A'
+            if not np.isnan(v060) and not np.isnan(v060_nooff) and v060_nooff > 0:
+                d060_nooff = f'{(v060 - v060_nooff) / v060_nooff * 100:+.1f}%'
+            else:
+                d060_nooff = 'N/A'
+            if not np.isnan(v051) and not np.isnan(v060) and v051 > 0:
+                delta_s = f'{(v060 - v051) / v051 * 100:+.1f}%'
+            else:
+                delta_s = 'N/A'
+            print(f"  {model:<18} {config:<24} {v051_s:>10} {d051_nooff:>16} {v060_s:>10} {d060_nooff:>16} {delta_s:>10}")
+        print()
+
+
 def print_latency_rate50(df):
-    """Table 6: Latency at rate=50, gmu=0.9, all 4 configs."""
+    """Table 7: Latency at rate=50, gmu=0.9, all configs."""
     gmu09 = df[~df['is_mempress']]
 
     print()
     print("=" * 90)
-    print("TABLE 6: LATENCY AT RATE=50 (gmu=0.9): TTFT and ITL")
+    print("TABLE 7: LATENCY AT RATE=50 (gmu=0.9): TTFT and ITL")
     print("=" * 90)
-    print(f"{'Model':<20} {'Config':<22} {'TTFT (s)':>10} {'ITL (ms)':>10}")
+    print(f"{'Model':<20} {'Config':<24} {'TTFT (s)':>10} {'ITL (ms)':>10}")
     print("-" * 90)
 
     for model in MODELS:
@@ -800,11 +853,11 @@ def print_latency_rate50(df):
         for config in CONFIGS:
             row = model_data[model_data['config'] == config]
             if len(row) == 0:
-                print(f"  {model:<18} {config:<22} {'N/A':>10} {'N/A':>10}")
+                print(f"  {model:<18} {config:<24} {'N/A':>10} {'N/A':>10}")
                 continue
             ttft = row['ttft_median_s'].values[0]
             itl = row['itl_median_ms'].values[0]
-            print(f"  {model:<18} {config:<22} {ttft:>10.3f} {itl:>10.1f}")
+            print(f"  {model:<18} {config:<24} {ttft:>10.3f} {itl:>10.1f}")
         print()
 
 
@@ -853,6 +906,10 @@ def main():
                             ['lmcache-local', 'lmcache-valkey'],
                             'LMCache',
                             OUTPUT_DIR / 'v0.6.0_lmcache_version_comparison.png')
+    plot_version_comparison(peak_df,
+                            ['fs-offload', 'cpu+fs-offload-20k'],
+                            'Filesystem Offload',
+                            OUTPUT_DIR / 'v0.6.0_fs_version_comparison.png')
     plot_mempress_peak_throughput(peak_df, OUTPUT_DIR / 'v0.6.0_mempress_peak_throughput.png')
     plot_mempress_version_comparison(peak_df, OUTPUT_DIR / 'v0.6.0_mempress_version_comparison.png')
 
@@ -862,6 +919,7 @@ def main():
     print_no_offload_crossversion(peak_df)
     print_native_offload_crossversion(peak_df)
     print_lmcache_crossversion(peak_df)
+    print_fs_crossversion(peak_df)
     print_latency_rate50(df)
 
     print()

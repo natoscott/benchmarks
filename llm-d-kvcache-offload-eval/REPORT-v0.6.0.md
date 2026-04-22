@@ -1,6 +1,6 @@
 # llm-d v0.6.0 KV-Cache Offload Evaluation
 
-This report evaluates KV-cache offload strategies in llm-d v0.6.0 (vLLM 0.17.1, GuideLLM 0.6.0) and places the results in the context of the prior evaluation on v0.5.1 (vLLM 0.15.1). Four configurations are evaluated: no-offload (GPU-only baseline), native CPU offload via `OffloadingConnector`, and LMCache with local and Valkey remote backends. LMCache is evaluated for the first time with LMCache v0.4.2 (upgraded from v0.3.15 in v0.5.1). A memory-pressure suite re-ran all configurations with reduced `gpu_memory_utilization` per model (0.55–0.70 vs the default 0.9). Filesystem offload and hierarchical CPU+filesystem offload are deferred due to a libstdc++ ABI incompatibility in llm-d-cuda:v0.6.0 (see §Known Issues).
+This report evaluates KV-cache offload strategies in llm-d v0.6.0 (vLLM 0.17.1, GuideLLM 0.6.0) and places the results in the context of the prior evaluation on v0.5.1 (vLLM 0.15.1). Six configurations are evaluated: no-offload (GPU-only baseline), native CPU offload via `OffloadingConnector`, LMCache with local and Valkey remote backends, filesystem offload via `SharedStorageOffloadingSpec`, and hierarchical CPU+filesystem offload via `MultiConnector`. LMCache is evaluated for the first time with LMCache v0.4.2 (upgraded from v0.3.15 in v0.5.1). A memory-pressure suite re-ran the four non-filesystem configurations with reduced `gpu_memory_utilization` per model (0.55–0.70 vs the default 0.9).
 
 **Software Versions:**
 
@@ -10,7 +10,7 @@ This report evaluates KV-cache offload strategies in llm-d v0.6.0 (vLLM 0.17.1, 
 | vLLM | 0.17.1 (bundled in llm-d-cuda:v0.6.0) |
 | LMCache | v0.4.2 (`lmcache/vllm-openai:v0.4.2`) |
 | GuideLLM | 0.6.0 |
-| llmd_fs_connector | 0.18.0 (not tested — see §Known Issues) |
+| llmd_fs_connector | 0.18.0 |
 | gateway-api-inference-extension (EPP) | v0.7.1 |
 | Valkey | 8-alpine |
 | OpenShift | 4.22.0 (SNO) |
@@ -26,17 +26,17 @@ This report evaluates KV-cache offload strategies in llm-d v0.6.0 (vLLM 0.17.1, 
 
 ## Summary
 
-233 benchmark runs across four KV-cache configurations (gmu=0.9), four model sizes (gmu=0.9) and three model sizes (mempress), and eight concurrency levels. Compared to v0.5.1, vLLM 0.17.1 delivers large throughput gains for Qwen3-0.6B (+26.8%) and Qwen3-8B (+72.9%) at gmu=0.9 no-offload baseline. Qwen3-14B no-offload decreases by -5.5% vs v0.5.1. Qwen3-32B-AWQ no-offload is stable (-2.1%).
+297 benchmark runs across six KV-cache configurations at gmu=0.9 (four models), four configurations under memory pressure (three models), and eight concurrency levels. Compared to v0.5.1, vLLM 0.17.1 delivers large throughput gains for Qwen3-0.6B (+26.8%) and Qwen3-8B (+72.9%) at gmu=0.9 no-offload baseline. Qwen3-14B no-offload decreases by -5.5% vs v0.5.1. Qwen3-32B-AWQ no-offload is stable (-2.1%).
 
 **Configurations:**
 1. **no-offload**: GPU-only KV-cache (baseline)
 2. **native-offload-20k**: CPU offload via `OffloadingConnector` / `CPUOffloadingSpec`, 20K-block equivalent
 3. **lmcache-local**: LMCache v0.4.2 with local CPU backend (`lmcache/vllm-openai:v0.4.2`)
 4. **lmcache-valkey**: LMCache v0.4.2 with Valkey remote backend
+5. **fs-offload**: Filesystem offload via `SharedStorageOffloadingSpec` (`llmd_fs_connector` v0.18.0), IBM VPC block PVC
+6. **cpu+fs-offload-20k**: Hierarchical CPU+filesystem offload via `MultiConnector`
 
-**Deferred configurations:**
-- **fs-offload** and **cpu+fs-offload-20k**: blocked by GLIBCXX_3.4.30 missing in llm-d-cuda:v0.6.0 (Nsight Compute removed); fix PR [llm-d/llm-d-kv-cache#498](https://github.com/llm-d/llm-d-kv-cache/pull/498) pending
-- **32B-AWQ offload configs (mempress only)**: blocked by vLLM #38515 crash (negative Prometheus counter under KV offload + high preemption); 32B-AWQ no-offload is included at both gmu levels
+**Note:** 32B-AWQ offload configs (mempress only) were not run due to vLLM #38515 crash (negative Prometheus counter under KV offload + high preemption); 32B-AWQ no-offload is included at both gmu levels. Filesystem offload was not run under mempress conditions.
 
 At default gpu_memory_utilization=0.9, only Qwen3-14B has insufficient GPU KV-cache to benefit from CPU offload on this hardware (20.58 GiB vs 269K token capacity). Memory-pressure runs reduce gmu per-model to create KV-cache constraint across all sizes, providing a more complete characterisation of offload behaviour.
 
@@ -65,14 +65,14 @@ Under memory pressure, Qwen3-0.6B native-offload-20k reaches +51.4% vs the mempr
 
 **Peak Throughput at default gpu_memory_utilization=0.9 (unconstrained conditions):**
 
-| Model | no-offload | native-offload-20k | lmcache-local | lmcache-valkey |
-|-------|:----------:|:------------------:|:-------------:|:--------------:|
-| Qwen3-0.6B | 807.5 tok/s | 809.6 (+0.3%) | 665.6 (-17.6%) | 789.3 (-2.2%) |
-| Qwen3-8B | 197.3 tok/s | 184.5 (-6.5%) | 194.1 (-1.6%) | 141.9 (-28.1%) |
-| Qwen3-14B | 55.5 tok/s | 56.5 (+1.9%) | 54.4 (-1.9%) | 56.5 (+1.9%) |
-| Qwen3-32B-AWQ | 50.1 tok/s | 18.1 (-63.8%) | 18.1 (-63.8%) | 19.2 (-61.7%) |
+| Model | no-offload | native-offload-20k | lmcache-local | lmcache-valkey | fs-offload | cpu+fs-offload-20k |
+|-------|:----------:|:------------------:|:-------------:|:--------------:|:----------:|:-----------------:|
+| Qwen3-0.6B | 807.5 tok/s | 809.6 (+0.3%) | 665.6 (-17.6%) | 789.3 (-2.2%) | 320.6 (-60.3%) | 789.3 (-2.2%) |
+| Qwen3-8B | 197.3 tok/s | 184.5 (-6.5%) | 194.1 (-1.6%) | 141.9 (-28.1%) | **199.5 (+1.1%)** | 197.3 (0.0%) |
+| Qwen3-14B | 55.5 tok/s | 56.5 (+1.9%) | 54.4 (-1.9%) | 56.5 (+1.9%) | **163.2 (+194.2%)** | **164.3 (+196.2%)** |
+| Qwen3-32B-AWQ | 50.1 tok/s | 18.1 (-63.8%) | 18.1 (-63.8%) | 19.2 (-61.7%) | 18.1 (-63.8%) | 18.1 (-63.8%) |
 
-At gmu=0.9, native-offload-20k shows near-zero overhead for Qwen3-0.6B (+0.3%) and Qwen3-14B (+1.9%). Qwen3-8B incurs -6.5% with native-offload-20k, a +23.4 pp improvement from v0.5.1 (-29.9%). lmcache-valkey shows elevated TTFT for Qwen3-8B (6.555 s vs 0.696 s no-offload) associated with -28.1% throughput overhead at this model size.
+At gmu=0.9, native-offload-20k shows near-zero overhead for Qwen3-0.6B (+0.3%) and Qwen3-14B (+1.9%). Qwen3-8B incurs -6.5% with native-offload-20k, a +23.4 pp improvement from v0.5.1 (-29.9%). lmcache-valkey shows elevated TTFT for Qwen3-8B (6.555 s vs 0.696 s no-offload) associated with -28.1% throughput overhead at this model size. fs-offload delivers +194.2% for Qwen3-14B and +1.1% for Qwen3-8B; cpu+fs-offload-20k delivers +196.2% for 14B and 0.0% for 8B. Qwen3-0.6B fs-offload shows -60.3% while cpu+fs-offload-20k matches lmcache-valkey at -2.2%.
 
 ---
 
@@ -84,7 +84,7 @@ At gmu=0.9, native-offload-20k shows near-zero overhead for Qwen3-0.6B (+0.3%) a
 - **GPUs**: 2× NVIDIA L40S (24 GB VRAM each, 48 GB total)
   - Tensor Parallelism: 2 GPUs per model
 - **CPU**: 48 vCPUs
-- **Storage**: IBM VPC block PVC (256 GiB, `ibmc-vpc-block-custom`) mounted at `/kvcache` (not used in v0.6.0 — fs-offload deferred)
+- **Storage**: IBM VPC block PVC (256 GiB, `ibmc-vpc-block-custom`, 6,000 IOPS) mounted at `/kvcache` for filesystem offload
 
 ### Software
 
@@ -163,6 +163,37 @@ PYTHONHASHSEED=123
 
 Valkey pod restarted before each lmcache-valkey run to clear cache state between benchmark rates.
 
+#### 5. fs-offload
+
+Filesystem offload via `SharedStorageOffloadingSpec` from the `llmd_fs_connector` v0.18.0 wheel. The v0.6.0 image (llm-d-cuda:v0.6.0) ships libstdc++ built with `-static-libstdc++` (fix from [llm-d/llm-d-kv-cache#498](https://github.com/llm-d/llm-d-kv-cache/pull/498)), eliminating the GLIBCXX version dependency that required the LD_PRELOAD workaround in v0.5.1.
+
+```bash
+vllm serve <model> --tensor-parallel-size 2 --port 8000 --max-num-seq 1024 \
+  --distributed-executor-backend mp \
+  --kv-transfer-config '{"kv_connector":"OffloadingConnector","kv_role":"kv_both",
+    "kv_connector_extra_config":{"spec_name":"SharedStorageOffloadingSpec",
+      "shared_storage_path":"/kvcache/kv-cache/","block_size":256,
+      "threads_per_gpu":128,"spec_module_path":"llmd_fs_backend.spec"}}'
+```
+
+#### 6. cpu+fs-offload-20k
+
+Hierarchical offload via `MultiConnector`. Writes to CPU and filesystem simultaneously; reads from CPU first.
+
+```bash
+vllm serve <model> --tensor-parallel-size 2 --port 8000 --max-num-seq 1024 \
+  --distributed-executor-backend mp \
+  --kv-transfer-config '{"kv_connector":"MultiConnector","kv_role":"kv_both",
+    "kv_connector_extra_config":{"connectors":[
+      {"kv_connector":"OffloadingConnector","kv_role":"kv_both",
+       "kv_connector_extra_config":{"cpu_bytes_to_use":<per_model_bytes>}},
+      {"kv_connector":"OffloadingConnector","kv_role":"kv_both",
+       "kv_connector_extra_config":{"spec_name":"SharedStorageOffloadingSpec",
+         "shared_storage_path":"/kvcache/kv-cache/","block_size":256,
+         "threads_per_gpu":128,"spec_module_path":"llmd_fs_backend.spec"}}
+    ]}}'
+```
+
 **Memory-pressure `gpu_memory_utilization` per model:**
 
 | Model | gmu=0.9 | mempress gmu |
@@ -191,9 +222,9 @@ These runs are excluded from peak throughput selection. The clean peak for Qwen3
 
 The 32B-AWQ mempress offload configurations were not run at all for native-offload-20k, lmcache-local, and lmcache-valkey due to confirmed crashes at all concurrency levels during initial testing. Qwen3-32B-AWQ mempress no-offload (50.1 tok/s) is included and unaffected.
 
-### libstdc++ ABI: fs-offload and cpu+fs-offload-20k Deferred
+### libstdc++ ABI: Resolved in v0.6.0 Builds
 
-The `llmd_fs_connector` wheel (v0.18.0 in the v0.6.0 cycle) requires GLIBCXX_3.4.30+. The llm-d-cuda:v0.6.0 image removed Nsight Compute (which previously provided a newer libstdc++.so.6 suitable for LD_PRELOAD workaround). The base RHEL 9 libstdc++ in v0.6.0 provides GLIBCXX_3.4.28, which is insufficient. A fix PR ([llm-d/llm-d-kv-cache#498](https://github.com/llm-d/llm-d-kv-cache/pull/498)) adds `-static-libstdc++` as a linker flag to `setup.py`, embedding the C++ runtime in the `.so` and eliminating the runtime GLIBCXX version dependency. Until merged, fs-offload and cpu+fs-offload-20k cannot be tested on llm-d-cuda:v0.6.0.
+The `llmd_fs_connector` wheel (v0.18.0) requires GLIBCXX_3.4.30+. The llm-d-cuda:v0.6.0 image removed Nsight Compute (which provided the workaround libstdc++ in v0.5.1 via LD_PRELOAD). Fix PR [llm-d/llm-d-kv-cache#498](https://github.com/llm-d/llm-d-kv-cache/pull/498) added `-static-libstdc++` to `setup.py`, embedding the C++ runtime in the `.so` and eliminating the runtime GLIBCXX version dependency. This fix is present in the v0.18.0 wheel used for these benchmarks; no LD_PRELOAD workaround is required.
 
 ---
 
@@ -250,18 +281,26 @@ At gmu=0.9, most models are not GPU KV-cache limited on this hardware. Only Qwen
 | | native-offload-20k | 809.6 | 50 | +0.3% |
 | | lmcache-local | 665.6 | 50 | -17.6% |
 | | lmcache-valkey | 789.3 | 50 | -2.2% |
+| | fs-offload | 320.6 | 50 | -60.3% |
+| | cpu+fs-offload-20k | 789.3 | 50 | -2.2% |
 | **Qwen3-8B** | no-offload | 197.3 | 50 | — |
 | | native-offload-20k | 184.5 | 50 | -6.5% |
 | | lmcache-local | 194.1 | 50 | -1.6% |
 | | lmcache-valkey | 141.9 | 50 | -28.1% |
+| | fs-offload | 199.5 | 50 | +1.1% |
+| | cpu+fs-offload-20k | 197.3 | 50 | 0.0% |
 | **Qwen3-14B** | no-offload | 55.5 | 100 | — |
 | | native-offload-20k | 56.5 | 100 | +1.9% |
 | | lmcache-local | 54.4 | 100 | -1.9% |
 | | lmcache-valkey | 56.5 | 50 | +1.9% |
+| | fs-offload | 163.2 | 50 | +194.2% |
+| | cpu+fs-offload-20k | 164.3 | 50 | +196.2% |
 | **Qwen3-32B-AWQ** | no-offload | 50.1 | 1 | — |
 | | native-offload-20k | 18.1 | 100 | -63.8% |
 | | lmcache-local | 18.1 | 100 | -63.8% |
 | | lmcache-valkey | 19.2 | 50 | -61.7% |
+| | fs-offload | 18.1 | 100 | -63.8% |
+| | cpu+fs-offload-20k | 18.1 | 100 | -63.8% |
 
 ![Peak Throughput](analysis/v0.6.0_peak_throughput.png)
 *Figure: 4-panel peak throughput by configuration for each model. Hatched bars show v0.5.1 values for comparison.*
@@ -308,12 +347,14 @@ Rate=1 used for Qwen3-32B-AWQ (peak throughput rate).
 | | native-offload-20k | 40.555 | 359.4 |
 | | lmcache-local | 41.670 | 364.2 |
 | | lmcache-valkey | 31.525 | 367.4 |
+| | fs-offload | **7.063** | **87.8** |
+| | cpu+fs-offload-20k | **6.911** | **87.3** |
 | Qwen3-32B-AWQ | no-offload | 0.115 | 18.3 |
 | | native-offload-20k | 0.216 | 135.1 |
 | | lmcache-local | 0.224 | 147.2 |
 | | lmcache-valkey | 0.233 | 148.4 |
 
-Qwen3-14B shows high TTFT across all configurations at rate=50 (31–41 s), consistent with deep queuing at this concurrency. Qwen3-8B lmcache-valkey TTFT (6.555 s) is 9.4× the no-offload value (0.696 s), indicating that Valkey round-trip overhead accumulates under concurrency for this model size. Qwen3-32B-AWQ native-offload TTFT at rate=1 increases from 0.115 s to 0.216 s (+88%), with ITL increasing from 18.3 ms to 135.1 ms (+638%), consistent with KV block transfer overhead at each decode step.
+Qwen3-14B fs-offload and cpu+fs-offload-20k show TTFT of 6.9–7.1 s and ITL of 87 ms at rate=50, compared to 40.0 s and 357.7 ms for no-offload — an 82% reduction in TTFT and 76% reduction in ITL. This reflects the high external prefix cache hit rate eliminating prefill latency. Qwen3-8B lmcache-valkey TTFT (6.555 s) is 9.4× the no-offload value (0.696 s), indicating that Valkey round-trip overhead accumulates under concurrency for this model size. Qwen3-32B-AWQ native-offload TTFT at rate=1 increases from 0.115 s to 0.216 s (+88%), with ITL increasing from 18.3 ms to 135.1 ms (+638%), consistent with KV block transfer overhead at each decode step.
 
 ---
 
@@ -408,6 +449,57 @@ Qwen3-8B lmcache-local shows a +71.6% increase in absolute throughput (113.1 →
 
 ---
 
+## Filesystem Offload Results
+
+### Peak Throughput (gmu=0.9)
+
+| Model | no-offload | fs-offload | vs nooff | cpu+fs-offload-20k | vs nooff |
+|-------|:----------:|:----------:|:--------:|:-----------------:|:--------:|
+| Qwen3-0.6B | 807.5 | 320.6 | -60.3% | 789.3 | -2.2% |
+| Qwen3-8B | 197.3 | **199.5** | **+1.1%** | 197.3 | 0.0% |
+| Qwen3-14B | 55.5 | **163.2** | **+194.2%** | **164.3** | **+196.2%** |
+| Qwen3-32B-AWQ | 50.1 | 18.1 | -63.8% | 18.1 | -63.8% |
+
+Qwen3-14B shows the largest throughput gain: fs-offload +194.2% and cpu+fs-offload-20k +196.2% vs the no-offload baseline. Qwen3-8B fs-offload (+1.1%) and cpu+fs-offload-20k (0.0%) are effectively neutral vs baseline. Qwen3-0.6B fs-offload shows -60.3%; cpu+fs-offload-20k recovers to -2.2% (matching lmcache-valkey). Qwen3-32B-AWQ shows -63.8% for both fs configs, consistent with other offload configurations at this model size.
+
+### Cross-Version Comparison (v0.5.1 → v0.6.0)
+
+| Model | Config | v0.5.1 | v0.5.1 vs nooff | v0.6.0 | v0.6.0 vs nooff | Delta |
+|-------|--------|:------:|:---------------:|:------:|:---------------:|:-----:|
+| Qwen3-0.6B | fs-offload | 842.7 | +32.3% | 320.6 | -60.3% | -62.0% |
+| Qwen3-8B | fs-offload | 212.3 | +86.0% | 199.5 | +1.1% | -6.0% |
+| Qwen3-14B | fs-offload | 183.5 | +212.7% | 163.2 | +194.2% | -11.1% |
+| Qwen3-32B-AWQ | fs-offload | 22.4 | -56.2% | 18.1 | -63.8% | -19.0% |
+| Qwen3-0.6B | cpu+fs-offload-20k | 854.4 | +34.2% | 789.3 | -2.2% | -7.6% |
+| Qwen3-8B | cpu+fs-offload-20k | 188.8 | +65.4% | 197.3 | 0.0% | +4.5% |
+| Qwen3-14B | cpu+fs-offload-20k | 169.6 | +189.1% | 164.3 | +196.2% | -3.1% |
+| Qwen3-32B-AWQ | cpu+fs-offload-20k | 21.3 | -58.3% | 18.1 | -63.8% | -14.9% |
+
+Qwen3-0.6B fs-offload shows -62.0% absolute decline from v0.5.1 to v0.6.0 (842.7 → 320.6 tok/s) while the no-offload baseline increased +26.8%. In v0.5.1, 0.6B fs-offload exceeded the no-offload baseline (+32.3%); in v0.6.0 it falls well below (-60.3%). cpu+fs-offload-20k partially recovers for 0.6B (-7.6% absolute, -2.2% vs no-offload), suggesting the CPU tier buffers some of the regression.
+
+Qwen3-14B maintains high absolute throughput under fs-offload across versions (183.5 → 163.2 tok/s, -11.1%), with both configurations remaining above 160 tok/s vs the 55.5 tok/s no-offload baseline.
+
+![Filesystem Offload Version Comparison](analysis/v0.6.0_fs_version_comparison.png)
+*Figure: fs-offload and cpu+fs-offload-20k peak throughput (tok/s) for v0.5.1 vs v0.6.0 at gmu=0.9.*
+
+### Latency (gmu=0.9, rate=50)
+
+| Model | Config | TTFT (s) | ITL (ms) |
+|-------|--------|:--------:|:--------:|
+| Qwen3-0.6B | no-offload | 0.248 | 47.4 |
+| | fs-offload | 0.322 | 47.3 |
+| | cpu+fs-offload-20k | 0.260 | 46.6 |
+| Qwen3-8B | no-offload | 0.696 | 110.9 |
+| | fs-offload | 0.959 | 130.9 |
+| | cpu+fs-offload-20k | 0.967 | 137.2 |
+| Qwen3-14B | no-offload | 40.009 | 357.7 |
+| | fs-offload | **7.063** | **87.8** |
+| | cpu+fs-offload-20k | **6.911** | **87.3** |
+
+Qwen3-14B fs-offload reduces TTFT from 40.0 s to 7.1 s (-82%) and ITL from 357.7 ms to 87.8 ms (-75%) at rate=50, driven by cache hits eliminating prefix recomputation. Qwen3-8B fs-offload shows a modest TTFT increase (0.696 → 0.959 s, +38%) with near-neutral throughput (+1.1%). Qwen3-0.6B latency is broadly comparable across configurations at rate=50.
+
+---
+
 ## Observations
 
 1. **vLLM 0.17.1 (v0.6.0) delivers 26.8% and 72.9% no-offload throughput gains for Qwen3-0.6B and Qwen3-8B respectively vs vLLM 0.15.1 (v0.5.1).** Qwen3-14B no-offload throughput decreases by 5.5% (58.7 → 55.5 tok/s). Qwen3-32B-AWQ no-offload is within measurement variance (-2.1%).
@@ -424,9 +516,13 @@ Qwen3-8B lmcache-local shows a +71.6% increase in absolute throughput (113.1 →
 
 7. **Qwen3-32B-AWQ offload configurations under memory pressure were not run** due to confirmed vLLM #38515 crashes across all concurrency levels during initial testing. No-offload (50.1 tok/s) is included and stable.
 
-8. **fs-offload and cpu+fs-offload-20k remain untested in v0.6.0** due to the GLIBCXX_3.4.30 requirement in `llmd_fs_connector` v0.18.0 not being met by the llm-d-cuda:v0.6.0 image base. The v0.5.1 workaround (LD_PRELOAD of Nsight Compute libstdc++) is no longer available. Fix PR [llm-d/llm-d-kv-cache#498](https://github.com/llm-d/llm-d-kv-cache/pull/498) pending.
+8. **Qwen3-14B fs-offload delivers +194.2% throughput and reduces TTFT from 40.0 s to 7.1 s (-82%) at rate=50.** Both fs-offload and cpu+fs-offload-20k exceed 160 tok/s vs the 55.5 tok/s no-offload baseline. This is the largest throughput gain observed for any configuration across all v0.6.0 results.
 
-9. **EPP v0.7.1 removes the `--kv-cache-usage-percentage-metric` flag** present in v0.5.x. All v0.6.0 EPP deployments were updated accordingly; no functional impact on benchmark workloads was observed.
+9. **Qwen3-0.6B fs-offload regresses from v0.5.1 (+32.3% vs no-offload) to v0.6.0 (-60.3%).** cpu+fs-offload-20k recovers to -2.2% for 0.6B, matching lmcache-valkey. The underlying cause of the 0.6B fs-offload regression between versions is not yet determined.
+
+10. **libstdc++ ABI issue resolved in v0.6.0:** `llmd_fs_connector` v0.18.0 is built with `-static-libstdc++` ([llm-d/llm-d-kv-cache#498](https://github.com/llm-d/llm-d-kv-cache/pull/498)), eliminating the GLIBCXX runtime dependency and the LD_PRELOAD workaround required in v0.5.1.
+
+11. **EPP v0.7.1 removes the `--kv-cache-usage-percentage-metric` flag** present in v0.5.x. All v0.6.0 EPP deployments were updated accordingly; no functional impact on benchmark workloads was observed.
 
 ---
 
@@ -443,3 +539,5 @@ Qwen3-8B lmcache-local shows a +71.6% increase in absolute throughput (113.1 →
 **Historical baselines:** v0.5.1 peak throughput values are taken from `scripts/analyze-v0.5.1.py` (gmu=0.9) and `scripts/analyze-v0.5.1-lmcache.py` (mempress) output. v0.4.0 no-offload values are from REPORT-v0.4.0.md.
 
 **Analysis script:** `scripts/analyze-v0.6.0.py`, outputs in `analysis/v0.6.0_*.{png,csv}`.
+
+**Run count:** 297 total benchmark runs — 6 configs × 4 models × 8 rates (gmu=0.9) plus 4 configs × 3 models × 8 rates (mempress) plus Qwen3-32B-AWQ no-offload at both gmu levels.
