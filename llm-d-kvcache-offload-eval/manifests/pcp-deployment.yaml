@@ -41,7 +41,7 @@ spec:
       serviceAccountName: pcp
       containers:
       - name: pcp
-        image: quay.io/performancecopilot/pcp:latest
+        image: ghcr.io/performancecopilot/pcp:latest
         imagePullPolicy: IfNotPresent
         command:
         - /bin/bash
