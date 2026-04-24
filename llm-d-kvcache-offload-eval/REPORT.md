@@ -128,6 +128,8 @@ Values are % throughput delta vs same-version no-offload baseline. LMCache versi
 
 Values are % throughput delta vs same-version no-offload baseline. All runs use `threads_per_gpu=128`, IBM VPC block PVC (6,000 IOPS). Mempress fs-offload runs used `threads_per_gpu=64` and are not shown here (see REPORT-v0.5.1.md §Memory-Pressure Analysis).
 
+**gmu=0.9** — values are % throughput delta vs same-version no-offload baseline, `threads_per_gpu=128`:
+
 | Config | Qwen3-0.6B | Qwen3-8B | Qwen3-14B | Qwen3-32B-AWQ |
 |-------|:----------:|:--------:|:---------:|:------------:|
 | v0.5.1 fs-offload | +32.3% | +86.0% | +212.7% | -56.2% |
@@ -135,7 +137,14 @@ Values are % throughput delta vs same-version no-offload baseline. All runs use 
 | v0.6.0 fs-offload | -60.3% | +1.1% | +194.2% | -63.8% |
 | v0.6.0 cpu+fs-offload-20k | -2.2% | 0.0% | +196.2% | -63.8% |
 
-Qwen3-14B shows the largest gains in both versions (>189%), driven by high external prefix cache hit rates (52–57%) reducing prefill computation for the 10,000-token shared prefix. Qwen3-0.6B fs-offload regresses from v0.5.1 to v0.6.0; cpu+fs-offload-20k recovers to -2.2% in v0.6.0.
+**mempress gmu (0.55–0.70)** — v0.5.1 only, `threads_per_gpu=128`:
+
+| Config | Qwen3-0.6B | Qwen3-8B | Qwen3-14B | Qwen3-32B-AWQ |
+|-------|:----------:|:--------:|:---------:|:------------:|
+| v0.5.1 fs-offload | **+48.4%** | **+103.6%** | **+125.4%** | -2.1% |
+| v0.5.1 cpu+fs-offload-20k | +24.7% | +80.0% | +125.4% | -2.1% |
+
+Qwen3-14B shows the largest gains (>125% mempress, >189% gmu=0.9), driven by high external prefix cache hit rates (52–57%) reducing prefill computation for the 10,000-token shared prefix. Qwen3-0.6B fs-offload regresses from v0.5.1 to v0.6.0 at gmu=0.9; cpu+fs-offload-20k recovers to -2.2% in v0.6.0.
 
 ---
 

@@ -38,10 +38,10 @@ At default gpu_memory_utilization=0.9, only Qwen3-14B has insufficient GPU KV-ca
 | native-offload-20k | **+22.3%** | -3.6% | **+10.4%** | -33.3% |
 | lmcache-local | -4.7% | +1.8% | -3.0% | -2.1% |
 | lmcache-valkey | -5.3% | +0.9% | -1.5% | -2.1% |
-| fs-offload | -58.7% | -41.8% | -40.3% | 0.0% |
-| cpu+fs-offload-20k | -85.6% | -41.8% | -40.3% | -2.1% |
+| fs-offload | **+48.4%** | **+103.6%** | **+125.4%** | -2.1% |
+| cpu+fs-offload-20k | **+24.7%** | **+80.0%** | **+125.4%** | -2.1% |
 
-Under memory pressure, native-offload-20k reaches +22.3% for Qwen3-0.6B and +10.4% for Qwen3-14B. LMCache shows near-zero overhead for 8B (+1.8%) and 32B-AWQ (-2.1%) and modest negative deltas for 0.6B and 14B. Mempress fs-offload runs used `threads_per_gpu=64`; see §Filesystem Offload Analysis for the impact of this parameter.
+Under memory pressure, native-offload-20k reaches +22.3% for Qwen3-0.6B and +10.4% for Qwen3-14B. LMCache shows near-zero overhead for 8B (+1.8%) and 32B-AWQ (-2.1%) and modest negative deltas for 0.6B and 14B. Filesystem offload with `threads_per_gpu=128` shows large throughput gains under memory pressure for 0.6B, 8B, and 14B, with high external prefix cache hit rates driving the improvement.
 
 **Peak Throughput at default gpu_memory_utilization=0.9 (unconstrained conditions):**
 
@@ -208,8 +208,8 @@ All four v0.5.1 configurations were re-run with per-model reduced `gpu_memory_ut
 | native-offload-20k | 644.3 (+22.3%) | 113.1 (-3.6%) | 78.9 (+10.4%) | 34.1 (-33.3%) |
 | **lmcache-local** | **502.4 (-4.7%)** | **119.5 (+1.8%)** | **69.3 (-3.0%)** | **50.1 (-2.1%)** |
 | **lmcache-valkey** | **499.2 (-5.3%)** | **118.4 (+0.9%)** | **70.4 (-1.5%)** | **50.1 (-2.1%)** |
-| fs-offload | 217.6 (-58.7%) | 68.3 (-41.8%) | 42.7 (-40.3%) | 51.2 (0.0%) |
-| cpu+fs-offload-20k | 75.7 (-85.6%) | 68.3 (-41.8%) | 42.7 (-40.3%) | 50.1 (-2.1%) |
+| fs-offload | **781.9 (+48.4%)** | **238.9 (+103.6%)** | **161.1 (+125.4%)** | 50.1 (-2.1%) |
+| cpu+fs-offload-20k | 657.1 (+24.7%) | 211.2 (+80.0%) | 161.1 (+125.4%) | 50.1 (-2.1%) |
 
 ![v0.5.1 Memory-Pressure Peak Throughput](analysis/v0.5.1-mempress_peak_throughput.png)
 *Figure: Peak throughput at reduced gpu_memory_utilization. native-offload-20k shows throughput above the mempress no-offload baseline for 0.6B and 14B.*
@@ -247,7 +247,7 @@ All four v0.5.1 configurations were re-run with per-model reduced `gpu_memory_ut
 
 **Qwen3-32B-AWQ:** native-offload-20k at -33.3% — the largest throughput reduction observed across the mempress suite. Mean waiting requests at rate=50 is 38.6 and median TTFT is 27,982ms. At gmu=0.65, the GPU KV-cache token capacity (116K tokens) may be insufficient for 20K-block CPU offload to provide a net benefit at this model size.
 
-**fs-offload and cpu+fs-offload-20k:** Both show -40% to -86% throughput reduction. GPU KV-cache utilisation remains below 2% under memory pressure.
+**fs-offload and cpu+fs-offload-20k:** With `threads_per_gpu=128`, both show large throughput gains under memory pressure: 0.6B +48.4%/+24.7%, 8B +103.6%/+80.0%, 14B +125.4%/+125.4%. Qwen3-32B-AWQ shows -2.1% for both, consistent with its gmu=0.9 behaviour.
 
 ### Cross-Version Comparison at Matched Memory Pressure
 
@@ -451,7 +451,7 @@ The 0.6B model shows a 23–25 pp regression from v0.4.0 to v0.5.1 at mempress: 
 
 ### threads_per_gpu Parameter
 
-The `threads_per_gpu` parameter controls the number of I/O worker threads per GPU in `SharedStorageOffloadingSpec`. The gmu=0.9 runs reported here used `threads_per_gpu=128`. The mempress runs (§Memory-Pressure Analysis) used `threads_per_gpu=64`. The difference is significant: at 64 threads, fs-offload throughput for 0.6B at gmu=0.9 was below baseline; at 128 threads, it reaches +32.3%. The higher thread count reduces I/O queuing at peak concurrency and prevents shared-memory broadcast starvation in `--distributed-executor-backend mp` (see `BUG-shm-broadcast-deadlock.md`).
+The `threads_per_gpu` parameter controls the number of I/O worker threads per GPU in `SharedStorageOffloadingSpec`. All runs reported here (both gmu=0.9 and mempress) used `threads_per_gpu=128`. The higher thread count reduces I/O queuing at peak concurrency and prevents shared-memory broadcast starvation in `--distributed-executor-backend mp` (see `BUG-shm-broadcast-deadlock.md`). Earlier benchmarks at `threads_per_gpu=64` showed -40% to -86% under mempress and deadlock at rate≥300 for 0.6B; at 128 threads both issues are resolved.
 
 ### Storage I/O Characterisation
 
