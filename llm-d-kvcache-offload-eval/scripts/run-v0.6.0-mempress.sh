@@ -21,7 +21,7 @@ export TENSOR_PARALLEL_SIZE=2
 export GPUS_PER_REPLICA=2
 
 # llmd_fs_connector wheel — v0.18.0 for vLLM 0.17.1
-FS_WHEEL_PATH="/data/llmd_fs_connector-0.18.0-cp312-cp312-linux_x86_64.whl"
+FS_WHEEL_PATH="/data/llmd_fs_connector-0.18-static-fixed.whl"
 FS_PACKAGES_DIR="/tmp/llmd_packages"
 
 # ---------------------------------------------------------------------------
@@ -106,7 +106,7 @@ for replicas in ${REPLICAS}; do
                     export VLLM_ENV_VARS="PYTHONHASHSEED=42 PYTHONPATH=${FS_PACKAGES_DIR}"
                     export EPP_BACKEND_CONFIG="in-memory"
                     export USE_LMCACHE_IMAGE=""
-                    export VLLM_PRE_CMD="pip3.12 install --quiet --target ${FS_PACKAGES_DIR} ${FS_WHEEL_PATH} && mkdir -p /kvcache/kv-cache"
+                    export VLLM_PRE_CMD="rm -rf ${FS_PACKAGES_DIR} && pip3.12 install --quiet --no-cache-dir --target ${FS_PACKAGES_DIR} ${FS_WHEEL_PATH} && mkdir -p /kvcache/kv-cache"
                     ;;
                 "cpu+fs-offload-20k")
                     export CONTAINER_IMAGE="ghcr.io/llm-d/llm-d-cuda:v0.6.0"
@@ -114,7 +114,7 @@ for replicas in ${REPLICAS}; do
                     export VLLM_ENV_VARS="PYTHONHASHSEED=42 PYTHONPATH=${FS_PACKAGES_DIR}"
                     export EPP_BACKEND_CONFIG="in-memory"
                     export USE_LMCACHE_IMAGE=""
-                    export VLLM_PRE_CMD="pip3.12 install --quiet --target ${FS_PACKAGES_DIR} ${FS_WHEEL_PATH} && mkdir -p /kvcache/kv-cache"
+                    export VLLM_PRE_CMD="rm -rf ${FS_PACKAGES_DIR} && pip3.12 install --quiet --no-cache-dir --target ${FS_PACKAGES_DIR} ${FS_WHEEL_PATH} && mkdir -p /kvcache/kv-cache"
                     ;;
                 *)
                     echo "Unknown configuration: ${run}"

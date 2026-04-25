@@ -26,7 +26,7 @@ export GPUS_PER_REPLICA="${TENSOR_PARALLEL_SIZE}"
 # llm-d-cuda:v0.6.0. No LD_PRELOAD workaround required.
 # Staged on model-storage-pvc as /data/llmd_fs_connector-0.18-cp312-cp312-linux_x86_64.whl
 # (copied from the -static- named artifact with valid wheel filename for pip).
-FS_WHEEL_PATH="/data/llmd_fs_connector-0.18-cp312-cp312-linux_x86_64.whl"
+FS_WHEEL_PATH="/data/llmd_fs_connector-0.18-static-fixed.whl"
 FS_PACKAGES_DIR="/tmp/llmd_packages"
 
 # ---------------------------------------------------------------------------
