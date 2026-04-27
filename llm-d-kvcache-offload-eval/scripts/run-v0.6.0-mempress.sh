@@ -21,7 +21,7 @@ export TENSOR_PARALLEL_SIZE=2
 export GPUS_PER_REPLICA=2
 
 # llmd_fs_connector wheel — v0.18.0 for vLLM 0.17.1
-FS_WHEEL_PATH="/data/llmd_fs_connector-0.18-static-fixed.whl"
+FS_WHEEL_PATH="/data/llmd_fs_connector-0.7.1-cp312-cp312-linux_x86_64.whl"
 FS_PACKAGES_DIR="/tmp/llmd_packages"
 
 # ---------------------------------------------------------------------------
@@ -57,7 +57,7 @@ for replicas in ${REPLICAS}; do
     kubectl --kubeconfig="${KUBECONFIG}" scale deployment/"${INFERENCE_DEPLOYMENT}" \
         -n "${NAMESPACE}" --replicas="${replicas}"
     kubectl --kubeconfig="${KUBECONFIG}" rollout status deployment/"${INFERENCE_DEPLOYMENT}" \
-        -n "${NAMESPACE}" --timeout=300s
+        -n "${NAMESPACE}" --timeout=600s
     sleep 30
 
     for model in ${MODELS}; do
