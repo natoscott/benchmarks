@@ -3,7 +3,7 @@ set -e
 
 # Benchmarks for llm-d v0.6.0 (vLLM 0.17.1) — filesystem and CPU+filesystem offload.
 # Uses llmd_fs_connector-0.18.0 wheel (llm-d-kv-cache v0.7.1).
-# Wheel must be pre-staged on model-storage-pvc at /data/llmd_fs_connector-vllm017-static-cp312-cp312-linux_x86_64.whl
+# Wheel must be pre-staged on model-storage-pvc at /data/llmd_fs_connector-0.17.1-cp312-cp312-linux_x86_64.whl
 # Mirrors run-v0.5.1-filesystem-offload.sh for version comparison.
 
 RUNS="${RUNS:-fs-offload cpu+fs-offload-20k}"
@@ -24,9 +24,9 @@ export GPUS_PER_REPLICA="${TENSOR_PARALLEL_SIZE}"
 # llmd_fs_connector wheel — v0.18.0 built with -static-libstdc++ (llm-d-kv-cache PR#498).
 # Statically links libstdc++ to avoid GLIBCXX_3.4.30 runtime dependency missing in
 # llm-d-cuda:v0.6.0. No LD_PRELOAD workaround required.
-# Staged on model-storage-pvc as /data/llmd_fs_connector-vllm017-static-cp312-cp312-linux_x86_64.whl
+# Staged on model-storage-pvc as /data/llmd_fs_connector-0.17.1-cp312-cp312-linux_x86_64.whl
 # (copied from the -static- named artifact with valid wheel filename for pip).
-FS_WHEEL_PATH="/data/llmd_fs_connector-vllm017-static-cp312-cp312-linux_x86_64.whl"
+FS_WHEEL_PATH="/data/llmd_fs_connector-0.17.1-cp312-cp312-linux_x86_64.whl"
 FS_PACKAGES_DIR="/tmp/llmd_packages"
 
 # ---------------------------------------------------------------------------
