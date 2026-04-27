@@ -114,7 +114,7 @@ for replicas in ${REPLICAS}; do
                     export VLLM_ENV_VARS="PYTHONHASHSEED=42 PYTHONPATH=${FS_PACKAGES_DIR} PROMETHEUS_MULTIPROC_DIR=/tmp/prom_multiproc"
                     export EPP_BACKEND_CONFIG="in-memory"
                     export USE_LMCACHE_IMAGE=""
-                    export VLLM_PRE_CMD="rm -rf ${FS_PACKAGES_DIR} && pip3.12 install --quiet --no-cache-dir --target ${FS_PACKAGES_DIR} ${FS_WHEEL_PATH} && mkdir -p /kvcache/kv-cache /tmp/prom_multiproc"
+                    export VLLM_PRE_CMD="rm -rf ${FS_PACKAGES_DIR} && pip3.12 install --quiet --no-cache-dir --target ${FS_PACKAGES_DIR} ${FS_WHEEL_PATH} && mkdir -p /kvcache/kv-cache /tmp/prom_multiproc && python3.12 /data/patch_multi_connector.py"
                     ;;
                 *)
                     echo "Unknown configuration: ${run}"
