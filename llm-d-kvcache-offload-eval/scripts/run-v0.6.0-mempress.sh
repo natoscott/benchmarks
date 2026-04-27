@@ -21,7 +21,7 @@ export TENSOR_PARALLEL_SIZE=2
 export GPUS_PER_REPLICA=2
 
 # llmd_fs_connector wheel — v0.18.0 for vLLM 0.17.1
-FS_WHEEL_PATH="/data/llmd_fs_connector-0.7.1-cp312-cp312-linux_x86_64.whl"
+FS_WHEEL_PATH="/data/llmd_fs_connector-vllm017-static-cp312-cp312-linux_x86_64.whl"
 FS_PACKAGES_DIR="/tmp/llmd_packages"
 
 # ---------------------------------------------------------------------------
