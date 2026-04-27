@@ -103,18 +103,18 @@ for replicas in ${REPLICAS}; do
                 "fs-offload")
                     export CONTAINER_IMAGE="ghcr.io/llm-d/llm-d-cuda:v0.6.0"
                     export VLLM_EXTRA_ARGS="--kv-transfer-config '{\"kv_connector\":\"OffloadingConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"spec_name\":\"SharedStorageOffloadingSpec\",\"shared_storage_path\":\"/kvcache/kv-cache/\",\"block_size\":256,\"threads_per_gpu\":128,\"spec_module_path\":\"llmd_fs_backend.spec\"}}' --distributed-executor-backend mp"
-                    export VLLM_ENV_VARS="PYTHONHASHSEED=42 PYTHONPATH=${FS_PACKAGES_DIR}"
+                    export VLLM_ENV_VARS="PYTHONHASHSEED=42 PYTHONPATH=${FS_PACKAGES_DIR} PROMETHEUS_MULTIPROC_DIR=/tmp/prom_multiproc"
                     export EPP_BACKEND_CONFIG="in-memory"
                     export USE_LMCACHE_IMAGE=""
-                    export VLLM_PRE_CMD="rm -rf ${FS_PACKAGES_DIR} && pip3.12 install --quiet --no-cache-dir --target ${FS_PACKAGES_DIR} ${FS_WHEEL_PATH} && mkdir -p /kvcache/kv-cache"
+                    export VLLM_PRE_CMD="rm -rf ${FS_PACKAGES_DIR} && pip3.12 install --quiet --no-cache-dir --target ${FS_PACKAGES_DIR} ${FS_WHEEL_PATH} && mkdir -p /kvcache/kv-cache /tmp/prom_multiproc"
                     ;;
                 "cpu+fs-offload-20k")
                     export CONTAINER_IMAGE="ghcr.io/llm-d/llm-d-cuda:v0.6.0"
                     export VLLM_EXTRA_ARGS="--kv-transfer-config '{\"kv_connector\":\"MultiConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"connectors\":[{\"kv_connector\":\"OffloadingConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"cpu_bytes_to_use\":${CPU_BYTES_20K}}},{\"kv_connector\":\"OffloadingConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"spec_name\":\"SharedStorageOffloadingSpec\",\"shared_storage_path\":\"/kvcache/kv-cache/\",\"block_size\":256,\"threads_per_gpu\":128,\"spec_module_path\":\"llmd_fs_backend.spec\"}}]}}' --distributed-executor-backend mp"
-                    export VLLM_ENV_VARS="PYTHONHASHSEED=42 PYTHONPATH=${FS_PACKAGES_DIR}"
+                    export VLLM_ENV_VARS="PYTHONHASHSEED=42 PYTHONPATH=${FS_PACKAGES_DIR} PROMETHEUS_MULTIPROC_DIR=/tmp/prom_multiproc"
                     export EPP_BACKEND_CONFIG="in-memory"
                     export USE_LMCACHE_IMAGE=""
-                    export VLLM_PRE_CMD="rm -rf ${FS_PACKAGES_DIR} && pip3.12 install --quiet --no-cache-dir --target ${FS_PACKAGES_DIR} ${FS_WHEEL_PATH} && mkdir -p /kvcache/kv-cache"
+                    export VLLM_PRE_CMD="rm -rf ${FS_PACKAGES_DIR} && pip3.12 install --quiet --no-cache-dir --target ${FS_PACKAGES_DIR} ${FS_WHEEL_PATH} && mkdir -p /kvcache/kv-cache /tmp/prom_multiproc"
                     ;;
                 *)
                     echo "Unknown configuration: ${run}"
