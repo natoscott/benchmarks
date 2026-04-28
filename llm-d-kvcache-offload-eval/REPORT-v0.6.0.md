@@ -56,12 +56,20 @@ At default gpu_memory_utilization=0.9, only Qwen3-14B has insufficient GPU KV-ca
 | | native-offload-20k¹ | 61.9 | 300 | -10.8% | -21.6% |
 | | lmcache-local | 68.3 | 100 | -1.5% | -1.5% |
 | | lmcache-valkey | 68.3 | 100 | -1.5% | -3.0% |
+| | fs-offload | 67.2 | 100 | -3.0% | — |
+| | cpu+fs-offload-20k | — | — | deadlock² | — |
 | Qwen3-32B-AWQ | no-offload | 50.1 | 1 | — | -2.1% |
-| | offload configs | not run | — | — | — |
+| | native-offload-20k | not run | — | (vLLM #38515) | — |
+| | lmcache-local | not run | — | (vLLM #38515) | — |
+| | lmcache-valkey | not run | — | (vLLM #38515) | — |
+| | fs-offload | 50.1 | 1 | 0.0% | — |
+| | cpu+fs-offload-20k | — | — | deadlock² | — |
 
 ¹ *Qwen3-14B native-offload-20k mempress: three rates excluded due to vLLM #38515 (>10% error rate: rate=50, rate=100, rate=500). Peak from clean rates (rate=150–650, excluding rate=500).*
 
-Under memory pressure, Qwen3-0.6B native-offload-20k reaches +51.4% vs the mempress no-offload baseline (up from +22.3% in v0.5.1). Qwen3-8B lmcache-valkey delivers +3.1%, recovering from -28.1% at gmu=0.9. LMCache shows -1.5% to 0.0% for 8B and 14B under mempress.
+² *cpu+fs-offload-20k mempress: EngineCore shared-memory broadcast deadlock (vLLM 0.17.1 MultiConnector under KV cache pressure). Affects 14B (all rates) and 32B-AWQ (rate≥50); 8B complete only at rate<150. The deadlock occurs when both CPU and filesystem connectors write simultaneously under reduced GPU KV-cache capacity, saturating the mp executor shared-memory queue. See BUG-shm-broadcast-deadlock.md.*
+
+Under memory pressure, Qwen3-0.6B native-offload-20k reaches +51.4% vs the mempress no-offload baseline (up from +22.3% in v0.5.1). Qwen3-8B lmcache-valkey delivers +3.1%, recovering from -28.1% at gmu=0.9. LMCache shows -1.5% to 0.0% for 8B and 14B under mempress. fs-offload delivers modest results under mempress: 0.6B -3.5%, 8B -25.5%, 14B -3.0%, 32B-AWQ 0.0%. cpu+fs-offload-20k mempress is blocked by the MultiConnector deadlock for larger models.
 
 **Peak Throughput at default gpu_memory_utilization=0.9 (unconstrained conditions):**
 
@@ -222,6 +230,10 @@ These runs are excluded from peak throughput selection. The clean peak for Qwen3
 
 The 32B-AWQ mempress offload configurations were not run at all for native-offload-20k, lmcache-local, and lmcache-valkey due to confirmed crashes at all concurrency levels during initial testing. Qwen3-32B-AWQ mempress no-offload (50.1 tok/s) is included and unaffected.
 
+### MultiConnector EngineCore Deadlock Under Mempress
+
+When `cpu+fs-offload-20k` (MultiConnector with CPU+filesystem connectors) is used under reduced `gpu_memory_utilization`, the vLLM 0.17.1 EngineCore enters a shared-memory broadcast deadlock at moderate-to-high concurrency. The health endpoint continues returning 200 but inference requests hang indefinitely. The deadlock occurs because both connectors write KV blocks simultaneously under memory pressure, saturating the mp executor's shared-memory broadcast queue before workers can drain it. This affects 14B at all mempress rates and 32B-AWQ at rate≥50. Plain fs-offload (single connector) is unaffected. The fix for the related MultiConnector Prometheus duplication issue (vLLM #39906) was applied in-container via `patch_multi_connector.py`, but the deadlock is a separate issue in the KV transfer path.
+
 ### libstdc++ ABI: Resolved in v0.6.0 Builds
 
 The `llmd_fs_connector` wheel (v0.18.0) requires GLIBCXX_3.4.30+. The llm-d-cuda:v0.6.0 image removed Nsight Compute (which provided the workaround libstdc++ in v0.5.1 via LD_PRELOAD). Fix PR [llm-d/llm-d-kv-cache#498](https://github.com/llm-d/llm-d-kv-cache/pull/498) added `-static-libstdc++` to `setup.py`, embedding the C++ runtime in the `.so` and eliminating the runtime GLIBCXX version dependency. This fix is present in the v0.18.0 wheel used for these benchmarks; no LD_PRELOAD workaround is required.
@@ -240,10 +252,14 @@ Memory-pressure runs use reduced `gpu_memory_utilization` per model (see §Test 
 | | native-offload-20k | 794.7 | 50 | **+51.4%** | +23.3% |
 | | lmcache-local | 426.7 | 50 | -18.7% | -15.1% |
 | | lmcache-valkey | 474.7 | 50 | -9.6% | -4.9% |
+| | fs-offload | 506.7 | 50 | -3.5% | — |
+| | cpu+fs-offload-20k | — | — | deadlock² | — |
 | Qwen3-8B | no-offload | 104.5 | 100 | — | -10.9% |
 | | native-offload-20k | 87.5 | 50 | -16.3% | -22.7% |
 | | lmcache-local | 104.5 | 100 | 0.0% | -12.5% |
 | | lmcache-valkey | 107.7 | 50 | +3.1% | -9.0% |
+| | fs-offload | 77.9 | 100 | -25.5% | — |
+| | cpu+fs-offload-20k | — | — | deadlock² (rate≥150) | — |
 | Qwen3-14B | no-offload | 69.3 | 100 | — | -3.0% |
 | | native-offload-20k¹ | 61.9 | 300 | -10.8% | -21.6% |
 | | lmcache-local | 68.3 | 100 | -1.5% | -1.5% |
