@@ -1,0 +1,87 @@
+enabled: true
+modelArtifacts:
+  name: openai/gpt-oss-20b
+  labels:
+    llm-d.ai/inference-serving: 'true'
+    llm-d.ai/model: openai_gpt_oss_20b
+  uri: hf://openai/gpt-oss-20b
+  size: 100Gi
+authSecretName: ''
+mountPath: /model-cache
+accelerator:
+  type: nvidia
+  dra: false
+routing:
+  servicePort: 8000
+  proxy:
+    enabled: true
+    image: ghcr.io/llm-d/llm-d-routing-sidecar:latest
+    imagePullPolicy: Always
+    targetPort: 8200
+    connector: nixlv2
+    zapLogLevel: info
+multinode: false
+decode:
+  create: true
+  replicas: 1
+  parallelism:
+    tensor: 1
+    data: 1
+    dataLocal: 1
+    workers: 1
+  containers:
+  - name: vllm
+    image: vllm/vllm-openai:latest
+    modelCommand: vllmServe
+    args:
+    - --model
+    - openai/gpt-oss-20b
+    - --served-model-name
+    - ? openai/gpt-oss-20b        - "--tensor-parallel-size"        - "1"        - "--pipeline-parallel-size"        - "1"        - "--data-parallel-size"        - "1"        - "--kv-cache-dtype"        - "auto"        - "--max-num-seqs"        - "512"        - "--max-num-batched-tokens"        - "512"      env
+      : []
+    ports:
+    - containerPort: 8200
+      name: metrics
+      protocol: TCP
+    resources:
+      limits:
+        nvidia.com/gpu: 1
+    mountModelVolume: true
+    volumeMounts:
+    - name: metrics-volume
+      mountPath: /.config
+  volumes:
+  - name: metrics-volume
+    emptyDir: {}
+prefill:
+  create: true
+  replicas: 7
+  parallelism:
+    tensor: 1
+    data: 1
+    dataLocal: 1
+    workers: 1
+  containers:
+  - name: vllm
+    image: vllm/vllm-openai:latest
+    modelCommand: vllmServe
+    args:
+    - --model
+    - openai/gpt-oss-20b
+    - --served-model-name
+    - ? openai/gpt-oss-20b        - "--tensor-parallel-size"        - "1"        - "--pipeline-parallel-size"        - "1"        - "--data-parallel-size"        - "1"        - "--kv-cache-dtype"        - "auto"        - "--max-num-seqs"        - "1"        - "--max-num-batched-tokens"        - "10500"      env
+      : []
+    ports:
+    - containerPort: 8000
+      name: metrics
+      protocol: TCP
+    resources:
+      limits:
+        nvidia.com/gpu: 1
+    mountModelVolume: true
+    volumeMounts:
+    - name: metrics-volume
+      mountPath: /.config
+  volumes:
+  - name: metrics-volume
+    emptyDir: {}

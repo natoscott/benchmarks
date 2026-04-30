@@ -1,0 +1,50 @@
+# LLMInferenceService for openai/gpt-oss-20b — agg top1 config from aiconfigurator.
+#
+# AIC prediction (ISL=9000, OSL=30, TTFT<=500ms, 8x H200):
+#   Deployment: 8 replicas x 1 GPU (tp=1, data-parallel across replicas)
+#   Predicted:  63.6 req/s, TTFT=461ms, 1844 tokens/s total
+#
+# Memory budget per GPU (H200, 140GB HBM):
+#   Weights (mxfp4 MoE): ~21.8 GB
+#   KV cache (bfloat16):  ~118 GB available
+#
+# vLLM args derived from aiconfigurator agg/top1/generator_config.yaml:
+#   --max-model-len 10530       ISL 9000 + OSL 30 + overhead
+#   --max-num-seqs 512          KV cache capacity at bfloat16 on 1x H200
+#   --max-num-batched-tokens 11012  prefill batch ceiling for ISL 9000
+apiVersion: serving.kserve.io/v1alpha2
+kind: LLMInferenceService
+metadata:
+  name: gpt-oss-20b
+  namespace: aiconfigurator
+spec:
+  baseRefs:
+  - name: v3-4-0-kserve-config-llm-template
+  - name: v3-4-0-kserve-config-llm-scheduler
+  - name: v3-4-0-kserve-config-llm-router-route
+  model:
+    name: "openai/gpt-oss-20b"
+    uri: "pvc://model-storage-pvc/openai/gpt-oss-20b"
+  parallelism:
+    tensor: 1
+  replicas: 8
+  template:
+    containers:
+    - name: main
+      env:
+      - name: HUGGING_FACE_HUB_TOKEN
+        valueFrom:
+          secretKeyRef:
+            name: llm-d-hf-token
+            key: HF_TOKEN
+      - name: VLLM_ADDITIONAL_ARGS
+        value: >-
+          --max-model-len 10530
+          --max-num-seqs 512
+          --max-num-batched-tokens 11012
+      resources:
+        requests:
+          nvidia.com/gpu: "1"
+          memory: 40Gi
+        limits:
+          nvidia.com/gpu: "1"

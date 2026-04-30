@@ -1,0 +1,8 @@
+# Model weights — stored on cluster PVC, not in git
+*.safetensors
+*.bin
+*.pt
+*.gguf
+
+# Download logs
+*-download.log

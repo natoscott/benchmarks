@@ -1,0 +1,16 @@
+# NVMe-backed local storage on the GPU node (lvms-vg-gpu-node / topolvm).
+# WaitForFirstConsumer pins the PVC to whichever node the first pod lands on —
+# in practice this will always be the single GPU worker node.
+# Sized for gpt-oss-20b (bfloat16 ~40GB) with room for additional models.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: model-storage-pvc
+  namespace: aiconfigurator
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 200Gi
+  storageClassName: lvms-vg-gpu-node

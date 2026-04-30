@@ -1,0 +1,45 @@
+# aiconfigurator runner pod.
+# Runs `sleep infinity` — exec into it to run `aiconfigurator cli` commands.
+# Output configs are written to /output (emptyDir); copy out with kubectl cp.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aiconfigurator
+  namespace: aiconfigurator
+  labels:
+    app: aiconfigurator
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app: aiconfigurator
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: aiconfigurator
+    spec:
+      serviceAccountName: aiconfigurator
+      terminationGracePeriodSeconds: 10
+      containers:
+      - name: aiconfigurator
+        image: ghcr.io/natoscott/aiconfigurator:latest
+        imagePullPolicy: Always
+        command: [sleep, infinity]
+        stdin: true
+        tty: true
+        resources:
+          requests:
+            cpu: "2"
+            memory: 4Gi
+          limits:
+            cpu: "4"
+            memory: 8Gi
+        volumeMounts:
+        - name: output
+          mountPath: /output
+      volumes:
+      - name: output
+        emptyDir: {}
