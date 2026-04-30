@@ -8,7 +8,8 @@
 #   Prefill weights (mxfp4 MoE): ~61.9 GB
 #   Decode weights (mxfp4 MoE):  ~69.1 GB
 #
-# vLLM args: prefill batch size = 1 (prefill-only workers), decode batch size = 15.
+# spec.prefill = prefill workers (vllm serve with prefill-only role)
+# spec.template = decode workers (vllm serve with decode-only role)
 apiVersion: serving.kserve.io/v1alpha2
 kind: LLMInferenceService
 metadata:
@@ -23,6 +24,9 @@ spec:
   model:
     name: "openai/gpt-oss-120b"
     uri: "pvc://model-storage-pvc/openai/gpt-oss-120b"
+  parallelism:
+    tensor: 1
+  replicas: 1
   prefill:
     parallelism:
       tensor: 1
@@ -47,27 +51,23 @@ spec:
             memory: 80Gi
           limits:
             nvidia.com/gpu: "1"
-  decode:
-    parallelism:
-      tensor: 1
-    replicas: 1
-    template:
-      containers:
-      - name: main
-        env:
-        - name: HUGGING_FACE_HUB_TOKEN
-          valueFrom:
-            secretKeyRef:
-              name: llm-d-hf-token
-              key: HF_TOKEN
-        - name: VLLM_ADDITIONAL_ARGS
-          value: >-
-            --max-model-len 10530
-            --max-num-seqs 512
-            --max-num-batched-tokens 11012
-        resources:
-          requests:
-            nvidia.com/gpu: "1"
-            memory: 80Gi
-          limits:
-            nvidia.com/gpu: "1"
+  template:
+    containers:
+    - name: main
+      env:
+      - name: HUGGING_FACE_HUB_TOKEN
+        valueFrom:
+          secretKeyRef:
+            name: llm-d-hf-token
+            key: HF_TOKEN
+      - name: VLLM_ADDITIONAL_ARGS
+        value: >-
+          --max-model-len 10530
+          --max-num-seqs 512
+          --max-num-batched-tokens 11012
+      resources:
+        requests:
+          nvidia.com/gpu: "1"
+          memory: 80Gi
+        limits:
+          nvidia.com/gpu: "1"
