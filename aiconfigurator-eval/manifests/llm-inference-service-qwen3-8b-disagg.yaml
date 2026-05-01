@@ -1,0 +1,66 @@
+# LLMInferenceService for Qwen/Qwen3-8B — disagg top1 config from aiconfigurator.
+#
+# AIC prediction (ISL=9000, OSL=30, TTFT<=500ms, 8x H200):
+#   Deployment: 1 replica = 7 prefill workers (TP=1) + 1 decode worker (TP=1) on 8 GPUs
+#   Predicted:  28.8 req/s, TTFT=394ms, 863 tokens/s total
+apiVersion: serving.kserve.io/v1alpha2
+kind: LLMInferenceService
+metadata:
+  name: qwen3-8b-disagg
+  namespace: aiconfigurator
+spec:
+  baseRefs:
+  - name: v3-4-0-kserve-config-llm-prefill-template
+  - name: v3-4-0-kserve-config-llm-decode-template
+  - name: v3-4-0-kserve-config-llm-scheduler
+  - name: v3-4-0-kserve-config-llm-router-route
+  model:
+    name: "Qwen/Qwen3-8B"
+    uri: "pvc://model-storage-pvc/Qwen__Qwen3-8B"
+  parallelism:
+    tensor: 1
+  replicas: 1
+  prefill:
+    parallelism:
+      tensor: 1
+    replicas: 7
+    template:
+      containers:
+      - name: main
+        env:
+        - name: HUGGING_FACE_HUB_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: llm-d-hf-token
+              key: HF_TOKEN
+        - name: VLLM_ADDITIONAL_ARGS
+          value: >-
+            --max-model-len 10530
+            --max-num-seqs 1
+            --max-num-batched-tokens 11012
+        resources:
+          requests:
+            nvidia.com/gpu: "1"
+            memory: 30Gi
+          limits:
+            nvidia.com/gpu: "1"
+  template:
+    containers:
+    - name: main
+      env:
+      - name: HUGGING_FACE_HUB_TOKEN
+        valueFrom:
+          secretKeyRef:
+            name: llm-d-hf-token
+            key: HF_TOKEN
+      - name: VLLM_ADDITIONAL_ARGS
+        value: >-
+          --max-model-len 10530
+          --max-num-seqs 512
+          --max-num-batched-tokens 11012
+      resources:
+        requests:
+          nvidia.com/gpu: "1"
+          memory: 30Gi
+        limits:
+          nvidia.com/gpu: "1"

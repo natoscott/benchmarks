@@ -1,0 +1,58 @@
+enabled: true
+modelArtifacts:
+  name: Qwen/Qwen3-32B-FP8
+  labels:
+    llm-d.ai/inference-serving: 'true'
+    llm-d.ai/model: Qwen_Qwen3_32B_FP8
+  uri: hf://Qwen/Qwen3-32B-FP8
+  size: 100Gi
+authSecretName: ''
+mountPath: /model-cache
+accelerator:
+  type: nvidia
+  dra: false
+routing:
+  servicePort: 8000
+  proxy:
+    enabled: true
+    image: ghcr.io/llm-d/llm-d-routing-sidecar:latest
+    imagePullPolicy: Always
+    targetPort: 8200
+    connector: nixlv2
+    zapLogLevel: info
+multinode: false
+decode:
+  create: true
+  replicas: 1
+  parallelism:
+    tensor: 8
+    data: 1
+    dataLocal: 1
+    workers: 1
+  containers:
+  - name: vllm
+    image: vllm/vllm-openai:latest
+    modelCommand: vllmServe
+    args:
+    - --model
+    - Qwen/Qwen3-32B-FP8
+    - --served-model-name
+    - ? Qwen/Qwen3-32B-FP8        - "--tensor-parallel-size"        - "8"        - "--pipeline-parallel-size"        - "1"        - "--data-parallel-size"        - "1"        - "--kv-cache-dtype"        - "fp8"        - "--max-model-len"        - "10530"        - "--max-num-seqs"        - "512"        - "--max-num-batched-tokens"        - "11012"      env
+      : []
+    ports:
+    - containerPort: 8200
+      name: metrics
+      protocol: TCP
+    resources:
+      limits:
+        nvidia.com/gpu: 8
+    mountModelVolume: true
+    volumeMounts:
+    - name: metrics-volume
+      mountPath: /.config
+  volumes:
+  - name: metrics-volume
+    emptyDir: {}
+prefill:
+  create: false
+  replicas: 0

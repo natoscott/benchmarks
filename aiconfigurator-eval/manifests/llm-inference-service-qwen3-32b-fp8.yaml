@@ -1,0 +1,45 @@
+# LLMInferenceService for Qwen/Qwen3-32B-FP8 — agg top1 config from aiconfigurator.
+#
+# AIC prediction (ISL=9000, OSL=30, TTFT<=500ms, 8x H200):
+#   Deployment: 8 replicas x 1 GPU (tp=1)
+#   Predicted:  6.6 req/s, TTFT=493ms, 191 tokens/s total
+#   Note: dense 32B prefill at ISL=9000 is compute-heavy — tight TTFT budget
+#
+# Memory budget per GPU (H200, 140GB HBM):
+#   Weights (FP8): ~16 GB
+apiVersion: serving.kserve.io/v1alpha2
+kind: LLMInferenceService
+metadata:
+  name: qwen3-32b-fp8
+  namespace: aiconfigurator
+spec:
+  baseRefs:
+  - name: v3-4-0-kserve-config-llm-template
+  - name: v3-4-0-kserve-config-llm-scheduler
+  - name: v3-4-0-kserve-config-llm-router-route
+  model:
+    name: "Qwen/Qwen3-32B-FP8"
+    uri: "pvc://model-storage-pvc/Qwen__Qwen3-32B-FP8"
+  parallelism:
+    tensor: 1
+  replicas: 8
+  template:
+    containers:
+    - name: main
+      env:
+      - name: HUGGING_FACE_HUB_TOKEN
+        valueFrom:
+          secretKeyRef:
+            name: llm-d-hf-token
+            key: HF_TOKEN
+      - name: VLLM_ADDITIONAL_ARGS
+        value: >-
+          --max-model-len 10530
+          --max-num-seqs 512
+          --max-num-batched-tokens 11012
+      resources:
+        requests:
+          nvidia.com/gpu: "1"
+          memory: 40Gi
+        limits:
+          nvidia.com/gpu: "1"
