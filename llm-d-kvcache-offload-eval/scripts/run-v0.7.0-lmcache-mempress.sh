@@ -3,7 +3,9 @@ set -e
 
 # LMCache benchmarks for llm-d v0.7.0 at reduced gpu_memory_utilization (memory-pressure).
 # Same gmu values as v0.5.1-lmcache-mempress and v0.6.0-lmcache-mempress for comparison.
-# NOTE: Verify LMCache image compatibility with vLLM 0.19.1 before running.
+# Installs lmcache==0.4.4 (released 2026-04-22) via pip into ghcr.io/llm-d/llm-d-cuda:v0.7.0.
+# v0.4.4 targets vLLM 0.18.x; compatibility with vLLM 0.19.1 is assumed until proven otherwise.
+# If v0.4.4 fails, fall back to nightly-2026-05-13-cu13 with USE_LMCACHE_IMAGE=true.
 
 RUNS="${RUNS:-lmcache-local lmcache-valkey}"
 MODELS="${MODELS:-Qwen/Qwen3-0.6B Qwen/Qwen3-8B Qwen/Qwen3-14B Qwen/Qwen3-32B-AWQ}"
@@ -19,9 +21,6 @@ export TURNS=5
 export INFERENCE_DEPLOYMENT="${INFERENCE_DEPLOYMENT:-llm-d-model-server}"
 export TENSOR_PARALLEL_SIZE=2
 export GPUS_PER_REPLICA=2
-
-# TODO: update to LMCache image targeting vLLM 0.19.1
-LMCACHE_IMAGE="${LMCACHE_IMAGE:-docker.io/lmcache/vllm-openai:v0.4.2}"
 
 IFS=',' read -ra RATES <<< "$RATE_LIST"
 
@@ -63,20 +62,20 @@ for replicas in ${REPLICAS}; do
 
             case "${run}" in
                 "lmcache-local")
-                    export CONTAINER_IMAGE="${LMCACHE_IMAGE}"
-                    export VLLM_EXTRA_ARGS=""
-                    export VLLM_ENV_VARS="HOME=/tmp HF_HOME=/data/.hf LMCACHE_MAX_LOCAL_CPU_SIZE=${LMCACHE_SIZE} PYTHONHASHSEED=123"
+                    export CONTAINER_IMAGE="ghcr.io/llm-d/llm-d-cuda:v0.7.0"
+                    export VLLM_EXTRA_ARGS="--kv-transfer-config '{\"kv_connector\":\"LMCacheConnectorV1\",\"kv_role\":\"kv_both\"}' --enable-prefix-caching"
+                    export VLLM_ENV_VARS="HF_HOME=/data/.hf LMCACHE_MAX_LOCAL_CPU_SIZE=${LMCACHE_SIZE} PYTHONHASHSEED=123"
                     export EPP_BACKEND_CONFIG="in-memory"
-                    export USE_LMCACHE_IMAGE="true"
-                    export VLLM_PRE_CMD=""
+                    export USE_LMCACHE_IMAGE=""
+                    export VLLM_PRE_CMD="pip install --quiet lmcache==0.4.4"
                     ;;
                 "lmcache-valkey")
-                    export CONTAINER_IMAGE="${LMCACHE_IMAGE}"
-                    export VLLM_EXTRA_ARGS=""
-                    export VLLM_ENV_VARS="HOME=/tmp HF_HOME=/data/.hf LMCACHE_REMOTE_URL=valkey://valkey.${NAMESPACE}.svc.cluster.local:6379 LMCACHE_USE_EXPERIMENTAL=true PYTHONHASHSEED=123"
+                    export CONTAINER_IMAGE="ghcr.io/llm-d/llm-d-cuda:v0.7.0"
+                    export VLLM_EXTRA_ARGS="--kv-transfer-config '{\"kv_connector\":\"LMCacheConnectorV1\",\"kv_role\":\"kv_both\"}' --enable-prefix-caching"
+                    export VLLM_ENV_VARS="HF_HOME=/data/.hf LMCACHE_REMOTE_URL=valkey://valkey.${NAMESPACE}.svc.cluster.local:6379 LMCACHE_USE_EXPERIMENTAL=true PYTHONHASHSEED=123"
                     export EPP_BACKEND_CONFIG="in-memory"
-                    export USE_LMCACHE_IMAGE="true"
-                    export VLLM_PRE_CMD=""
+                    export USE_LMCACHE_IMAGE=""
+                    export VLLM_PRE_CMD="pip install --quiet lmcache==0.4.4"
                     ;;
                 *)
                     echo "Unknown configuration: ${run}"
