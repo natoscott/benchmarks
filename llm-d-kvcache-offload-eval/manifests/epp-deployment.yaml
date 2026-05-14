@@ -10,7 +10,7 @@ metadata:
   labels:
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/name: llm-d-infpool-epp
-    app.kubernetes.io/version: v1.3.0
+    app.kubernetes.io/version: v1.5.0
   name: llm-d-infpool-epp
   namespace: llm-d-pfc-cpu
   resourceVersion: "384389"
@@ -43,8 +43,6 @@ spec:
         - json
         - --config-file
         - /config/custom-plugins.yaml
-        - --kv-cache-usage-percentage-metric
-        - vllm:kv_cache_usage_perc
         - --v
         - "1"
         - --tracing=false
@@ -60,7 +58,7 @@ spec:
             fieldRef:
               apiVersion: v1
               fieldPath: metadata.name
-        image: registry.k8s.io/gateway-api-inference-extension/epp:v1.3.0
+        image: registry.k8s.io/gateway-api-inference-extension/epp:v1.5.0
         imagePullPolicy: Always
         livenessProbe:
           failureThreshold: 3
