@@ -137,7 +137,7 @@ Values are % throughput delta vs same-version no-offload baseline. All runs use 
 | v0.6.0 fs-offload | -60.3% | +1.1% | +194.2% | -63.8% |
 | v0.6.0 cpu+fs-offload-20k | -2.2% | 0.0% | +196.2% | -63.8% |
 
-**mempress gmu (0.55–0.70)** — v0.5.1 only, `threads_per_gpu=128`:
+**mempress gmu (0.55–0.70)** — v0.5.1 only, kvcache PVC at 6,000 IOPS, `threads_per_gpu=128`:
 
 | Config | Qwen3-0.6B | Qwen3-8B | Qwen3-14B | Qwen3-32B-AWQ |
 |-------|:----------:|:--------:|:---------:|:------------:|

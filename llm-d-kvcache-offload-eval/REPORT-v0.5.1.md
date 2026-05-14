@@ -41,7 +41,7 @@ At default gpu_memory_utilization=0.9, only Qwen3-14B has insufficient GPU KV-ca
 | fs-offload | **+48.4%** | **+103.6%** | **+125.4%** | -2.1% |
 | cpu+fs-offload-20k | **+24.7%** | **+80.0%** | **+125.4%** | -2.1% |
 
-Under memory pressure, native-offload-20k reaches +22.3% for Qwen3-0.6B and +10.4% for Qwen3-14B. LMCache shows near-zero overhead for 8B (+1.8%) and 32B-AWQ (-2.1%) and modest negative deltas for 0.6B and 14B. Filesystem offload with `threads_per_gpu=128` shows large throughput gains under memory pressure for 0.6B, 8B, and 14B, with high external prefix cache hit rates driving the improvement.
+Under memory pressure, native-offload-20k reaches +22.3% for Qwen3-0.6B and +10.4% for Qwen3-14B. LMCache shows near-zero overhead for 8B (+1.8%) and 32B-AWQ (-2.1%) and modest negative deltas for 0.6B and 14B. Filesystem offload shows large throughput gains under memory pressure for 0.6B, 8B, and 14B, driven by the corrected storage subsystem configuration (kvcache PVC at 6,000 IOPS) and high external prefix cache hit rates.
 
 **Peak Throughput at default gpu_memory_utilization=0.9 (unconstrained conditions):**
 
@@ -247,7 +247,7 @@ All four v0.5.1 configurations were re-run with per-model reduced `gpu_memory_ut
 
 **Qwen3-32B-AWQ:** native-offload-20k at -33.3% — the largest throughput reduction observed across the mempress suite. Mean waiting requests at rate=50 is 38.6 and median TTFT is 27,982ms. At gmu=0.65, the GPU KV-cache token capacity (116K tokens) may be insufficient for 20K-block CPU offload to provide a net benefit at this model size.
 
-**fs-offload and cpu+fs-offload-20k:** With `threads_per_gpu=128`, both show large throughput gains under memory pressure: 0.6B +48.4%/+24.7%, 8B +103.6%/+80.0%, 14B +125.4%/+125.4%. Qwen3-32B-AWQ shows -2.1% for both, consistent with its gmu=0.9 behaviour.
+**fs-offload and cpu+fs-offload-20k:** Both show large throughput gains under memory pressure: 0.6B +48.4%/+24.7%, 8B +103.6%/+80.0%, 14B +125.4%/+125.4%. Qwen3-32B-AWQ shows -2.1% for both, consistent with its gmu=0.9 behaviour. The improvement vs earlier runs reflects the corrected storage configuration (kvcache PVC updated to 6,000 IOPS from the ~400 IOPS fallback) and `threads_per_gpu=128`.
 
 ### Cross-Version Comparison at Matched Memory Pressure
 
@@ -451,7 +451,7 @@ The 0.6B model shows a 23–25 pp regression from v0.4.0 to v0.5.1 at mempress: 
 
 ### threads_per_gpu Parameter
 
-The `threads_per_gpu` parameter controls the number of I/O worker threads per GPU in `SharedStorageOffloadingSpec`. All runs reported here (both gmu=0.9 and mempress) used `threads_per_gpu=128`. The higher thread count reduces I/O queuing at peak concurrency and prevents shared-memory broadcast starvation in `--distributed-executor-backend mp` (see `BUG-shm-broadcast-deadlock.md`). Earlier benchmarks at `threads_per_gpu=64` showed -40% to -86% under mempress and deadlock at rate≥300 for 0.6B; at 128 threads both issues are resolved.
+The `threads_per_gpu` parameter controls the number of I/O worker threads per GPU in `SharedStorageOffloadingSpec`. All runs reported here (both gmu=0.9 and mempress) used `threads_per_gpu=128` and the kvcache PVC configured at 6,000 IOPS. Earlier benchmark runs were affected by two issues: the PVC was silently provisioned at ~400 IOPS (the requested 64,000 was out of range for a 256 GiB volume and fell back to the minimum without error), and `threads_per_gpu=64` caused shared-memory broadcast starvation under high write pressure. Both were corrected before these runs — the IOPS via `ibmcloud is volume-update`, the thread count via the run script. The storage throughput correction is the primary driver of the improvement; see `scripts/setup-kvcache-pvc-iops.md` for the full procedure.
 
 ### Storage I/O Characterisation
 

@@ -1,0 +1,7 @@
+# OpenShift cluster install artifacts (may contain secrets)
+install/
+install.sh
+credentials/
+
+# Generated analysis outputs
+analysis/
