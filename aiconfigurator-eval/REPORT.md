@@ -182,16 +182,16 @@ TP=1×8 delivers 2.3× higher throughput than TP=4×2 at concurrency=16 (5.1 vs 
 | Qwen3-32B-FP8 disagg | 3.4 | — (TTFT >SLA at all levels) | 731 ms @ conc=1 | — |
 
 - **Qwen3-8B agg** is the only configuration that meets the TTFT SLA in practice. Its SLA-compliant throughput ceiling is 13.9 req/s at concurrency=16. The extended sweep shows saturation at ~20.9 req/s (concurrency=32–40), but this operating point violates the TTFT SLA.
-- **Qwen3-8B disagg** meets the SLA only up to concurrency=2 (2.97 req/s, TTFT=381ms). At concurrency=4 the TTFT rises to 525ms. llm-d routing overhead is the likely constraint, as AIC models pure vLLM performance without routing latency.
+- **Qwen3-8B disagg** meets the SLA only up to concurrency=2 (2.97 req/s, TTFT=381ms). At concurrency=4 the TTFT rises to 525ms. AIC models pure vLLM performance and has no term for routing or KV-transfer latency between workers.
 - **Qwen3-32B-FP8 agg TP=1** is the closest to AIC's TP=1 pareto prediction (5.1 observed vs 4.8 predicted) for throughput, but TTFT at concurrency=1 (737ms) is already above AIC's predicted 315ms. The TTFT model divergence is not explained by throughput saturation.
-- **Qwen3-32B-FP8 agg TP=4**, AIC's top-1 recommendation, delivers 2.3× lower throughput than TP=1×8 at all concurrency levels, contrary to AIC's prediction (6.6 vs 4.8 req/s in favour of TP=4). At concurrency=1, per-instance performance is nearly identical: TP=4 TTFT=729ms / TPOT=36.2ms vs TP=1 TTFT=737ms / TPOT=36.5ms. The throughput gap at higher concurrency is a direct consequence of replica count: TP=4×2 provides 2 decode slots against TP=1×8's 8, giving 4× lower aggregate throughput. AIC predicted TP=4 would achieve higher per-instance throughput than TP=1; the deployment data does not support this. H200 SXM uses NVSwitch with full all-to-all NVLink between all 8 GPUs, so GPU assignment does not affect inter-rank bandwidth.
+- **Qwen3-32B-FP8 agg TP=4**, AIC's top-1 recommendation, delivers 2.3× lower throughput than TP=1×8 at all concurrency levels, contrary to AIC's prediction (6.6 vs 4.8 req/s in favour of TP=4). At concurrency=1, per-instance performance is nearly identical: TP=4 TTFT=729ms / TPOT=36.2ms vs TP=1 TTFT=737ms / TPOT=36.5ms. At concurrency=1, per-instance throughput is nearly equal between the two topologies. The throughput gap at higher concurrency is consistent with the replica count difference: TP=4×2 provides 2 instances against TP=1×8's 8. AIC predicted TP=4 would achieve higher per-instance throughput than TP=1; the deployment data does not support this. H200 SXM uses NVSwitch with full all-to-all NVLink between all 8 GPUs, so GPU assignment does not affect inter-rank bandwidth.
 - **Concurrency sweep extension** confirmed that the original sweep (concurrency 1–16) was insufficient for Qwen3-8B agg. The saturation point was not reached until concurrency=32–40, well above the original ceiling.
 
 ---
 
 ## AIC Model Analysis
 
-The discrepancies between AIC predictions and observed results were investigated by reading the AIC source code alongside a re-run of the 32B-FP8 TTFT baseline. Three distinct root causes were identified, each improvable in the AIC codebase.
+The discrepancies between AIC predictions and observed results were investigated by reading the AIC source code alongside a re-run of the 32B-FP8 TTFT baseline. Three factors were identified from source code analysis, each representing a gap that could be addressed in the AIC codebase.
 
 ### TTFT discrepancy is reproducible
 
@@ -199,13 +199,13 @@ The Qwen3-32B-FP8 single-request TTFT was re-run on a fresh deployment:
 
 | Run | Concurrency | TTFT mean | TTFT p50 | TTFT p95 |
 |-----|-------------|-----------|----------|----------|
-| Original | 1 | 737 ms | — | — |
+| Original | 1 | 737 ms | 731 ms | 815 ms |
 | Re-run | 1 | 736 ms | 730 ms | 815 ms |
 | Re-run | 4 | 819 ms | 734 ms | 1,438 ms |
 
 The concurrency=1 value is stable to within 0.1% across independent deployments. At concurrency=4, p50 is also 734 ms — the elevated mean is caused by requests queuing behind each other (p95=1,438ms), not by higher single-request latency. The single-request prefill cost is consistently ~730–737 ms, against AIC's prediction of 315–493 ms.
 
-### Root cause 1 — Silicon data version mismatch (improvable)
+### Factor 1 — Silicon data version mismatch (improvable)
 
 AIC predictions are computed from lookup tables in `systems/{hw}/data/vllm/{version}/` — CSV files of measured per-operation latencies (GEMM, context attention, generation attention) at various batch sizes and TP sizes. The database version used was vLLM 0.19.0.
 
@@ -213,7 +213,7 @@ The deployed stack runs `vLLM v0.18.0+rhaiv.0` with a distinct compilation profi
 
 **Fix:** measure and add a `v0.18.0+rhaiv` data directory using the actual deployed image on H200 SXM hardware.
 
-### Root cause 2 — Concurrency is equated to batch size (improvable)
+### Factor 2 — Concurrency is equated to batch size (improvable)
 
 In `vllm_backend.py`, the predicted concurrency is hardcoded as `concurrency = batch_size × pp_size × attention_dp_size`. AIC treats its chosen batch size as the perpetually-full in-flight request count, implying 100% server utilisation at all times. No queue-depth or saturation model exists.
 
@@ -223,7 +223,7 @@ A simple M/M/1 or token-bucket queueing model inserted between the batch-size sw
 
 **Fix:** replace `concurrency = batch_size` with a queueing model parameterised by the silicon-measured step latency.
 
-### Root cause 3 — Disaggregated routing overhead is not modelled (improvable)
+### Factor 3 — Disaggregated routing overhead is not modelled (improvable)
 
 For disaggregated configurations, `picking.py` applies fixed degradation constants of 0.9 (prefill) and 0.92 (decode) to account for pipeline bubbles, and nothing else. There is no term for:
 
@@ -231,26 +231,7 @@ For disaggregated configurations, `picking.py` applies fixed degradation constan
 - Request routing latency through llm-d's scheduler and EPP
 - Network round-trip for the prefill→decode handoff
 
-The Qwen3-8B disagg TTFT exceeds the 500 ms SLA at concurrency=4 (525 ms) and reaches 1,128 ms at concurrency=16. AIC predicted 394 ms at its chosen operating point. The gap is entirely attributable to routing and KV-transfer overhead that AIC has no model for, which also explains the disagg throughput being 6–10× below prediction across both models.
+The Qwen3-8B disagg TTFT exceeds the 500 ms SLA at concurrency=4 (525 ms) and reaches 1,128 ms at concurrency=16. AIC predicted 394 ms at its chosen operating point. AIC has no model for routing or KV-transfer overhead, which are plausible contributors to the observed gap. The disagg throughput is 6–10× below prediction across both models.
 
 **Fix:** add a per-request KV-transfer term — `(ISL × kv_bytes_per_token) / network_bandwidth_GBps` — plus a measured routing latency constant, to the disagg TTFT calculation in `picking.py`.
 
-### AIC memory model
-
-AIC does model GPU memory consumption. For each candidate configuration it computes:
-
-```
-total_memory = weights/pp_size + activations + KV_cache + NCCL + misc
-```
-
-KV cache is computed as `batch_size × (ISL + OSL) × kv_heads_per_gpu × head_dim × num_layers × 2 × dtype_bytes`, with FP8 correctly using 1 byte/element. Configurations that exceed the HBM budget (default 90% of GPU capacity) are filtered from the search before the pareto is built, so the `memory` column in the CSV reflects the total per-GPU footprint in GiB at that operating point.
-
-The memory model gaps are minor and do not explain the observed discrepancies: paged-attention page-table overhead (~1–2 GB) and block-manager fragmentation are absent, but neither is large enough to materially affect batch size selection on a 140 GB H200.
-
----
-
-## Notes
-
-- AIC predictions were generated using vLLM 0.19.0 silicon data. Deployments ran on vLLM 0.18.0+rhaiv.
-- guidellm's `--profile throughput --rate N` sets a max concurrency of N in-flight requests, not a target request rate. Figures show max concurrent requests on the x-axis.
-- The Qwen3-32B-FP8 TP=4 throughput shortfall relative to TP=1×8 is explained by replica count (2 vs 8 decode slots), not inter-GPU connectivity. H200 SXM NVSwitch provides full all-to-all NVLink regardless of which GPUs are assigned.
