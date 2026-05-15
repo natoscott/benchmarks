@@ -79,6 +79,7 @@ CONFIGS = [
         "aic_tpot": 28.6,
         "color":    PALETTE[0],
         "ls":       "-",
+        "marker":   "o",
     },
     {
         "label":    "Qwen3-8B disagg (7P+1D)",
@@ -89,8 +90,9 @@ CONFIGS = [
         "aic_rps":  28.8,
         "aic_ttft": 394,
         "aic_tpot": 8.9,
-        "color":    PALETTE[0],
-        "ls":       "--",
+        "color":    PALETTE[3],
+        "ls":       "-",
+        "marker":   "^",
     },
     {
         "label":    "Qwen3-32B-FP8 agg (TP=1×8)",
@@ -103,6 +105,7 @@ CONFIGS = [
         "aic_tpot": 13.7,
         "color":    PALETTE[1],
         "ls":       "-",
+        "marker":   "o",
     },
     {
         "label":    "Qwen3-32B-FP8 agg (TP=4×2) — AIC top-1",
@@ -115,6 +118,7 @@ CONFIGS = [
         "aic_tpot": 18.2,
         "color":    PALETTE[2],
         "ls":       "-",
+        "marker":   "s",
     },
     {
         "label":    "Qwen3-32B-FP8 disagg (7P+1D)",
@@ -125,8 +129,9 @@ CONFIGS = [
         "aic_rps":  3.4,
         "aic_ttft": 473,
         "aic_tpot": 10.4,
-        "color":    PALETTE[2],
-        "ls":       "--",
+        "color":    PALETTE[4],
+        "ls":       "-",
+        "marker":   "^",
     },
 ]
 
@@ -143,7 +148,7 @@ fig, ax = plt.subplots()
 for cfg in CONFIGS:
     xs = [r["conc"] for r in cfg["data"]]
     ys = [r["rps"]  for r in cfg["data"]]
-    ax.plot(xs, ys, marker="o", color=cfg["color"], ls=cfg["ls"],
+    ax.plot(xs, ys, marker=cfg["marker"], color=cfg["color"], ls=cfg["ls"],
             linewidth=2, label=cfg["label"])
     # AIC predicted peak as horizontal dotted line (same colour, lighter)
     ax.axhline(cfg["aic_rps"], color=cfg["color"], ls=":", linewidth=1.2, alpha=0.6)
@@ -170,7 +175,7 @@ fig, ax = plt.subplots()
 for cfg in CONFIGS:
     xs = [r["rps"]  for r in cfg["data"]]
     ys = [r["ttft"] for r in cfg["data"]]
-    ax.plot(xs, ys, marker="o", color=cfg["color"], ls=cfg["ls"],
+    ax.plot(xs, ys, marker=cfg["marker"], color=cfg["color"], ls=cfg["ls"],
             linewidth=2, label=cfg["label"])
 
 ax.axhline(500, color="red", ls="--", linewidth=1.5, label="TTFT SLA = 500 ms")
@@ -192,7 +197,7 @@ fig, ax = plt.subplots()
 for cfg in CONFIGS:
     xs = [r["conc"] for r in cfg["data"]]
     ys = [r["ttft"] for r in cfg["data"]]
-    ax.plot(xs, ys, marker="o", color=cfg["color"], ls=cfg["ls"],
+    ax.plot(xs, ys, marker=cfg["marker"], color=cfg["color"], ls=cfg["ls"],
             linewidth=2, label=cfg["label"])
     ax.axhline(cfg["aic_ttft"], color=cfg["color"], ls=":", linewidth=1.2, alpha=0.6)
 
@@ -215,7 +220,7 @@ fig, ax = plt.subplots()
 for cfg in CONFIGS:
     xs = [r["conc"] for r in cfg["data"]]
     ys = [r["tpot"] for r in cfg["data"]]
-    ax.plot(xs, ys, marker="o", color=cfg["color"], ls=cfg["ls"],
+    ax.plot(xs, ys, marker=cfg["marker"], color=cfg["color"], ls=cfg["ls"],
             linewidth=2, label=cfg["label"])
     ax.axhline(cfg["aic_tpot"], color=cfg["color"], ls=":", linewidth=1.2, alpha=0.6)
 
