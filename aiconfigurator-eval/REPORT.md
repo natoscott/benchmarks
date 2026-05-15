@@ -241,3 +241,11 @@ The Qwen3-8B disagg TTFT exceeds the 500 ms SLA at concurrency=4 (525 ms) and re
 
 **Fix:** add a per-request KV-transfer term — `(ISL × kv_bytes_per_token) / network_bandwidth_GBps` — plus a measured routing latency constant, to the disagg TTFT calculation in `picking.py`.
 
+### Factor 4 — Undocumented TPOT correction of unknown provenance (investigate)
+
+In `vllm_backend.py` line 82, TPOT is computed using an adjusted mix step count: `num_mix_steps_for_tpot_calc = max(1, num_mix_steps - 3)`. This reduces the number of mix steps counted against TPOT by 3, with no accompanying comment or documentation.
+
+`git blame` traces this constant to commit `5554d2eb` (6 Nov 2025), which introduced the initial vLLM backend — H100-only at that point. It has not been revisited since, including when H200 support was added. Its physical meaning — what 3 steps represents, what it was calibrated against, or whether it generalises across hardware — is unknown.
+
+Since TPOT is systematically underestimated in this evaluation and this constant sits directly in the TPOT calculation path, its validity for H200 SXM warrants investigation before further calibration work on Factor 1.
+
