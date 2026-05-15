@@ -197,19 +197,7 @@ TP=1×8 delivers 2.3× higher throughput than TP=4×2 at concurrency=16 (5.1 vs 
 
 ## AIC Model Analysis
 
-The discrepancies between AIC predictions and observed results were investigated by reading the AIC source code alongside a re-run of the 32B-FP8 TTFT baseline. Three factors were identified from source code analysis, each representing a gap that could be addressed in the AIC codebase.
-
-### TTFT discrepancy is reproducible
-
-The Qwen3-32B-FP8 single-request TTFT was re-run on a fresh deployment:
-
-| Run | Concurrency | TTFT mean | TTFT p50 | TTFT p95 |
-|-----|-------------|-----------|----------|----------|
-| Original | 1 | 737 ms | 731 ms | 815 ms |
-| Re-run | 1 | 736 ms | 730 ms | 815 ms |
-| Re-run | 4 | 819 ms | 734 ms | 1,438 ms |
-
-The concurrency=1 value is stable to within 0.1% across independent deployments. At concurrency=4, p50 is also 734 ms — the elevated mean is caused by requests queuing behind each other (p95=1,438ms), not by higher single-request latency. The single-request prefill cost is consistently ~730–737 ms, against AIC's prediction of 315–493 ms.
+The discrepancies between AIC predictions and observed results were investigated by reading the AIC source code. Four factors were identified, each representing a gap that could be addressed in the AIC codebase.
 
 ### Factor 1 — Silicon data version mismatch (improvable)
 
