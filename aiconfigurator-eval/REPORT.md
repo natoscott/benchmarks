@@ -70,7 +70,7 @@ Each benchmark run lasted 120 seconds. Synthetic prompts were fixed at ISL=9000,
 
 ## AIC Predictions
 
-The table below shows AIC's top-1 predicted operating point for each configuration at the stated SLA constraints. AIC version 0.8.0, database mode SILICON, modelled against vLLM 0.19.0.
+The table below shows AIC's top-1 predicted operating point for each configuration at the stated SLA constraints.
 
 | Config | AIC req/s | AIC TTFT (ms) | AIC TPOT (ms/tok) | AIC tok/s |
 |--------|-----------|---------------|-------------------|-----------|
@@ -81,6 +81,8 @@ The table below shows AIC's top-1 predicted operating point for each configurati
 | Qwen3-32B-FP8 disagg (7P+1D) | 3.4 | 473 | 10.4 | 103 |
 
 AIC selected aggregated mode as the top configuration for both models. For Qwen3-32B-FP8 agg, AIC's top-1 topology is TP=4 × 2 replicas (6.6 req/s). TP=1 × 8 replicas appears lower in the AIC pareto front at 4.8 req/s.
+
+The Qwen3-32B-FP8 agg (TP=1×8) row is included for comparison only — AIC did not recommend this topology and produced no tok/s figure for it. The 4.8 req/s and associated TTFT/TPOT values are read from the AIC pareto front, not from its top-1 output.
 
 ---
 
