@@ -78,13 +78,13 @@ Each benchmark run lasted 120 seconds. Synthetic prompts were fixed at ISL=9000,
 
 The table below shows AIC's top-1 predicted operating point for each configuration at the stated SLA constraints.
 
-| Config | AIC req/s | AIC TTFT (ms) | AIC TPOT (ms/tok) | AIC tok/s |
-|--------|-----------|---------------|-------------------|-----------|
-| Qwen3-8B agg (TP=1×8) | **34.9** | 432 | 28.6 | 1,013 |
-| Qwen3-8B disagg (7P+1D) | 28.8 | 394 | 8.9 | 863 |
-| Qwen3-32B-FP8 agg (TP=4×2) | 6.6 | 493 | 18.2 | 191 |
-| Qwen3-32B-FP8 agg (TP=1×8) | 4.8 | 315 | 13.7 | — |
-| Qwen3-32B-FP8 disagg (7P+1D) | 3.4 | 473 | 10.4 | 103 |
+| Config | AIC req/s | AIC TTFT (ms) | AIC TPOT (ms/tok) | AIC tok/s | AIC concurrency |
+|--------|-----------|---------------|-------------------|-----------|-----------------|
+| Qwen3-8B agg (TP=1×8) | **34.9** | 432 | 28.6 | 1,013 | 48 |
+| Qwen3-8B disagg (7P+1D) | 28.8 | 394 | 8.9 | 863 | 10 |
+| Qwen3-32B-FP8 agg (TP=4×2) | 6.6 | 493 | 18.2 | 191 | 8 |
+| Qwen3-32B-FP8 agg (TP=1×8) | 4.8 | 315 | 13.7 | — | — |
+| Qwen3-32B-FP8 disagg (7P+1D) | 3.4 | 473 | 10.4 | 103 | 4 |
 
 AIC selected aggregated mode as the top configuration for both models. For Qwen3-32B-FP8 agg, AIC's top-1 topology is TP=4 × 2 replicas (6.6 req/s). TP=1 × 8 replicas appears lower in the AIC pareto front at 4.8 req/s.
 
