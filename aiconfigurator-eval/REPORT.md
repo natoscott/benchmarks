@@ -7,6 +7,12 @@
 
 ---
 
+## TL;DR
+
+AIC's throughput predictions are substantially above observed performance for this deployment stack. **Qwen3-8B agg is the only configuration that meets the 500 ms TTFT SLA**; its peak SLA-compliant throughput is 13.9 req/s — 40% of AIC's predicted 34.9 req/s. All Qwen3-32B-FP8 configurations exceed the TTFT SLA at every tested concurrency level, including single-request load, so no SLA-compliant operating point was found for the 32B model. AIC's top-1 topology for 32B-FP8 (TP=4 × 2 replicas) delivered 2.3× lower throughput than the non-recommended TP=1 × 8 configuration. Disaggregated serving fell furthest below predictions (6–10× gap), consistent with AIC having no model for routing or KV-transfer latency between workers. Source code analysis identified three candidate gaps in AIC: use of vLLM 0.19.0 silicon data against a 0.18.0+rhaiv deployment, an assumption that concurrency equals batch size, and no disaggregated routing overhead term.
+
+---
+
 ## Test Setup
 
 ### Hardware
