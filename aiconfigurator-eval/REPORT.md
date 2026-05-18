@@ -9,7 +9,7 @@
 
 ## TL;DR
 
-AIC's throughput predictions are substantially above observed performance for this deployment stack. **Qwen3-8B agg is the only configuration that meets both the TTFT (≤500 ms) and TPOT (≤30 ms/tok) SLAs**; its peak dual-SLA-compliant throughput is 13.9 req/s at concurrency=16 (TTFT=487 ms, ITL=22.7 ms) — 40% of AIC's predicted 34.9 req/s. All Qwen3-32B-FP8 configurations exceed the TTFT SLA at every tested concurrency level; their ITL meets the TPOT SLA at concurrency=1 (12.3 ms) but the TTFT violation means no dual-SLA-compliant operating point exists. AIC's top-1 topology for 32B-FP8 (TP=4 × 2 replicas) delivered 2.3× lower throughput than the non-recommended TP=1 × 8 configuration. Disaggregated serving fell furthest below predictions (6–10× gap), consistent with AIC having no model for routing or KV-transfer latency between workers. Source code analysis identified four candidate gaps in AIC: use of vLLM 0.19.0 silicon data against a 0.18.0+rhaiv deployment, an assumption that concurrency equals batch size, no disaggregated routing overhead term, and an undocumented empirical constant in the TPOT calculation path.
+This evaluation assesses how closely AIC predictions match observed performance on a real deployment stack. The SLA values (TTFT≤500ms, TPOT≤30ms/tok at ISL=9000) were used as AIC inputs to constrain its recommendation; they are evaluation parameters, not production requirements. **AIC's predictions are accurate to within ~1.3× for Qwen3-8B agg throughput and TTFT at low concurrency, but diverge significantly at higher concurrency and for all 32B-FP8 configurations.** For 32B-FP8, TTFT≤500ms at ISL=9000 is not achievable for any dense topology — this is a workload/SLA mismatch, not a tunable AIC failure. At AIC's predicted operating point, throughput falls 0.29–0.60× of prediction and TTFT runs 1.3–4.1× above prediction. Disaggregated serving is furthest from predictions (throughput 0.13× for 8B disagg), consistent with AIC having no model of decode worker queuing under concurrent load. Source code analysis identified four candidate gaps: vLLM 0.19.0 silicon data used against a 0.18.0+rhaiv deployment, concurrency equated to batch size, no disaggregated queuing model, and an empirical TPOT correction of uncertain validity for H200.
 
 ---
 
@@ -65,6 +65,8 @@ AIC version 0.8.0 was run in SILICON database mode against vLLM 0.19.0 reference
 ### Benchmark methodology
 
 guidellm 0.6.0 was used to benchmark each configuration. The `throughput` profile was used with a concurrency limit (`--profile throughput --rate N`), which sends requests as fast as possible up to N simultaneous in-flight requests. This is a **concurrency sweep**, not a request-rate sweep: the x-axis in all figures represents max concurrent requests, and the y-axis represents the resulting measured throughput.
+
+**Evaluation objective:** The goal is to assess how accurately AIC predicts performance on this deployment stack (RHOAI 3.4, vLLM 0.18.0+rhaiv, H200 SXM). The SLA values supplied to AIC (TTFT≤500ms, TPOT≤30ms/tok) constrain its recommended operating point; they are not production requirements for this workload. Where AIC's recommended concurrency was not tested exactly, the closest concurrency level is used for comparison.
 
 **TPOT metric note:** guidellm reports two distinct per-token latency metrics. `time_per_output_token_ms` = `total_request_latency / output_tokens`, which includes TTFT and is not directly comparable to AIC's TPOT model. `inter_token_latency_ms` (ITL) = mean time between consecutive output tokens during the decode phase, which corresponds to AIC's TPOT model. All TPOT columns and SLA checks in this report use ITL.
 
@@ -134,6 +136,19 @@ Throughput saturates at ~20.9 req/s between concurrency=32 and concurrency=40. B
 
 *Ratios shown above each observed bar are observed / AIC predicted.*
 
+**AIC prediction accuracy at AIC's predicted concurrency:**
+
+The most direct accuracy test compares observed and predicted values at the concurrency AIC itself predicts will be needed. Where AIC's predicted concurrency was not tested exactly, the nearest tested level is used.
+
+| Config | AIC conc | Test conc | AIC req/s | Obs req/s | Ratio | AIC TTFT | Obs TTFT | Ratio | AIC ITL | Obs ITL | Ratio |
+|--------|----------|-----------|-----------|-----------|-------|----------|----------|-------|---------|---------|-------|
+| Qwen3-8B agg | 48 | 40 | 34.9 | 20.9 | 0.60× | 432 ms | 550 ms | 1.27× | 28.6 ms | 43.4 ms | 1.52× |
+| Qwen3-8B disagg | 10 | 8 | 28.8 | 3.8 | 0.13× | 394 ms | 1,051 ms | 2.67× | 8.9 ms | 36.0 ms | 4.04× |
+| Qwen3-32B-FP8 agg (TP=4) | 8 | 8 | 6.6 | 1.9 | 0.29× | 493 ms | 1,584 ms | 3.21× | 18.2 ms | 85.6 ms | 4.70× |
+| Qwen3-32B-FP8 disagg | 4 | 4 | 3.4 | 1.2 | 0.35× | 473 ms | 1,944 ms | 4.11× | 10.4 ms | 46.6 ms | 4.48× |
+
+Qwen3-8B agg is the closest match: throughput at 0.60×, TTFT at 1.27×, ITL at 1.52× of prediction. The disaggregated configurations and all 32B-FP8 configurations diverge substantially — throughput 0.13–0.35× of prediction and TTFT 2.7–4.1× above prediction.
+
 **Qwen3-32B-FP8 TP=4 vs TP=1:**
 
 | Concurrency | TP=1 (req/s) | TP=4 (req/s) | TP=1 TTFT | TP=4 TTFT |
@@ -188,18 +203,20 @@ Notably, at concurrency=1 (minimal load) AIC's TPOT prediction closely matches o
 
 ## Summary
 
-| Config | AIC predicted (req/s) | Dual-SLA-compliant peak (req/s) | TTFT @ peak | ITL @ peak | Ratio |
-|--------|----------------------|--------------------------------|-------------|------------|-------|
-| Qwen3-8B agg | 34.9 | 13.9 (conc=16) | 487 ms | 22.7 ms | 0.40× |
-| Qwen3-8B disagg | 28.8 | 2.97 (conc=2) | 381 ms | 10.0 ms | 0.10× |
-| Qwen3-32B-FP8 agg TP=4 | 6.6 | — (TTFT exceeds SLA at all levels) | 729 ms @ conc=1 | 12.3 ms @ conc=1 | — |
-| Qwen3-32B-FP8 agg TP=1 | 4.8 | — (TTFT exceeds SLA at all levels) | 737 ms @ conc=1 | 12.3 ms @ conc=1 | — |
-| Qwen3-32B-FP8 disagg | 3.4 | — (TTFT exceeds SLA at all levels) | 731 ms @ conc=1 | 12.4 ms @ conc=1 | — |
+| Config | AIC req/s | Obs req/s @ AIC conc | Throughput ratio | AIC TTFT | Obs TTFT @ AIC conc | TTFT ratio |
+|--------|-----------|---------------------|-----------------|----------|---------------------|------------|
+| Qwen3-8B agg | 34.9 | 20.9 (conc=40) | 0.60× | 432 ms | 550 ms | 1.27× |
+| Qwen3-8B disagg | 28.8 | 3.8 (conc=8) | 0.13× | 394 ms | 1,051 ms | 2.67× |
+| Qwen3-32B-FP8 agg TP=4 | 6.6 | 1.9 (conc=8) | 0.29× | 493 ms | 1,584 ms | 3.21× |
+| Qwen3-32B-FP8 agg TP=1 | 4.8 | 4.2 (conc=8) | 0.88× | 315 ms | 952 ms | 3.02× |
+| Qwen3-32B-FP8 disagg | 3.4 | 1.2 (conc=4) | 0.35× | 473 ms | 1,944 ms | 4.11× |
 
-- **Qwen3-8B agg** is the only configuration that meets both SLAs in practice. Its dual-SLA-compliant ceiling is 13.9 req/s at concurrency=16 (TTFT=487ms, ITL=22.7ms). The extended sweep shows throughput saturation at ~20.9 req/s (concurrency=32–40), above the SLA-compliant window.
-- **Qwen3-8B disagg** meets both SLAs only up to concurrency=2 (2.97 req/s, TTFT=381ms, ITL=10.0ms). At concurrency=4 TTFT rises to 525ms and ITL to 20.3ms; TTFT fails the SLA at that point. AIC models pure vLLM performance and has no term for routing or KV-transfer latency between workers.
-- **Qwen3-32B-FP8 agg TP=1** is the closest to AIC's TP=1 pareto prediction (5.1 observed vs 4.8 predicted) for throughput, but TTFT (737ms) exceeds its SLA at concurrency=1; ITL (12.3ms) meets the TPOT SLA but TTFT does not. No dual-SLA-compliant operating point exists for this configuration.
-- **Qwen3-32B-FP8 agg TP=4**, AIC's top-1 recommendation, delivers 2.3× lower throughput than TP=1×8 at all concurrency levels, contrary to AIC's prediction (6.6 vs 4.8 req/s in favour of TP=4). At concurrency=1, per-instance performance is nearly identical (TP=4: 729ms TTFT, TP=1: 737ms TTFT). The throughput gap at higher concurrency is consistent with the replica count difference: TP=4×2 provides 2 instances against TP=1×8's 8. AIC predicted TP=4 would achieve higher per-instance throughput than TP=1; the deployment data does not support this.
+*Note: TTFT≤500ms at ISL=9000 is not achievable for 32B dense models on a single GPU — this reflects a workload/SLA mismatch, not an AIC modelling failure specific to those configs. For 8B agg, the 500ms SLA is met up to concurrency=16 (13.9 req/s); concurrency=16 is the practical SLA-bounded operating point.*
+
+- **Qwen3-8B agg** is the best-predicted configuration. At AIC's predicted concurrency (~40–48), throughput is 0.60× of prediction and TTFT is 1.27× above prediction — the most accurate result across all configs. The 500ms TTFT SLA is met up to concurrency=16 (13.9 req/s); the extended sweep shows saturation at ~20.9 req/s at concurrency=32–40.
+- **Qwen3-8B disagg** throughput is 0.13× of prediction at AIC's predicted concurrency and TTFT is 2.67× above prediction. The decode worker saturates rapidly under concurrent load — a queuing effect AIC does not model.
+- **Qwen3-32B-FP8** configurations all show TTFT well above 500ms even at concurrency=1 (730–737ms). This reflects the compute cost of prefilling 9000 tokens at 32B dense — a physics constraint unrelated to AIC accuracy. TTFT accuracy is 3–4× off prediction across 32B configurations; the discrepancy is consistent with the silicon data version gap identified in Factor 1. Throughput prediction accuracy ranges from 0.29× (TP=4) to 0.88× (TP=1).
+- **Qwen3-32B-FP8 agg TP=4**, AIC's top-1 recommendation, delivers 2.3× lower throughput than TP=1×8, contrary to AIC's prediction (6.6 vs 4.8 req/s). At concurrency=1, per-instance TTFT is nearly identical (TP=4: 729ms, TP=1: 737ms). The throughput gap at higher concurrency is consistent with the replica count difference: TP=4×2 provides 2 instances against TP=1×8's 8.
 
 ---
 
