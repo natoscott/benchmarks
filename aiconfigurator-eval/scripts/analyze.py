@@ -48,7 +48,8 @@ def load_metrics(path):
     return {
         "rps":  mean("requests_per_second"),
         "ttft": mean("time_to_first_token_ms"),
-        "tpot": mean("time_per_output_token_ms"),
+        "tpot": mean("time_per_output_token_ms"),   # total_latency/output_tokens, includes TTFT
+        "itl":  mean("inter_token_latency_ms"),     # decode interval only; matches AIC TPOT model
         "n":    m.get("request_totals", {}).get("successful"),
     }
 
@@ -212,21 +213,28 @@ plt.close()
 print("fig3-ttft.png")
 
 # ---------------------------------------------------------------------------
-# Fig 4 — TPOT vs concurrency
+# Fig 4 — ITL (inter-token latency) vs concurrency
+# ITL = decode interval only, matching AIC's TPOT model.
+# guidellm time_per_output_token_ms = total_latency/output_tokens (includes TTFT)
+# and is NOT plotted here.
 # ---------------------------------------------------------------------------
 
 fig, ax = plt.subplots()
 
 for cfg in CONFIGS:
     xs = [r["conc"] for r in cfg["data"]]
-    ys = [r["tpot"] for r in cfg["data"]]
+    ys = [r["itl"]  for r in cfg["data"] if r.get("itl") is not None]
+    xs = [r["conc"] for r in cfg["data"] if r.get("itl") is not None]
+    if not ys:
+        continue
     ax.plot(xs, ys, marker=cfg["marker"], color=cfg["color"], ls=cfg["ls"],
             linewidth=2, label=cfg["label"])
     ax.axhline(cfg["aic_tpot"], color=cfg["color"], ls=":", linewidth=1.2, alpha=0.6)
 
+ax.axhline(30, color="red", ls="--", linewidth=1.5, label="TPOT SLA = 30 ms/tok")
 ax.set_xlabel("Max concurrent requests")
-ax.set_ylabel("TPOT mean (ms/token)")
-ax.set_title("TPOT vs Concurrency\n(dotted horizontals = AIC predicted TPOT)")
+ax.set_ylabel("Inter-token latency / ITL mean (ms/token)")
+ax.set_title("ITL vs Concurrency\n(dotted horizontals = AIC predicted TPOT; dashed red = SLA)")
 ax.legend(fontsize=9)
 plt.tight_layout()
 plt.savefig(FIGURES / "fig4-tpot.png", dpi=150)
