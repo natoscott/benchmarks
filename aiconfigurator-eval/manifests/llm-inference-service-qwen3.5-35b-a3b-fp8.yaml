@@ -1,0 +1,49 @@
+# LLMInferenceService for Qwen/Qwen3.5-35B-A3B-FP8 — agg config.
+#
+# Qwen3.5-35B-A3B is a MoE model with 35B total parameters and ~3B active
+# per forward pass (A3B = Activated 3B). The small active parameter count
+# makes prefill fast relative to dense 32B models.
+#
+# AIC invocation for this model:
+#   aiconfigurator cli default --model Qwen/Qwen3.5-35B-A3B-FP8 \
+#     --system h200_sxm --backend vllm --deployment-target llm-d \
+#     --total-gpus 8 --isl 9000 --osl 30 --ttft 500 --tpot 30
+#
+# AIC topology recommendation and vLLM args to be filled in after running
+# the above command with the 0.18.0 silicon data.
+apiVersion: serving.kserve.io/v1alpha2
+kind: LLMInferenceService
+metadata:
+  name: qwen3-5-35b-a3b-fp8
+  namespace: aiconfigurator
+spec:
+  baseRefs:
+  - name: v3-4-0-kserve-config-llm-template
+  - name: v3-4-0-kserve-config-llm-scheduler
+  - name: v3-4-0-kserve-config-llm-router-route
+  model:
+    name: "Qwen/Qwen3.5-35B-A3B-FP8"
+    uri: "pvc://model-storage-pvc/Qwen__Qwen3.5-35B-A3B-FP8"
+  parallelism:
+    tensor: 1
+  replicas: 8
+  template:
+    containers:
+    - name: main
+      env:
+      - name: HUGGING_FACE_HUB_TOKEN
+        valueFrom:
+          secretKeyRef:
+            name: llm-d-hf-token
+            key: HF_TOKEN
+      - name: VLLM_ADDITIONAL_ARGS
+        value: >-
+          --max-model-len 10530
+          --max-num-seqs 512
+          --max-num-batched-tokens 11012
+      resources:
+        requests:
+          nvidia.com/gpu: "1"
+          memory: 40Gi
+        limits:
+          nvidia.com/gpu: "1"

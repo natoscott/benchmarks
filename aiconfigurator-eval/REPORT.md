@@ -224,13 +224,24 @@ Notably, at concurrency=1 (minimal load) AIC's TPOT prediction closely matches o
 
 The discrepancies between AIC predictions and observed results were investigated by reading the AIC source code. Four factors were identified, each representing a gap that could be addressed in the AIC codebase.
 
-### Factor 1 — Silicon data version mismatch (improvable)
+### Factor 1 — Silicon data version mismatch (partially addressed)
 
 AIC predictions are computed from lookup tables in `systems/{hw}/data/vllm/{version}/` — CSV files of measured per-operation latencies (GEMM, context attention, generation attention) at various batch sizes and TP sizes. The database version used was vLLM 0.19.0.
 
-The deployed stack runs `vLLM v0.18.0+rhaiv.0` with a distinct compilation profile: the startup log shows `compilation_config.mode = VLLM_COMPILE` (torch.inductor), `compile_ranges_endpoints = [11012]`, and custom FP8 fusion passes. AIC's silicon tables were captured against vLLM 0.19.0, which has a different compilation configuration — different attention kernels, different GEMM tile sizes, and different FP8 fusion passes. All latency entries in the database are therefore measured under different kernel behaviour than what runs in this deployment, and the observed 2× TTFT gap is consistent with that divergence.
+The deployed stack runs `vLLM v0.18.0+rhaiv.0` with a distinct compilation profile: the startup log shows `compilation_config.mode = VLLM_COMPILE` (torch.inductor), `compile_ranges_endpoints = [11012]`, and custom FP8 fusion passes. AIC's silicon tables were captured against vLLM 0.19.0, which has a different compilation configuration — different attention kernels, different GEMM tile sizes, and different FP8 fusion passes. All latency entries in the database are therefore measured under different kernel behaviour than what runs in this deployment.
 
-**Fix:** measure and add a `v0.18.0+rhaiv` data directory using the actual deployed image on H200 SXM hardware.
+**Partial fix applied:** vLLM 0.18.0 silicon data was collected on H200 SXM hardware using the deployed image with application clocks locked (SM=1980 MHz, MEM=3201 MHz) and added to the AIC database. The improvement for Qwen3-8B agg is significant:
+
+| Metric | v0.19.0 | v0.18.0 | Observed |
+|--------|---------|---------|----------|
+| TTFT (top-1) | 432 ms | **488 ms** | 487 ms ✓ |
+| TPOT/ITL (top-1) | 28.6 ms | **23.3 ms** | 22.7 ms ✓ |
+| Concurrency | 48 | **40** | 40 (saturation) |
+| req/s | 34.9 | **30.1** | 20.9 (sat.) / 13.9 (SLA) |
+
+TTFT and TPOT predictions are now accurate to within 5% for Qwen3-8B. Throughput remains 44% above the observed saturation value — the remaining gap is consistent with Factor 2.
+
+**Remaining gap:** The 0.18.0 collection only captured BF16 attention data. Qwen3-32B-FP8 requires FP8 generation attention measurements, which must be collected in a separate pass with FP8 KV cache enabled.
 
 ### Factor 2 — Concurrency is equated to batch size (improvable)
 

@@ -1,0 +1,43 @@
+# Standalone pod for AIC silicon data collection against vLLM 0.18.0+rhaiv.
+# Requests all 8 GPUs for exclusive access during measurement.
+# Uses the same vLLM image as the LLMInferenceService workloads.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: aic-collector
+  namespace: aiconfigurator
+spec:
+  restartPolicy: Never
+  terminationGracePeriodSeconds: 30
+  serviceAccountName: guidellm
+  containers:
+  - name: collector
+    image: registry.redhat.io/rhaii/vllm-cuda-rhel9@sha256:d3e57d4ca13a17f4d5d1228df4fe47cfe1a9f630250a8b3d26f86d871fdb9e69
+    imagePullPolicy: IfNotPresent
+    command: [sleep, infinity]
+    stdin: true
+    tty: true
+    env:
+    - name: HUGGING_FACE_HUB_TOKEN
+      valueFrom:
+        secretKeyRef:
+          name: llm-d-hf-token
+          key: HF_TOKEN
+    resources:
+      requests:
+        nvidia.com/gpu: "8"
+        cpu: "16"
+        memory: 64Gi
+      limits:
+        nvidia.com/gpu: "8"
+    volumeMounts:
+    - name: output
+      mountPath: /output
+    - name: model-cache
+      mountPath: /models
+  volumes:
+  - name: output
+    emptyDir: {}
+  - name: model-cache
+    persistentVolumeClaim:
+      claimName: model-storage-pvc
