@@ -721,3 +721,13 @@ echo ""
 echo "PCP Archives:"
 ls -lh "${OUTPUT_DIR}/pcp-archives/" 2>/dev/null || echo "No PCP archives collected"
 echo "=========================================="
+
+# Log results to MLflow if configured (non-fatal).
+# Set MLFLOW_CONF to an absolute path or rely on MLFLOW_TRACKING_URI env var.
+MLFLOW_CONF="${MLFLOW_CONF:-}"
+if [ -f "${MLFLOW_CONF}" ] || [ -n "${MLFLOW_TRACKING_URI}" ]; then
+    echo ""
+    echo "Logging results to MLflow..."
+    python3 "${SCRIPT_DIR}/mlflow-log-run.py" "${OUTPUT_DIR}" || \
+        echo "Warning: MLflow logging failed (non-fatal, results are still in ${OUTPUT_DIR})"
+fi
