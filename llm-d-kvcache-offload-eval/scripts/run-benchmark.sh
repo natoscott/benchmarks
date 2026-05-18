@@ -723,8 +723,8 @@ ls -lh "${OUTPUT_DIR}/pcp-archives/" 2>/dev/null || echo "No PCP archives collec
 echo "=========================================="
 
 # Log results to MLflow if configured (non-fatal).
-# Set MLFLOW_CONF to an absolute path or rely on MLFLOW_TRACKING_URI env var.
-MLFLOW_CONF="${MLFLOW_CONF:-}"
+# Uses mlflow.conf in the repo root by default; override with MLFLOW_CONF env var.
+MLFLOW_CONF="${MLFLOW_CONF:-${SCRIPT_DIR}/../mlflow.conf}"
 if [ -f "${MLFLOW_CONF}" ] || [ -n "${MLFLOW_TRACKING_URI}" ]; then
     echo ""
     echo "Logging results to MLflow..."
