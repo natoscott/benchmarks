@@ -233,9 +233,11 @@ The Qwen3-8B disagg TTFT exceeds the 500 ms SLA at concurrency=4 (525 ms) and re
 
 **Fix:** add a per-request KV-transfer term — `(ISL × kv_bytes_per_token) / network_bandwidth_GBps` — plus a measured routing latency constant, to the disagg TTFT calculation in `picking.py`.
 
-### Factor 4 — TPOT metric mismatch and undocumented correction (investigate)
+### Factor 4 — TPOT metric mismatch and pipeline-bubble correction (investigate)
 
 Investigation revealed that guidellm's `time_per_output_token_ms` = `total_request_latency / output_tokens`, which includes TTFT. AIC's TPOT model corresponds instead to `inter_token_latency_ms` (ITL), the decode-phase interval between consecutive output tokens. Comparing AIC's predictions against ITL rather than guidellm's TPOT reduces the apparent gap from 5–8× to 2–5×, and shows that at concurrency=1 (minimal load) AIC's TPOT prediction is within 5% of measured ITL for Qwen3-8B agg (AIC: 5.4 ms, measured: 5.7 ms). The model diverges at higher concurrency, consistent with Factor 2.
 
-Separately, `vllm_backend.py` line 82 applies `num_mix_steps_for_tpot_calc = max(1, num_mix_steps - 3)`. The inline comment describes this as "an empirical correction for pipelining requests where new requests cannot be enqueued immediately after last request's exit." `git blame` traces it to commit `5554d2eb` (6 Nov 2025), the initial H100-only vLLM backend. It has not been revisited since. Given that the remaining ITL gap (2–5×) is driven primarily by higher concurrency and is not a uniform offset, this constant warrants investigation to determine whether its value is appropriate for H200.
+Separately, `vllm_backend.py` line 82 applies `num_mix_steps_for_tpot_calc = max(1, num_mix_steps - 3)`. The inline comment describes this as "an empirical correction for pipelining requests where new requests cannot be enqueued immediately after last request's exit." `git blame` traces it to commit `5554d2eb` (6 Nov 2025), the initial H100-only vLLM backend; it has not been revisited since.
+
+For our workload (ISL=9000, ctx_tokens=11012), `num_mix_steps = ceil(9000 × b / 11012)`, giving 1, 2, 3, 4, 5 steps for b=1–5. After the correction, `max(1, num_mix_steps − 3)` yields 1, 1, 1, 1, 2 — clamping almost all batch sizes to a single mix step for TPOT calculation. This minimises the weight of the slower mix-step latency in the TPOT formula, producing lower TPOT predictions. Since our measured ITL is consistently *higher* than AIC predicts, the correction is moving predictions in the wrong direction relative to the observed data, strengthening the case for investigating whether the constant is appropriate for H200.
 
