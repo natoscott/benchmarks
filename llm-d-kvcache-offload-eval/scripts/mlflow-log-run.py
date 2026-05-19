@@ -26,7 +26,11 @@ import os
 import subprocess
 import sys
 import tempfile
+import warnings
 from collections import defaultdict
+
+# Suppress InsecureRequestWarning — self-signed cert is expected on this server
+warnings.filterwarnings("ignore", message="Unverified HTTPS request")
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
