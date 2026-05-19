@@ -67,7 +67,7 @@ for replicas in ${REPLICAS}; do
                     export VLLM_ENV_VARS="HF_HOME=/data/.hf LMCACHE_MAX_LOCAL_CPU_SIZE=${LMCACHE_SIZE} PYTHONHASHSEED=123"
                     export EPP_BACKEND_CONFIG="in-memory"
                     export USE_LMCACHE_IMAGE=""
-                    export VLLM_PRE_CMD="pip install --quiet lmcache==0.4.4"
+                    export VLLM_PRE_CMD="pip3.12 install --quiet lmcache==0.4.4"
                     ;;
                 "lmcache-valkey")
                     export CONTAINER_IMAGE="ghcr.io/llm-d/llm-d-cuda:v0.7.0"
@@ -75,7 +75,7 @@ for replicas in ${REPLICAS}; do
                     export VLLM_ENV_VARS="HF_HOME=/data/.hf LMCACHE_REMOTE_URL=valkey://valkey.${NAMESPACE}.svc.cluster.local:6379 LMCACHE_USE_EXPERIMENTAL=true PYTHONHASHSEED=123"
                     export EPP_BACKEND_CONFIG="in-memory"
                     export USE_LMCACHE_IMAGE=""
-                    export VLLM_PRE_CMD="pip install --quiet lmcache==0.4.4"
+                    export VLLM_PRE_CMD="pip3.12 install --quiet lmcache==0.4.4"
                     ;;
                 *)
                     echo "Unknown configuration: ${run}"
