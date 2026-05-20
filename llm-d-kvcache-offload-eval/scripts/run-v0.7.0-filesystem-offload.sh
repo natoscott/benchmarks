@@ -2,9 +2,8 @@
 set -e
 
 # Benchmarks for llm-d v0.7.0 (vLLM 0.19.1) — filesystem and CPU+filesystem offload.
-# Uses llmd_fs_connector-0.19+cu130 wheel (llm-d-kv-cache v0.8.0).
-# Wheel must be pre-staged on model-storage-pvc at:
-#   /data/llmd_fs_connector-0.19+cu130-cp312-cp312-manylinux_2_35_x86_64.whl
+# llmd_fs_connector is baked into ghcr.io/llm-d/llm-d-cuda:v0.7.0 at image build
+# time — no runtime pip install required.
 # Mirrors run-v0.6.0-filesystem-offload.sh for version comparison.
 
 RUNS="${RUNS:-fs-offload cpu+fs-offload-20k}"
@@ -21,11 +20,6 @@ export TURNS=5
 export INFERENCE_DEPLOYMENT="${INFERENCE_DEPLOYMENT:-llm-d-model-server}"
 export TENSOR_PARALLEL_SIZE="${TENSOR_PARALLEL_SIZE:-2}"
 export GPUS_PER_REPLICA="${TENSOR_PARALLEL_SIZE}"
-
-# llmd_fs_connector wheel — v0.19+cu130 built for vLLM 0.19.1 / CUDA 13.0
-# Statically links libstdc++ (llm-d-kv-cache PR#498); no LD_PRELOAD workaround needed.
-FS_WHEEL_PATH="/data/llmd_fs_connector-0.19+cu130-cp312-cp312-manylinux_2_35_x86_64.whl"
-FS_PACKAGES_DIR="/tmp/llmd_packages"
 
 # ---------------------------------------------------------------------------
 # One-time setup: ensure kvcache-storage-pvc is mounted
@@ -82,29 +76,18 @@ for replicas in ${REPLICAS}; do
                 "fs-offload")
                     export CONTAINER_IMAGE="ghcr.io/llm-d/llm-d-cuda:v0.7.0"
                     export VLLM_EXTRA_ARGS="--kv-transfer-config '{\"kv_connector\":\"OffloadingConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"spec_name\":\"SharedStorageOffloadingSpec\",\"shared_storage_path\":\"/kvcache/kv-cache/\",\"block_size\":256,\"threads_per_gpu\":128,\"spec_module_path\":\"llmd_fs_backend.spec\"}}' --distributed-executor-backend mp"
-                    export VLLM_ENV_VARS="PYTHONHASHSEED=42 PYTHONPATH=${FS_PACKAGES_DIR}"
+                    export VLLM_ENV_VARS="PYTHONHASHSEED=42"
                     export EPP_BACKEND_CONFIG="in-memory"
                     export USE_LMCACHE_IMAGE=""
-                    export VLLM_PRE_CMD="pip3.12 install --quiet --target ${FS_PACKAGES_DIR} ${FS_WHEEL_PATH} && mkdir -p /kvcache/kv-cache"
+                    export VLLM_PRE_CMD="mkdir -p /kvcache/kv-cache"
                     ;;
                 "cpu+fs-offload-20k")
                     export CONTAINER_IMAGE="ghcr.io/llm-d/llm-d-cuda:v0.7.0"
                     export VLLM_EXTRA_ARGS="--kv-transfer-config '{\"kv_connector\":\"MultiConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"connectors\":[{\"kv_connector\":\"OffloadingConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"cpu_bytes_to_use\":${CPU_BYTES_20K}}},{\"kv_connector\":\"OffloadingConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"spec_name\":\"SharedStorageOffloadingSpec\",\"shared_storage_path\":\"/kvcache/kv-cache/\",\"block_size\":256,\"threads_per_gpu\":128,\"spec_module_path\":\"llmd_fs_backend.spec\"}}]}}' --distributed-executor-backend mp"
-                    export VLLM_ENV_VARS="PYTHONHASHSEED=42 PYTHONPATH=${FS_PACKAGES_DIR}"
+                    export VLLM_ENV_VARS="PYTHONHASHSEED=42"
                     export EPP_BACKEND_CONFIG="in-memory"
                     export USE_LMCACHE_IMAGE=""
-                    export VLLM_PRE_CMD="pip3.12 install --quiet --target ${FS_PACKAGES_DIR} ${FS_WHEEL_PATH} && mkdir -p /kvcache/kv-cache && python3.12 -c \"
-import sys, pathlib
-sc = pathlib.Path('${FS_PACKAGES_DIR}/sitecustomize.py')
-sc.write_text('''
-import prometheus_client.registry as _r
-_orig = _r.CollectorRegistry.register
-def _safe(self, c):
-    try: _orig(self, c)
-    except ValueError: pass
-_r.CollectorRegistry.register = _safe
-''')
-\""
+                    export VLLM_PRE_CMD="mkdir -p /kvcache/kv-cache"
                     ;;
                 *)
                     echo "Unknown configuration: ${run}"
