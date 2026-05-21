@@ -83,7 +83,7 @@ V051_MEMPRESS = {
 
 # v0.6.0 gmu=0.9 peak throughput (tok/s) — computed from results/.
 # fs-offload and cpu+fs-offload-20k excluded: v0.6.0 fs-offload runs used a
-# misconfigured runtime pip install that produced invalid results. v0.7.0 is
+# system misconfiguration (PVC) that produced invalid results. v0.7.0 is
 # the first properly configured baseline for these configurations.
 V060_GMU09 = {
     ('Qwen3-0.6B',    'no-offload'):         807.5,

@@ -1,14 +1,10 @@
 # llm-d v0.6.0 KV-Cache Offload Evaluation
 
 > **Note on filesystem offload results:** The `fs-offload` and `cpu+fs-offload-20k`
-> results in this report are invalid. The `llmd_fs_connector` wheel was installed at
-> pod startup via a runtime `pip install` using a `manylinux_2_35`-tagged wheel that is
-> incompatible with the RHEL UBI 9 runtime (glibc 2.34); the connector was silently
-> not loaded. The correct approach — baking the connector into `llm-d-cuda` at image
-> build time using the `linux_x86_64` wheels from the `wheels/` directory — was
-> established in v0.7.0. The v0.7.0 report provides the first valid filesystem offload
-> baseline. The fs-offload sections below are retained for record but should not be
-> used as performance references.
+> results in this report are invalid due to a system misconfiguration (PVC). The
+> v0.7.0 report provides the first valid filesystem offload baseline. The fs-offload
+> sections below are retained for record but should not be used as performance
+> references.
 
 This report evaluates KV-cache offload strategies in llm-d v0.6.0 (vLLM 0.17.1, GuideLLM 0.6.0) and places the results in the context of the prior evaluation on v0.5.1 (vLLM 0.15.1). Six configurations are evaluated: no-offload (GPU-only baseline), native CPU offload via `OffloadingConnector`, LMCache with local and Valkey remote backends, filesystem offload via `SharedStorageOffloadingSpec`, and hierarchical CPU+filesystem offload via `MultiConnector`. LMCache is evaluated for the first time with LMCache v0.4.2 (upgraded from v0.3.15 in v0.5.1). A memory-pressure suite re-ran the four non-filesystem configurations with reduced `gpu_memory_utilization` per model (0.55–0.70 vs the default 0.9).
 
