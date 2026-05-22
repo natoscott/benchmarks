@@ -474,6 +474,122 @@ def fig5_ttft_comparison(df: pd.DataFrame) -> None:
     print(f"  Saved {out}")
 
 
+def fig8_peak_throughput_bars(df: pd.DataFrame) -> None:
+    """Figure 8: Peak throughput per config × model (gmu=0.9), v0.6.0 overlay where valid."""
+    gmu09 = df[~df['mempress']]
+    x = np.arange(len(MODELS))
+    width = 0.13
+    palette = sns.color_palette("muted", len(CONFIGS))
+
+    fig, ax = plt.subplots(figsize=(14, 7))
+    for ci, config in enumerate(CONFIGS):
+        v070_vals = [peak_throughput(gmu09, m, config) for m in MODELS]
+        offset = (ci - len(CONFIGS)/2 + 0.5) * width
+        bars = ax.bar(x + offset, v070_vals, width,
+                      label=CONFIG_LABELS[config], color=palette[ci])
+        # Overlay v0.6.0 where valid (no fs configs)
+        if config not in ('fs-offload', 'cpu+fs-offload-20k'):
+            v060_vals = [V060_GMU09.get((m, config), 0) for m in MODELS]
+            ax.bar(x + offset, v060_vals, width, fill=False,
+                   edgecolor=palette[ci], linewidth=1.5, linestyle='--')
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(MODELS, rotation=10)
+    ax.set_ylabel('Peak Throughput (tok/s)')
+    ax.set_title('Peak Throughput by Configuration: llm-d v0.7.0 (gmu=0.9)\n'
+                 'Dashed outlines = v0.6.0 values (where valid)', fontsize=12)
+    ax.legend(fontsize=8, ncol=3)
+    plt.tight_layout()
+    out = OUTPUT_DIR / 'v0.7.0_peak_throughput.png'
+    plt.savefig(out, dpi=150, bbox_inches='tight')
+    plt.close()
+    print(f"  Saved {out}")
+
+
+def fig9_ttft_curves(df: pd.DataFrame) -> None:
+    """Figure 9: TTFT vs concurrency for all configs (gmu=0.9), 4-panel by model."""
+    gmu09 = df[~df['mempress']]
+    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+    axes = axes.flatten()
+    palette = sns.color_palette("muted", len(CONFIGS))
+
+    for i, model in enumerate(MODELS):
+        ax = axes[i]
+        mdf = gmu09[gmu09['model'] == model]
+        for j, config in enumerate(CONFIGS):
+            cdf = mdf[mdf['config'] == config].sort_values('rate')
+            if cdf.empty:
+                continue
+            ax.plot(cdf['rate'], cdf['ttft_ms'] / 1000,  # convert to seconds
+                    marker='o', markersize=4, color=palette[j],
+                    label=CONFIG_LABELS[config])
+        ax.set_title(model, fontsize=11)
+        ax.set_xlabel('Concurrency')
+        ax.set_ylabel('TTFT (s)')
+        ax.legend(fontsize=7)
+
+    fig.suptitle('Time to First Token vs Concurrency: llm-d v0.7.0 (gmu=0.9)', fontsize=13)
+    plt.tight_layout()
+    out = OUTPUT_DIR / 'v0.7.0_ttft_curves.png'
+    plt.savefig(out, dpi=150, bbox_inches='tight')
+    plt.close()
+    print(f"  Saved {out}")
+
+
+def fig10_itl_curves(df: pd.DataFrame) -> None:
+    """Figure 10: Inter-token latency vs concurrency (gmu=0.9), 4-panel by model."""
+    gmu09 = df[~df['mempress']]
+    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+    axes = axes.flatten()
+    palette = sns.color_palette("muted", len(CONFIGS))
+
+    for i, model in enumerate(MODELS):
+        ax = axes[i]
+        mdf = gmu09[gmu09['model'] == model]
+        for j, config in enumerate(CONFIGS):
+            cdf = mdf[mdf['config'] == config].sort_values('rate')
+            if cdf.empty:
+                continue
+            ax.plot(cdf['rate'], cdf['itl_ms'],
+                    marker='o', markersize=4, color=palette[j],
+                    label=CONFIG_LABELS[config])
+        ax.set_title(model, fontsize=11)
+        ax.set_xlabel('Concurrency')
+        ax.set_ylabel('ITL (ms)')
+        ax.legend(fontsize=7)
+
+    fig.suptitle('Inter-Token Latency vs Concurrency: llm-d v0.7.0 (gmu=0.9)', fontsize=13)
+    plt.tight_layout()
+    out = OUTPUT_DIR / 'v0.7.0_itl_curves.png'
+    plt.savefig(out, dpi=150, bbox_inches='tight')
+    plt.close()
+    print(f"  Saved {out}")
+
+
+def print_latency_table(df: pd.DataFrame, rate: int = 50) -> None:
+    """Print TTFT and ITL at a given concurrency level."""
+    gmu09 = df[~df['mempress']]
+    print(f"\n{'='*80}")
+    print(f"LATENCY AT rate={rate} — gmu=0.9   (TTFT = time to first token, ITL = inter-token latency)")
+    print(f"{'='*80}")
+    print(f"{'Config':<22}{'TTFT (s)':>10}{'ITL (ms)':>12}  {'TTFT (s)':>10}{'ITL (ms)':>12}  "
+          f"{'TTFT (s)':>10}{'ITL (ms)':>12}  {'TTFT (s)':>10}{'ITL (ms)':>12}")
+    print(f"{'':22}" + "".join(f"  {m:>22}" for m in MODELS))
+    print("-" * 80)
+    for config in CONFIGS:
+        row = f"{CONFIG_LABELS[config]:<22}"
+        for model in MODELS:
+            sub = gmu09[(gmu09['model'] == model) & (gmu09['config'] == config) &
+                        (gmu09['rate'] == rate)]
+            if not sub.empty:
+                ttft = sub['ttft_ms'].values[0] / 1000
+                itl = sub['itl_ms'].values[0]
+                row += f"  {ttft:>9.3f}s {itl:>8.1f}ms"
+            else:
+                row += f"  {'—':>9}  {'—':>8}"
+        print(row)
+
+
 # ── Summary table ─────────────────────────────────────────────────────────────
 
 def print_summary(df: pd.DataFrame) -> None:
@@ -587,8 +703,13 @@ def main():
     fig5_ttft_comparison(df)
     fig6_fs_offload_baseline(df)
     fig7_fs_offload_mempress_baseline(df)
+    fig8_peak_throughput_bars(df)
+    fig9_ttft_curves(df)
+    fig10_itl_curves(df)
 
     print_summary(df)
+    print_latency_table(df, rate=50)
+    print_latency_table(df, rate=650)
 
     print("\nDone. Outputs in analysis/v0.7.0_*")
 
