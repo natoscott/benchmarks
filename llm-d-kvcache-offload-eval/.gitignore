@@ -6,5 +6,6 @@ credentials/
 # MLflow credentials (never commit — copy from mlflow.conf.example)
 mlflow.conf
 
-# Generated analysis outputs
-analysis/
+# Generated analysis outputs — ignore data files, track figures for reports
+analysis/*
+!analysis/*.png
