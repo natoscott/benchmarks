@@ -31,10 +31,16 @@ plt.rcParams['font.size'] = 11
 - Use when data wraps around (time of day, angles)
 - Provides perceptually uniform spacing in circular color space
 
-**Sequential/Heatmaps (continuous data)**: `magma`
-- Use for heatmaps, sequential data visualization
+**Sequential heatmaps (one-directional continuous data)**: `magma`
+- Use when all values go in one direction (e.g. utilization %, latency)
 - Perceptually uniform, colorblind-friendly
 - Alternative: `viridis` for different aesthetic
+
+**Diverging heatmaps (signed data centred at zero)**: `RdYlGn`
+- Use when data has both positive and negative values (e.g. % delta vs baseline)
+- Red = negative (overhead/regression), green = positive (gain)
+- Always set `vmin=-abs_max, vmax=abs_max` to centre at zero
+- Alternative: `RdBu` for colorblind-safer option
 
 ## Example Usage
 

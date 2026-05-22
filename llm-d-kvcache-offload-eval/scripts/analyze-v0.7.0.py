@@ -362,9 +362,11 @@ def fig3_overhead_heatmap(df: pd.DataFrame) -> None:
             if baseline > 0 and val > 0:
                 data[ci, mi] = (val - baseline) / baseline * 100
 
+    # Diverging colormap centred at 0: red = overhead, green = gain
+    abs_max = max(abs(data.min()), abs(data.max()), 1)
     fig, ax = plt.subplots(figsize=(10, 5))
-    im = ax.imshow(data, cmap='magma', aspect='auto',
-                   vmin=data.min(), vmax=max(data.max(), 1))
+    im = ax.imshow(data, cmap='RdYlGn', aspect='auto',
+                   vmin=-abs_max, vmax=abs_max)
     plt.colorbar(im, ax=ax, label='% vs no-offload baseline')
     ax.set_xticks(range(len(MODELS)))
     ax.set_xticklabels(MODELS, rotation=20, ha='right')
@@ -374,7 +376,7 @@ def fig3_overhead_heatmap(df: pd.DataFrame) -> None:
         for mi in range(len(MODELS)):
             ax.text(mi, ci, f'{data[ci, mi]:+.1f}%',
                     ha='center', va='center', fontsize=9,
-                    color='white' if abs(data[ci, mi]) > 30 else 'black')
+                    color='white' if abs(data[ci, mi]) > abs_max * 0.7 else 'black')
     ax.set_title('Throughput % Delta vs No-Offload: llm-d v0.7.0 (gmu=0.9)', fontsize=12)
     plt.tight_layout()
     out = OUTPUT_DIR / 'v0.7.0_overhead_heatmap.png'
