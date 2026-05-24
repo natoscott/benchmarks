@@ -156,6 +156,48 @@ native-offload-20k delivers +4.6% (72.5 vs 69.3 tok/s). cpu+fs-offload-20k shows
 
 All configurations match within ±2% of mempress no-offload (49.1–50.1 tok/s). The model saturates at rate=1 regardless of offload config; KV-cache capacity is not the binding constraint at this utilization level.
 
+### Latency under Memory Pressure
+
+When offload strategies extend KV-cache capacity, the throughput gain is accompanied by a reduction in TTFT — cache hits eliminate prefill computation for cached prefix tokens. The converse also holds: offload configurations that incur throughput overhead show increased latency.
+
+**TTFT and ITL at rate=50 — Memory Pressure:**
+
+| Model | Config | TTFT (s) | vs no-offload | ITL (ms) | vs no-offload |
+|-------|--------|:--------:|:-------------:|:--------:|:-------------:|
+| Qwen3-0.6B | no-offload | 3.293 | — | 65.8 | — |
+| | native-offload-20k | **1.754** | **−46.7%** | **46.4** | **−29.3%** |
+| | lmcache-local | 3.577 | +8.6% | 68.4 | +3.9% |
+| | lmcache-valkey | 3.168 | −3.8% | 70.3 | +6.8% |
+| | fs-offload | 3.507 | +6.5% | 70.4 | +7.0% |
+| | cpu+fs-offload-20k | **2.033** | **−38.3%** | **52.9** | **−19.6%** |
+| Qwen3-8B | no-offload | 24.238 | — | 205.2 | — |
+| | native-offload-20k | 27.534 | +13.6% | 234.6 | +14.3% |
+| | lmcache-local | 25.058 | +3.4% | 208.1 | +1.4% |
+| | lmcache-valkey | **21.802** | **−10.1%** | 205.6 | +0.2% |
+| | fs-offload | 29.640 | +22.3% | 259.3 | +26.4% |
+| | cpu+fs-offload-20k | 28.378 | +17.1% | 239.5 | +16.7% |
+| Qwen3-14B | no-offload | 41.047 | — | 219.4 | — |
+| | native-offload-20k | 40.768 | −0.7% | **206.2** | **−6.0%** |
+| | lmcache-valkey | **37.415** | **−8.8%** | 217.6 | −0.8% |
+| | cpu+fs-offload-20k | 41.731 | +1.7% | **210.8** | **−3.9%** |
+| Qwen3-32B-AWQ | no-offload | 42.819 | — | 317.0 | — |
+| | lmcache-valkey | **40.797** | **−4.7%** | **307.1** | **−3.1%** |
+| | native-offload-20k | 45.692 | +6.7% | 305.7 | −3.6% |
+
+![Mempress TTFT Curves](analysis/v0.7.0_mempress_ttft_curves.png)
+*Time to first token vs concurrency under memory pressure.*
+
+![Mempress ITL Curves](analysis/v0.7.0_mempress_itl_curves.png)
+*Inter-token latency vs concurrency under memory pressure.*
+
+**Qwen3-0.6B:** native-offload-20k reduces TTFT from 3.293 s to 1.754 s (−46.7%) and ITL from 65.8 to 46.4 ms (−29.3%) at rate=50. This is the strongest latency improvement in the evaluation: when GPU KV-cache is constrained, offload cache hits eliminate prefill computation for the 10,000-token shared prefix, directly reducing time to first token. cpu+fs-offload-20k shows a similar pattern (TTFT −38.3%, ITL −19.6%). fs-offload, lmcache-local, and lmcache-valkey add small latency overhead (+3.8% to +8.6% TTFT) without the prefill reduction benefit of the native connector.
+
+**Qwen3-8B:** lmcache-valkey is the only offload config to reduce TTFT under mempress (−10.1%, 21.8 vs 24.2 s). native-offload-20k, fs-offload, and cpu+fs-offload-20k all increase TTFT (+13.6% to +22.3%), consistent with write overhead exceeding any cache benefit at this model's throughput. fs-offload shows the largest ITL increase (+26.4%, 259.3 vs 205.2 ms).
+
+**Qwen3-14B:** lmcache-valkey reduces TTFT by 8.8% (37.4 vs 41.0 s), consistent with remote prefix cache hits. native-offload-20k shows near-zero TTFT change (−0.7%) but reduces ITL by 6.0% (206.2 vs 219.4 ms), suggesting cache hits reduce the per-token generation cost. cpu+fs-offload-20k reduces ITL by 3.9% with minimal TTFT impact.
+
+**Qwen3-32B-AWQ:** lmcache-valkey reduces TTFT by 4.7% (40.8 vs 42.8 s). All other configs show TTFT within ±7% of no-offload.
+
 ![Mempress Comparison](analysis/v0.7.0_mempress_comparison.png)
 *Memory-pressure peak throughput: v0.6.0 vs v0.7.0, for configurations with valid v0.6.0 baselines.*
 

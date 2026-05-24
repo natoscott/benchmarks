@@ -476,6 +476,72 @@ def fig5_ttft_comparison(df: pd.DataFrame) -> None:
     print(f"  Saved {out}")
 
 
+def fig12_mempress_ttft_curves(df: pd.DataFrame) -> None:
+    """Figure 12: TTFT vs concurrency under memory pressure, 4-panel by model."""
+    mempress_df = df[df['mempress']]
+    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+    axes = axes.flatten()
+    palette = sns.color_palette("muted", len(CONFIGS))
+
+    for i, model in enumerate(MODELS):
+        ax = axes[i]
+        mdf = mempress_df[mempress_df['model'] == model]
+        gmu = {'Qwen3-0.6B': 0.55, 'Qwen3-8B': 0.65,
+               'Qwen3-14B': 0.70, 'Qwen3-32B-AWQ': 0.65}.get(model, '')
+        for j, config in enumerate(CONFIGS):
+            cdf = mdf[mdf['config'] == config].sort_values('rate')
+            if cdf.empty:
+                continue
+            ax.plot(cdf['rate'], cdf['ttft_ms'] / 1000,
+                    marker='o', markersize=4, color=palette[j],
+                    label=CONFIG_LABELS[config])
+        ax.set_title(f'{model} (gmu={gmu})', fontsize=11)
+        ax.set_xlabel('Concurrency')
+        ax.set_ylabel('TTFT (s)')
+        ax.legend(fontsize=7)
+
+    fig.suptitle('Time to First Token vs Concurrency — Memory Pressure: llm-d v0.7.0',
+                 fontsize=13)
+    plt.tight_layout()
+    out = OUTPUT_DIR / 'v0.7.0_mempress_ttft_curves.png'
+    plt.savefig(out, dpi=150, bbox_inches='tight')
+    plt.close()
+    print(f"  Saved {out}")
+
+
+def fig13_mempress_itl_curves(df: pd.DataFrame) -> None:
+    """Figure 13: ITL vs concurrency under memory pressure, 4-panel by model."""
+    mempress_df = df[df['mempress']]
+    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+    axes = axes.flatten()
+    palette = sns.color_palette("muted", len(CONFIGS))
+
+    for i, model in enumerate(MODELS):
+        ax = axes[i]
+        mdf = mempress_df[mempress_df['model'] == model]
+        gmu = {'Qwen3-0.6B': 0.55, 'Qwen3-8B': 0.65,
+               'Qwen3-14B': 0.70, 'Qwen3-32B-AWQ': 0.65}.get(model, '')
+        for j, config in enumerate(CONFIGS):
+            cdf = mdf[mdf['config'] == config].sort_values('rate')
+            if cdf.empty:
+                continue
+            ax.plot(cdf['rate'], cdf['itl_ms'],
+                    marker='o', markersize=4, color=palette[j],
+                    label=CONFIG_LABELS[config])
+        ax.set_title(f'{model} (gmu={gmu})', fontsize=11)
+        ax.set_xlabel('Concurrency')
+        ax.set_ylabel('ITL (ms)')
+        ax.legend(fontsize=7)
+
+    fig.suptitle('Inter-Token Latency vs Concurrency — Memory Pressure: llm-d v0.7.0',
+                 fontsize=13)
+    plt.tight_layout()
+    out = OUTPUT_DIR / 'v0.7.0_mempress_itl_curves.png'
+    plt.savefig(out, dpi=150, bbox_inches='tight')
+    plt.close()
+    print(f"  Saved {out}")
+
+
 def fig11_mempress_throughput_curves(df: pd.DataFrame) -> None:
     """Figure 11: Throughput vs concurrency under memory pressure, 4-panel by model."""
     mempress_df = df[df['mempress']]
@@ -743,6 +809,8 @@ def main():
     fig9_ttft_curves(df)
     fig10_itl_curves(df)
     fig11_mempress_throughput_curves(df)
+    fig12_mempress_ttft_curves(df)
+    fig13_mempress_itl_curves(df)
 
     print_summary(df)
     print_latency_table(df, rate=50)
