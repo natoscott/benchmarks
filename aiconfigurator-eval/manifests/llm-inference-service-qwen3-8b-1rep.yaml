@@ -1,0 +1,40 @@
+# LLMInferenceService for Qwen/Qwen3-8B — single replica for overhead sweep.
+#
+# 1 replica x 1 GPU so guidellm concurrency == vLLM batch size directly.
+# Use llm-inference-service-qwen3-8b.yaml for production (8 replicas).
+apiVersion: serving.kserve.io/v1alpha2
+kind: LLMInferenceService
+metadata:
+  name: qwen3-8b
+  namespace: aiconfigurator
+spec:
+  baseRefs:
+  - name: v3-4-0-kserve-config-llm-template
+  - name: v3-4-0-kserve-config-llm-scheduler
+  - name: v3-4-0-kserve-config-llm-router-route
+  model:
+    name: "Qwen/Qwen3-8B"
+    uri: "pvc://model-storage-pvc/Qwen__Qwen3-8B"
+  parallelism:
+    tensor: 1
+  replicas: 1
+  template:
+    containers:
+    - name: main
+      env:
+      - name: HUGGING_FACE_HUB_TOKEN
+        valueFrom:
+          secretKeyRef:
+            name: llm-d-hf-token
+            key: HF_TOKEN
+      - name: VLLM_ADDITIONAL_ARGS
+        value: >-
+          --max-model-len 10530
+          --max-num-seqs 512
+          --max-num-batched-tokens 11012
+      resources:
+        requests:
+          nvidia.com/gpu: "1"
+          memory: 40Gi
+        limits:
+          nvidia.com/gpu: "1"
