@@ -335,8 +335,7 @@ The gaps are essentially unchanged from those observed in the original benchmark
 
 In `vllm_backend.py`, the predicted concurrency is hardcoded as `concurrency = batch_size × pp_size × attention_dp_size`. AIC treats its chosen batch size as the perpetually-full in-flight request count, implying 100% server utilisation at all times. No queue-depth or saturation model exists.
 
-An initial analysis (two data points at ISL=9000) produced an empirical decode overhead correction formula. Subsequent collection of a broader dataset (see Overhead Characterisation Study below) revealed that AIC's TPOT model is already accurate to within ±1ms mean across a 40-point (ISL, batch size) grid, and that the apparent correction at ISL=9000 was not reproducible across the full ISL range. The correction formula has been withdrawn pending a principled analysis.
-
+An initial analysis (two data points at ISL=9000) produced an empirical decode overhead correction formula. Subsequent collection of a broader dataset (see Overhead Characterisation Study below) revealed that AIC's TPOT model is already accurate to within ±1ms mean across a 40-point (ISL, batch size) grid, and that the apparent correction at ISL=9000 was not reproducible across the full ISL range.
 **Remaining work:** the throughput gap is likely explained by the concurrency model — AIC equates its batch size to the perpetually-filled request queue, overestimating achievable throughput at high concurrency. A Little's Law consistency cap (`throughput ≤ b / request_latency`) has been prototyped on branch `fix/throughput-queueing-model` and reduces the Qwen3-8B agg throughput prediction from 34.9 req/s to 24.4 req/s against observed saturation of 20.9 req/s. Further validation is required before this is opened as an upstream PR.
 
 ### Factor 3 — Disaggregated routing overhead is not modelled (improvable)
