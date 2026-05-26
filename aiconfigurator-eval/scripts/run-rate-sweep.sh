@@ -42,6 +42,8 @@ OUTPUT_PREFIX="${OUTPUT_PREFIX:?set OUTPUT_PREFIX for result filenames}"
 MAX_SECONDS="${MAX_SECONDS:-120}"
 RANDOM_SEED="${RANDOM_SEED:-889}"
 HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-900}"
+PROMPT_TOKENS="${PROMPT_TOKENS:-9000}"
+OUTPUT_TOKENS="${OUTPUT_TOKENS:-30}"
 
 mkdir -p "$OUTPUT_DIR"
 
@@ -107,7 +109,7 @@ for rate in $RATES; do
 
     kubectl exec -n "$NS" "$GUIDELLM_POD" -- \
         guidellm benchmark run \
-            --data "{\"prompt_tokens\":9000,\"output_tokens\":30}" \
+            --data "{\"prompt_tokens\":${PROMPT_TOKENS},\"output_tokens\":${OUTPUT_TOKENS}}" \
             --profile throughput \
             --rate "$rate" \
             --backend openai_http \

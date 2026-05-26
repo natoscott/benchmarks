@@ -9,7 +9,7 @@
 
 ## TL;DR
 
-This evaluation measures the gap between AIC predictions and observed performance on a real deployment stack (RHOAI 3.4, vLLM 0.18.0+rhaiv, H200 SXM). All predictions use vLLM 0.18.0 silicon data collected on the same hardware (PR #1142). The SLA values (TTFT≤500ms, TPOT≤30ms/tok at ISL=9000) are evaluation parameters used as AIC inputs, not production requirements.
+This evaluation measures the gap between AIC predictions and observed performance on a real deployment stack (RHOAI 3.4, vLLM 0.18.0+rhaiv, H200 SXM). All predictions use vLLM 0.18.0 silicon data collected on the same hardware ([PR #1142](https://github.com/ai-dynamo/aiconfigurator/pull/1142)). The SLA values (TTFT≤500ms, TPOT≤30ms/tok at ISL=9000) are evaluation parameters used as AIC inputs, not production requirements.
 
 For Qwen3-8B aggregated serving, AIC's predicted concurrency (40) matches the observed saturation point. Throughput is 0.69× of prediction and TTFT is 1.14× above prediction. A 40-point TPOT characterisation study (ISL 64–8192, batch size 4–64, OSL=128) found mean absolute error of 0.99 ms — AIC's per-step latency model is accurate over a broad range. The throughput gap is attributed to the concurrency model, which assumes 100% queue utilisation.
 
@@ -17,7 +17,7 @@ For disaggregated serving, throughput is 0.15× of prediction. At concurrency=1 
 
 For Qwen3-32B-FP8, TTFT at concurrency=1 is 729ms versus AIC's 489ms prediction — a 1.49× gap that may reflect FP8 kernel extrapolation in the silicon data. TPOT at concurrency=1 is 12.3ms versus AIC's 20.9ms — AIC over-predicts. These gaps are not yet explained.
 
-Four AIC modelling gaps are under investigation: silicon data version (addressed by PR #1142), concurrency model (Factor 2), disaggregated queuing (Factor 3), and an undocumented TPOT pipeline-bubble correction (Factor 4). See AIC Model Analysis for details. Data gaps and proposed additional measurements are listed in the Remaining Work section.
+Four AIC modelling gaps are under investigation: silicon data version (addressed by [PR #1142](https://github.com/ai-dynamo/aiconfigurator/pull/1142)), concurrency model (Factor 2), disaggregated queuing (Factor 3), and an undocumented TPOT pipeline-bubble correction (Factor 4). See AIC Model Analysis for details. Data gaps and proposed additional measurements are listed in the Remaining Work section.
 
 ---
 
@@ -57,7 +57,7 @@ vLLM arguments applied to all configurations, derived from AIC output:
 
 ### AIC invocation
 
-AIC version 0.8.0 was run in SILICON database mode using vLLM 0.18.0 silicon data collected on this hardware (PR #1142). All predictions in this report use these 0.18.0 tables. Each model was queried separately for aggregated and disaggregated serving modes with the following inputs:
+AIC version 0.8.0 was run in SILICON database mode using vLLM 0.18.0 silicon data collected on this hardware ([PR #1142](https://github.com/ai-dynamo/aiconfigurator/pull/1142)). All predictions in this report use these 0.18.0 tables. Each model was queried separately for aggregated and disaggregated serving modes with the following inputs:
 
 | Parameter | Value |
 |-----------|-------|
@@ -91,7 +91,7 @@ Each benchmark run lasted 120 seconds. Synthetic prompts were fixed at ISL=9000,
 
 ## AIC Predictions
 
-The table below shows AIC's top-1 predicted operating point for each configuration at the stated SLA constraints, using vLLM 0.18.0 silicon data (PR #1142). Earlier predictions using vLLM 0.19.0 data are shown for reference in Factor 1.
+The table below shows AIC's top-1 predicted operating point for each configuration at the stated SLA constraints, using vLLM 0.18.0 silicon data ([PR #1142](https://github.com/ai-dynamo/aiconfigurator/pull/1142)). Earlier predictions using vLLM 0.19.0 data are shown for reference in Factor 1.
 
 | Config | AIC req/s | AIC TTFT (ms) | AIC TPOT/ITL (ms/tok) | AIC tok/s | AIC concurrency |
 |--------|-----------|---------------|-------------------|-----------|-----------------|
@@ -363,8 +363,8 @@ The following comparisons cannot be made with current data:
 
 #### Open AIC code changes
 
-- **PR #1142** (`data/h200-sxm-vllm-0.18.0`): silicon data, awaiting review
-- **PR #1141** (`feat/inclusive-tpot-output`): `--inclusive-tpot` flag for guidellm-comparable reporting, awaiting review  
+- **[PR #1142](https://github.com/ai-dynamo/aiconfigurator/pull/1142)** (`data/h200-sxm-vllm-0.18.0`): silicon data, awaiting review
+- **[PR #1141](https://github.com/ai-dynamo/aiconfigurator/pull/1141)** (`feat/inclusive-tpot-output`): `--inclusive-tpot` flag for guidellm-comparable reporting, awaiting review  
 - **`fix/throughput-queueing-model`**: Little's Law throughput cap (Factor 2). Awaits cross-validation at multiple ISL values and model types before upstream PR.
 - **Factor 3**: no prototype yet. Requires a queuing model parameterised from silicon-measured decode step latency.
 - **Factor 4**: `num_mix_steps − 3` constant to be reviewed with original author (commit `5554d2eb`).
