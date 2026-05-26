@@ -9,7 +9,15 @@
 
 ## TL;DR
 
-This evaluation assesses how closely AIC predictions match observed performance on a real deployment stack. The SLA values (TTFT≤500ms, TPOT≤30ms/tok at ISL=9000) were used as AIC inputs to constrain its recommendation; they are evaluation parameters, not production requirements. Predictions were generated using AIC's vLLM 0.19.0 silicon database (the version available at evaluation time). Subsequent collection of vLLM 0.18.0 silicon data for this hardware reduced the TTFT prediction error from 1.3× to under 1% at the SLA boundary. For 32B-FP8, TTFT≤500ms at ISL=9000 is not achievable for any dense topology — a workload/SLA mismatch unrelated to AIC accuracy. Disaggregated serving is furthest from predictions (throughput 0.13× for 8B disagg), consistent with AIC having no model of decode worker queuing. A 40-point TPOT characterisation study (ISL: 64–8192, batch size: 4–64, Qwen3-8B on H200 SXM vLLM 0.18.0) found mean absolute TPOT prediction error of 0.99 ms — AIC's per-step latency model is already accurate over a broad operating range. The throughput gap is therefore better attributed to the concurrency model (Factor 2) than to TPOT misprediction. Source code analysis identified four gaps: silicon data version mismatch (now addressed by PR #1142), concurrency equated to batch size (under investigation), no disaggregated queuing model, and an undocumented TPOT pipeline-bubble correction of uncertain validity for H200. See AIC Model Analysis for details.
+This evaluation measures the gap between AIC predictions and observed performance on a real deployment stack (RHOAI 3.4, vLLM 0.18.0+rhaiv, H200 SXM). All predictions use vLLM 0.18.0 silicon data collected on the same hardware (PR #1142). The SLA values (TTFT≤500ms, TPOT≤30ms/tok at ISL=9000) are evaluation parameters used as AIC inputs, not production requirements.
+
+For Qwen3-8B aggregated serving, AIC's predicted concurrency (40) matches the observed saturation point. Throughput is 0.69× of prediction and TTFT is 1.14× above prediction. A 40-point TPOT characterisation study (ISL 64–8192, batch size 4–64, OSL=128) found mean absolute error of 0.99 ms — AIC's per-step latency model is accurate over a broad range. The throughput gap is attributed to the concurrency model, which assumes 100% queue utilisation.
+
+For disaggregated serving, throughput is 0.15× of prediction. At concurrency=1 — where there is no queuing — disagg TTFT (268ms) is 1.7× below AIC's prediction (453ms), indicating AIC over-estimates the fixed routing overhead. At higher concurrency, TTFT blows out to 1,051ms at concurrency=8 as the decode worker saturates, a queuing effect AIC has no model for.
+
+For Qwen3-32B-FP8, TTFT at concurrency=1 is 729ms versus AIC's 489ms prediction — a 1.49× gap that may reflect FP8 kernel extrapolation in the silicon data. TPOT at concurrency=1 is 12.3ms versus AIC's 20.9ms — AIC over-predicts. These gaps are not yet explained.
+
+Four AIC modelling gaps are under investigation: silicon data version (addressed by PR #1142), concurrency model (Factor 2), disaggregated queuing (Factor 3), and an undocumented TPOT pipeline-bubble correction (Factor 4). See AIC Model Analysis for details. Data gaps and proposed additional measurements are listed in the Remaining Work section.
 
 ---
 
@@ -49,7 +57,7 @@ vLLM arguments applied to all configurations, derived from AIC output:
 
 ### AIC invocation
 
-AIC version 0.8.0 was run in SILICON database mode against vLLM 0.19.0 reference data. Each model was queried separately for aggregated and disaggregated serving modes with the following inputs:
+AIC version 0.8.0 was run in SILICON database mode using vLLM 0.18.0 silicon data collected on this hardware (PR #1142). All predictions in this report use these 0.18.0 tables. Each model was queried separately for aggregated and disaggregated serving modes with the following inputs:
 
 | Parameter | Value |
 |-----------|-------|
@@ -68,7 +76,7 @@ guidellm 0.6.0 was used to benchmark each configuration. The `throughput` profil
 
 **Evaluation objective:** The goal is to assess how accurately AIC predicts performance on this deployment stack (RHOAI 3.4, vLLM 0.18.0+rhaiv, H200 SXM). The SLA values supplied to AIC (TTFT≤500ms, TPOT≤30ms/tok) constrain its recommended operating point; they are not production requirements for this workload. Where AIC's recommended concurrency was not tested exactly, the closest concurrency level is used for comparison.
 
-**TPOT metric note:** guidellm reports two distinct per-token latency metrics. `time_per_output_token_ms` = `total_request_latency / output_tokens`, which includes TTFT and is not directly comparable to AIC's TPOT model. `inter_token_latency_ms` (ITL) = mean time between consecutive output tokens during the decode phase, which corresponds to AIC's TPOT model. All TPOT columns and SLA checks in this report use ITL.
+**TPOT metric note:** guidellm reports two distinct per-token latency metrics. `time_per_output_token_ms` = `total_request_latency / output_tokens`, which includes TTFT and is not directly comparable to AIC's TPOT model. `inter_token_latency_ms` (ITL) = mean time between consecutive output tokens during the decode phase, which corresponds to AIC's TPOT model. All TPOT columns and SLA checks in this report use ITL. The `--inclusive-tpot` flag added to AIC ([PR #1141](https://github.com/ai-dynamo/aiconfigurator/pull/1141)) computes `(ttft + tpot × (osl − 1)) / osl` at output time, matching guidellm's `time_per_output_token_ms` definition for direct comparison when needed.
 
 Concurrency levels tested:
 - Qwen3-8B agg: 1, 2, 4, 8, 16, 24, 32, 40
@@ -83,19 +91,16 @@ Each benchmark run lasted 120 seconds. Synthetic prompts were fixed at ISL=9000,
 
 ## AIC Predictions
 
-The table below shows AIC's top-1 predicted operating point for each configuration at the stated SLA constraints, using vLLM 0.19.0 silicon data (the version used at evaluation time). Substantially improved predictions using vLLM 0.18.0 silicon data are described in the AIC Model Analysis section.
+The table below shows AIC's top-1 predicted operating point for each configuration at the stated SLA constraints, using vLLM 0.18.0 silicon data (PR #1142). Earlier predictions using vLLM 0.19.0 data are shown for reference in Factor 1.
 
 | Config | AIC req/s | AIC TTFT (ms) | AIC TPOT/ITL (ms/tok) | AIC tok/s | AIC concurrency |
 |--------|-----------|---------------|-------------------|-----------|-----------------|
-| Qwen3-8B agg (TP=1×8) | **34.9** | 432 | 28.6 | 1,013 | 48 |
-| Qwen3-8B disagg (7P+1D) | 28.8 | 394 | 8.9 | 863 | 10 |
-| Qwen3-32B-FP8 agg (TP=4×2) | 6.6 | 493 | 18.2 | 191 | 8 |
-| Qwen3-32B-FP8 agg (TP=1×8) | 4.8 | 315 | 13.7 | — | — |
-| Qwen3-32B-FP8 disagg (7P+1D) | 3.4 | 473 | 10.4 | 103 | 4 |
+| Qwen3-8B agg (TP=1×8) | 30.4 | 484 | 23.2 | 881 | 40 |
+| Qwen3-8B disagg | 25.0 | 453 | 7.7 | 751 | 7 |
+| Qwen3-32B-FP8 agg (TP=4×2) | 5.4 | 489 | 28.8 | 155 | 8 |
+| Qwen3-32B-FP8 disagg | 3.4 | 470 | 23.8 | 103 | 16 |
 
-AIC selected aggregated mode as the top configuration for both models. For Qwen3-32B-FP8 agg, AIC's top-1 topology is TP=4 × 2 replicas (6.6 req/s). TP=1 × 8 replicas appears lower in the AIC pareto front at 4.8 req/s.
-
-The Qwen3-32B-FP8 agg (TP=1×8) row is included for comparison only — AIC did not recommend this topology and produced no tok/s figure for it. The 4.8 req/s and associated TTFT/TPOT values are read from the AIC pareto front, not from its top-1 output.
+AIC selected aggregated mode as the top configuration for both models. For Qwen3-32B-FP8 agg, AIC's top-1 topology with 0.18.0 silicon data is TP=4 × 2 replicas. No TP=1×8 row appears in the 0.18.0 pareto front within the SLA bounds; the closest is TP=8×1 at 3.3 req/s.
 
 ---
 
@@ -120,17 +125,19 @@ The Qwen3-32B-FP8 agg (TP=1×8) row is included for comparison only — AIC did 
 | 32 | 20.9 | 512 | 34.5 | ✗ | ✗ |
 | 40 | 20.9 | 550 | 43.4 | ✗ | ✗ |
 
-Throughput saturates at ~20.9 req/s between concurrency=32 and concurrency=40. Both SLAs are met up to concurrency=16 (13.9 req/s, TTFT=487 ms, ITL=22.7 ms). The maximum dual-SLA-compliant operating point is **13.9 req/s** (40% of AIC's predicted 34.9 req/s).
+Throughput saturates at ~20.9 req/s between concurrency=32 and concurrency=40. Both SLAs are met up to concurrency=16 (13.9 req/s, TTFT=487 ms, ITL=22.7 ms). The maximum dual-SLA-compliant operating point is 13.9 req/s (46% of AIC's predicted 30.4 req/s using 0.18.0 silicon data). AIC's predicted operating point (concurrency=40) matches the observed saturation point.
 
 **All configurations at concurrency=16:**
 
 | Config | Observed (req/s) | AIC predicted (req/s) | Ratio | TTFT (ms) | ITL (ms) | TTFT SLA | ITL SLA |
 |--------|-----------------|----------------------|-------|-----------|----------|----------|---------|
-| Qwen3-8B agg | 13.9 | 34.9 | 0.40× | 487 | 22.7 | ✓ | ✓ |
-| Qwen3-8B disagg | 4.6 | 28.8 | 0.16× | 1,128 | 79.6 | ✗ | ✗ |
-| Qwen3-32B-FP8 agg TP=1 | 5.1 | 4.8 | 1.06× | 1,334 | 58.4 | ✗ | ✗ |
-| Qwen3-32B-FP8 agg TP=4 | 2.2 | 6.6 | 0.34× | 1,905 | 176.5 | ✗ | ✗ |
+| Qwen3-8B agg | 13.9 | 30.4 | 0.46× | 487 | 22.7 | ✓ | ✓ |
+| Qwen3-8B disagg | 4.6 | 25.0 | 0.18× | 1,128 | 79.6 | ✗ | ✗ |
+| Qwen3-32B-FP8 agg TP=1 | 5.1 | — | — | 1,334 | 58.4 | ✗ | ✗ |
+| Qwen3-32B-FP8 agg TP=4 | 2.2 | 5.4 | 0.41× | 1,905 | 176.5 | ✗ | ✗ |
 | Qwen3-32B-FP8 disagg | 1.2 | 3.4 | 0.35× | 3,353 | 304.0 | ✗ | ✗ |
+
+*TP=1×8 for 32B-FP8 has no AIC top-1 prediction within SLA constraints with 0.18.0 data; the TP=8×1 pareto entry gives 3.3 req/s at conc=4.*
 
 ![AIC predicted vs observed peak throughput](figures/fig5-aic-vs-observed.png)
 
@@ -142,12 +149,12 @@ The most direct accuracy test compares observed and predicted values at the conc
 
 | Config | AIC conc | Test conc | AIC req/s | Obs req/s | Ratio | AIC TTFT | Obs TTFT | Ratio | AIC ITL | Obs ITL | Ratio |
 |--------|----------|-----------|-----------|-----------|-------|----------|----------|-------|---------|---------|-------|
-| Qwen3-8B agg | 48 | 40 | 34.9 | 20.9 | 0.60× | 432 ms | 550 ms | 1.27× | 28.6 ms | 43.4 ms | 1.52× |
-| Qwen3-8B disagg | 10 | 8 | 28.8 | 3.8 | 0.13× | 394 ms | 1,051 ms | 2.67× | 8.9 ms | 36.0 ms | 4.04× |
-| Qwen3-32B-FP8 agg (TP=4) | 8 | 8 | 6.6 | 1.9 | 0.29× | 493 ms | 1,584 ms | 3.21× | 18.2 ms | 85.6 ms | 4.70× |
-| Qwen3-32B-FP8 disagg | 4 | 4 | 3.4 | 1.2 | 0.35× | 473 ms | 1,944 ms | 4.11× | 10.4 ms | 46.6 ms | 4.48× |
+| Qwen3-8B agg | 40 | 40 | 30.4 | 20.9 | 0.69× | 484 ms | 550 ms | 1.14× | 23.2 ms | 43.4 ms | 1.87× |
+| Qwen3-8B disagg | 7 | 8 | 25.0 | 3.8 | 0.15× | 453 ms | 1,051 ms | 2.32× | 7.7 ms | 36.0 ms | 4.68× |
+| Qwen3-32B-FP8 agg (TP=4) | 8 | 8 | 5.4 | 1.9 | 0.35× | 489 ms | 1,584 ms | 3.24× | 28.8 ms | 85.6 ms | 2.97× |
+| Qwen3-32B-FP8 disagg | 16 | 16 | 3.4 | 1.2 | 0.35× | 470 ms | 3,353 ms | 7.13× | 23.8 ms | 304 ms | 12.8× |
 
-Qwen3-8B agg is the closest match at 0.60× throughput and 1.27× TTFT against v0.19.0 predictions. With vLLM 0.18.0 silicon data and throughput model corrections (see AIC Model Analysis), Qwen3-8B agg improves to ~0.93× throughput and ~1.19× TTFT at the same concurrency. The disaggregated configurations and all 32B-FP8 configurations diverge substantially — throughput 0.13–0.35× of prediction and TTFT 2.7–4.1× above prediction; these gaps are driven by separate factors unaffected by the silicon data update.
+Qwen3-8B agg shows the smallest prediction gap: 0.69× throughput and 1.14× TTFT at AIC's predicted concurrency. TTFT is accurate to within 14% at the recommended operating point. The throughput gap is consistent with the concurrency model equating batch size to perpetual queue fill (Factor 2). The disaggregated and 32B-FP8 configurations diverge substantially — throughput 0.15–0.35× of prediction and TTFT 2.3–7.1× above prediction; these gaps are driven by separate factors.
 
 **Qwen3-32B-FP8 TP=4 vs TP=1:**
 
@@ -166,16 +173,15 @@ TP=1×8 delivers 2.3× higher throughput than TP=4×2 at concurrency=16 (5.1 vs 
 
 *Dotted horizontal lines indicate AIC predicted TTFT. Dashed red line marks the 500 ms SLA.*
 
-| Config | TTFT @ conc=1 | TTFT @ conc=16 | AIC predicted |
-|--------|--------------|----------------|---------------|
-| Qwen3-8B agg | 273 ms | 487 ms | 432 ms |
-| Qwen3-8B disagg | 268 ms | 1,128 ms | 394 ms |
-| Qwen3-32B-FP8 agg TP=1 | 737 ms | 1,334 ms | 315 ms |
-| Qwen3-32B-FP8 agg TP=4 | 729 ms | 1,905 ms | 493 ms |
-| Qwen3-32B-FP8 disagg | 731 ms | 3,353 ms | 473 ms |
+| Config | TTFT @ conc=1 | TTFT @ conc=16 | AIC predicted (v0.18.0) |
+|--------|--------------|----------------|-------------------------|
+| Qwen3-8B agg | 273 ms | 487 ms | 484 ms |
+| Qwen3-8B disagg | 268 ms | 1,128 ms | 453 ms |
+| Qwen3-32B-FP8 agg TP=4 | 729 ms | 1,905 ms | 489 ms |
+| Qwen3-32B-FP8 disagg | 731 ms | 3,353 ms | 470 ms |
 
-- Qwen3-8B agg is the only configuration that meets the TTFT SLA at low concurrency. It exceeds 500 ms above concurrency=16.
-- All Qwen3-32B-FP8 configurations exceed the 500 ms TTFT SLA at every concurrency level tested, including concurrency=1. At concurrency=1, TTFT is 729–737 ms across all 32B-FP8 topologies. AIC predicted 315–493 ms depending on topology.
+- Qwen3-8B agg: at concurrency=1, observed TTFT (273ms) is 1.59× below AIC's prediction (434ms). AIC's TTFT correction factor — designed for loaded operating points — over-estimates TTFT at low concurrency. At concurrency=16 (near the SLA boundary), observed TTFT (487ms) is within 1% of AIC's prediction (484ms). This suggests the correction factor is well-calibrated at the intended operating point but over-aggressive below it.
+- All Qwen3-32B-FP8 configurations exceed the 500 ms TTFT SLA at every concurrency level tested, including concurrency=1. At concurrency=1, TTFT is 729–737 ms across all 32B-FP8 topologies. AIC predicts 451–489 ms — a 1.49–1.62× under-prediction. This gap is not yet explained by the identified factors and may reflect FP8 GEMM or attention kernel extrapolation in the silicon data at ISL=9000.
 
 ### TTFT vs throughput
 
@@ -189,15 +195,17 @@ The near-vertical trajectories for Qwen3-32B-FP8 disagg and TP=4 show systems op
 
 *Dotted horizontal lines indicate AIC predicted TPOT (decode interval). Dashed red line marks the 30 ms/tok SLA. ITL (inter-token latency) is the decode-phase interval between consecutive output tokens and matches AIC's TPOT model. guidellm's `time_per_output_token_ms` = total_latency/output_tokens and is not shown here.*
 
-| Config | ITL @ conc=1 | ITL @ conc=16 | AIC predicted TPOT |
-|--------|-------------|---------------|-------------------|
-| Qwen3-8B agg | 5.7 ms | 22.7 ms | 28.6 ms |
-| Qwen3-8B disagg | 5.7 ms | 79.6 ms | 8.9 ms |
-| Qwen3-32B-FP8 agg TP=1 | 12.3 ms | 58.4 ms | 13.7 ms |
-| Qwen3-32B-FP8 agg TP=4 | 12.3 ms | 176.5 ms | 18.2 ms |
-| Qwen3-32B-FP8 disagg | 12.4 ms | 304.0 ms | 10.4 ms |
+| Config | ITL @ conc=1 | AIC TPOT @ b=1 | Ratio | ITL @ conc=16 | AIC TPOT @ rec. conc |
+|--------|-------------|----------------|-------|---------------|----------------------|
+| Qwen3-8B agg | 5.7 ms | 5.3 ms | 1.08× | 22.7 ms | 23.2 ms @ conc=40 |
+| Qwen3-8B disagg | 5.7 ms | — | — | 79.6 ms | 7.7 ms @ conc=7 |
+| Qwen3-32B-FP8 agg TP=1 | 12.3 ms | — | — | 58.4 ms | — |
+| Qwen3-32B-FP8 agg TP=4 | 12.3 ms | 20.9 ms | 0.59× | 176.5 ms | 28.8 ms @ conc=8 |
+| Qwen3-32B-FP8 disagg | 12.4 ms | — | — | 304.0 ms | 23.8 ms @ conc=16 |
 
-Notably, at concurrency=1 (minimal load) AIC's TPOT prediction closely matches observed ITL for Qwen3-8B agg (AIC: 5.4 ms, measured: 5.7 ms). The model diverges at higher concurrency, consistent with the concurrency=batch_size assumption (Factor 2).
+At concurrency=1 (no queuing), Qwen3-8B agg ITL is 5.7 ms against AIC's prediction of 5.3 ms — within 8%. For Qwen3-32B-FP8 agg TP=4, AIC predicts 20.9 ms but observes 12.3 ms at concurrency=1 — AIC over-predicts by 1.7×. The direction of this error (AIC too conservative) is not explained by the known factors and warrants further investigation with the FP8 silicon data.
+
+At concurrency=16, Qwen3-8B ITL (22.7 ms) closely matches AIC's prediction at the recommended concurrency=40 (23.2 ms), but this comparison conflates two different operating points. The model diverges at high concurrency — at conc=40, observed ITL is 43.4 ms versus AIC's 23.2 ms — consistent with the concurrency=batch_size assumption (Factor 2). The disagg and 32B-FP8 ITL values at concurrency=16 far exceed AIC predictions due to queuing saturation, not TPOT misprediction.
 
 ---
 
@@ -262,18 +270,17 @@ guidellm was run at 40 `(ISL, batch_size)` combinations:
 
 | Config | AIC req/s | Obs req/s @ AIC conc | Throughput ratio | AIC TTFT | Obs TTFT @ AIC conc | TTFT ratio |
 |--------|-----------|---------------------|-----------------|----------|---------------------|------------|
-| Qwen3-8B agg | 34.9 | 20.9 (conc=40) | 0.60× | 432 ms | 550 ms | 1.27× |
-| Qwen3-8B disagg | 28.8 | 3.8 (conc=8) | 0.13× | 394 ms | 1,051 ms | 2.67× |
-| Qwen3-32B-FP8 agg TP=4 | 6.6 | 1.9 (conc=8) | 0.29× | 493 ms | 1,584 ms | 3.21× |
-| Qwen3-32B-FP8 agg TP=1 | 4.8 | 4.2 (conc=8) | 0.88× | 315 ms | 952 ms | 3.02× |
-| Qwen3-32B-FP8 disagg | 3.4 | 1.2 (conc=4) | 0.35× | 473 ms | 1,944 ms | 4.11× |
+| Qwen3-8B agg | 30.4 | 20.9 (conc=40) | 0.69× | 484 ms | 550 ms | 1.14× |
+| Qwen3-8B disagg | 25.0 | 3.8 (conc=8) | 0.15× | 453 ms | 1,051 ms | 2.32× |
+| Qwen3-32B-FP8 agg TP=4 | 5.4 | 1.9 (conc=8) | 0.35× | 489 ms | 1,584 ms | 3.24× |
+| Qwen3-32B-FP8 disagg | 3.4 | 1.2 (conc=16) | 0.35× | 470 ms | 3,353 ms | 7.13× |
 
 *Note: TTFT≤500ms at ISL=9000 is not achievable for 32B dense models on a single GPU — this reflects a workload/SLA mismatch, not an AIC modelling failure specific to those configs. For 8B agg, the 500ms SLA is met up to concurrency=16 (13.9 req/s); concurrency=16 is the practical SLA-bounded operating point.*
 
-- **Qwen3-8B agg** is the best-predicted configuration. At AIC's predicted concurrency (~40–48), throughput is 0.60× of prediction and TTFT is 1.27× above prediction — the most accurate result across all configs. The 500ms TTFT SLA is met up to concurrency=16 (13.9 req/s); the extended sweep shows saturation at ~20.9 req/s at concurrency=32–40.
-- **Qwen3-8B disagg** throughput is 0.13× of prediction at AIC's predicted concurrency and TTFT is 2.67× above prediction. The decode worker saturates rapidly under concurrent load — a queuing effect AIC does not model.
-- **Qwen3-32B-FP8** configurations all show TTFT well above 500ms even at concurrency=1 (730–737ms). This reflects the compute cost of prefilling 9000 tokens at 32B dense — a physics constraint unrelated to AIC accuracy. TTFT accuracy is 3–4× off prediction across 32B configurations; the discrepancy is consistent with the silicon data version gap identified in Factor 1. Throughput prediction accuracy ranges from 0.29× (TP=4) to 0.88× (TP=1).
-- **Qwen3-32B-FP8 agg TP=4**, AIC's top-1 recommendation, delivers 2.3× lower throughput than TP=1×8, contrary to AIC's prediction (6.6 vs 4.8 req/s). At concurrency=1, per-instance TTFT is nearly identical (TP=4: 729ms, TP=1: 737ms). The throughput gap at higher concurrency is consistent with the replica count difference: TP=4×2 provides 2 instances against TP=1×8's 8.
+- **Qwen3-8B agg:** at AIC's predicted concurrency (40), throughput is 0.69× of prediction and TTFT is 1.14× above. AIC's predicted concurrency correctly identifies the saturation point; the throughput gap reflects the concurrency model (Factor 2). The TTFT and TPOT predictions are accurate at the SLA boundary (concurrency=16). At concurrency=1, AIC over-predicts TTFT (434ms vs 273ms observed) — the TTFT correction factor is calibrated for loaded conditions.
+- **Qwen3-8B disagg:** throughput is 0.15× of prediction at AIC's predicted concurrency; TTFT is 2.32× above. At concurrency=1, disagg TTFT (268ms) is 41% below AIC's prediction (453ms), showing the modelled fixed routing overhead is too large. At concurrency=8, TTFT is 1,051ms — 2.32× above prediction — as the decode worker saturates. AIC has no model for this queuing effect.
+- **Qwen3-32B-FP8 agg TP=4:** TTFT at concurrency=1 is 729ms vs AIC prediction of 489ms (1.49× gap); throughput at AIC's recommended concurrency is 0.35× of prediction. TPOT at concurrency=1 is 12.3ms vs AIC's 20.9ms — AIC over-predicts by 1.7×. These gaps are not yet attributed to a specific factor.
+- **Qwen3-32B-FP8 disagg:** throughput is 0.35× of prediction; TTFT at concurrency=16 is 7.1× above prediction. Both are dominated by queuing saturation and the absence of a routing overhead model.
 
 ---
 
@@ -281,7 +288,7 @@ guidellm was run at 40 `(ISL, batch_size)` combinations:
 
 The discrepancies between AIC predictions and observed results were investigated by reading the AIC source code. Four factors were identified, each representing a gap that could be addressed in the AIC codebase.
 
-### Factor 1 — Silicon data version mismatch (partially addressed)
+### Factor 1 — Silicon data version mismatch ([PR #1142](https://github.com/ai-dynamo/aiconfigurator/pull/1142))
 
 AIC predictions are computed from lookup tables in `systems/{hw}/data/vllm/{version}/` — CSV files of measured per-operation latencies (GEMM, context attention, generation attention) at various batch sizes and TP sizes. The database version used was vLLM 0.19.0.
 
@@ -291,14 +298,14 @@ The deployed stack runs `vLLM v0.18.0+rhaiv.0` with a distinct compilation profi
 
 | Metric | v0.19.0 | v0.18.0 | Observed |
 |--------|---------|---------|----------|
-| TTFT (top-1) | 432 ms | **488 ms** | 487 ms ✓ |
-| TPOT/ITL (top-1) | 28.6 ms | **23.3 ms** | 22.7 ms ✓ |
-| Concurrency | 48 | **40** | 40 (saturation) |
-| req/s | 34.9 | **30.1** | 20.9 (sat.) / 13.9 (SLA) |
+| TTFT (top-1) | 432 ms | 484 ms | 487 ms ✓ |
+| TPOT/ITL (top-1) | 28.6 ms | 23.2 ms | 22.7 ms ✓ |
+| Concurrency | 48 | 40 | 40 (saturation) |
+| req/s | 34.9 | 30.4 | 20.9 (sat.) / 13.9 (SLA) |
 
-TTFT and TPOT predictions are now accurate to within 5% for Qwen3-8B. Throughput remains 44% above the observed saturation value — the remaining gap is consistent with Factor 2.
+For Qwen3-8B, TTFT prediction at the SLA boundary (concurrency=16) is now within 1%; TPOT at concurrency=1 is within 8%. Throughput remains 31% above observed saturation — consistent with Factor 2.
 
-**Remaining gap:** The 0.18.0 collection only captured BF16 attention data. Qwen3-32B-FP8 requires FP8 generation attention measurements, which must be collected in a separate pass with FP8 KV cache enabled.
+For Qwen3-32B-FP8, the 0.18.0 data includes both BF16 and FP8 for all six op tables. Despite complete silicon data, TTFT at concurrency=1 is 1.49× below AIC's prediction and TPOT at concurrency=1 is 1.7× above prediction. A collector bug fix was required: vLLM ≥0.11.0 sets `supports_quant_query_input=True`, requiring the caller to pass an FP8-dtype query to `impl.forward()` and allocate the output buffer as BF16. Without this fix, all FP8 attention measurements returned dtype errors. Whether the corrected data fully resolves the 32B-FP8 accuracy gap has not yet been validated by re-running the concurrency benchmarks.
 
 ### Factor 2 — Concurrency is equated to batch size (under investigation)
 
@@ -316,13 +323,13 @@ For disaggregated configurations, `picking.py` applies fixed degradation constan
 - Request routing latency through llm-d's scheduler and EPP
 - Network round-trip for the prefill→decode handoff
 
-The Qwen3-8B disagg TTFT exceeds the 500 ms SLA at concurrency=4 (525 ms) and reaches 1,128 ms at concurrency=16. AIC predicted 394 ms at its chosen operating point. AIC has no model for routing or KV-transfer overhead, which are plausible contributors to the observed gap. The disagg throughput is 6–10× below prediction across both models.
+The Qwen3-8B disagg TTFT exceeds the 500 ms SLA at concurrency=4 (525 ms) and reaches 1,128 ms at concurrency=16. AIC predicted 453 ms at its chosen operating point (concurrency=7). At concurrency=1, disagg TTFT (268ms) is 41% below AIC's prediction (453ms) and marginally below agg TTFT (273ms). This shows the fixed routing and KV-transfer overhead is effectively zero at concurrency=1 — AIC's fixed degradation constants (0.90/0.92) are over-conservative at low load. The throughput gap (0.15×) and TTFT blowout at higher concurrency are queuing-driven: the decode worker saturates rapidly under load.
 
-**Fix:** the observed TTFT blowout is queuing-driven — at concurrency=1, disagg TTFT (268ms) is marginally lower than agg (273ms), so there is no measurable fixed per-request routing overhead. The bottleneck is the decode worker saturating under concurrent load. A queueing model at the decode worker (M/M/1 with service time derived from silicon-measured decode step latency) would capture this behaviour. Separately, a KV-transfer latency term could be added for deployments where network bandwidth is a constraint.
+**Modelling gap:** AIC needs a queuing model at the decode worker, parameterised from silicon-measured decode step latency. The constant 0.90/0.92 degradation factors are not sufficient to capture load-dependent behaviour. A separate routing overhead term should be removed or reduced to reflect the observed negligible fixed routing cost.
 
 ### Factor 4 — TPOT metric mismatch and pipeline-bubble correction (largely explained)
 
-Investigation revealed that guidellm's `time_per_output_token_ms` = `total_request_latency / output_tokens`, which includes TTFT. AIC's TPOT model corresponds instead to `inter_token_latency_ms` (ITL). Correcting this comparison reduces the apparent TPOT gap from 5–8× to 2–5× against v0.19.0 data.
+guidellm's `time_per_output_token_ms` = `total_request_latency / output_tokens` includes TTFT and is not directly comparable to AIC's TPOT model. AIC's TPOT corresponds to `inter_token_latency_ms` (ITL). All TPOT comparisons in this report use ITL.
 
 With v0.18.0 silicon data, AIC TPOT predictions at ISL=9000 for Qwen3-8B are accurate to within 5% at b=1 (AIC 5.4 ms, observed 5.7 ms). The Overhead Characterisation Study confirms this accuracy extends across ISL=64–8192 and b=4–64, with a mean absolute error of 0.99 ms. No additional correction to the TPOT model is required to explain the observed TPOT values.
 
@@ -332,15 +339,33 @@ The pipeline-bubble correction `num_mix_steps_for_tpot_calc = max(1, num_mix_ste
 
 ### Remaining work
 
-The following items have been identified for future investigation:
+#### Data gaps
 
-**Factor 1 — FP8 context attention data (PR #1142):** The vLLM 0.18.0 silicon data PR is open. A collector bug was fixed (vLLM ≥0.11.0 requires the caller to pass an FP8-dtype query tensor when `supports_quant_query_input=True`; the output buffer must remain BF16). All six op tables are now complete and the PR awaits review.
+The following comparisons cannot be made with current data:
 
-**Factor 2 — Concurrency model:** A Little's Law throughput cap is prototyped on `fix/throughput-queueing-model`. The Overhead Characterisation Study has ruled out a TPOT correction as the primary fix. The remaining question is whether the throughput gap is entirely explained by the 100%-utilisation assumption or whether a queueing model is needed. Cross-validation benchmarks at ISL=512 and ISL=4096 for Qwen3-8B and a MoE model are needed.
+**32B-FP8 concurrency benchmarks not re-run after FP8 silicon fix:** All 32B-FP8 benchmarks predate the FP8 collector bug fix. We do not know whether the 0.18.0 FP8 silicon data improves the 32B-FP8 TTFT and TPOT gaps. The TTFT gap (1.49× at conc=1) and TPOT gap (0.59× at conc=1) are currently unattributed.
 
-**Factor 3 — Disaggregated queuing model:** AIC has no model for decode worker saturation under concurrent load. The Qwen3-8B disagg result (throughput 0.13× of prediction) is dominated by this effect. An M/M/1 or token-bucket model parameterised from silicon-measured decode step latency would improve disagg predictions.
+**Overhead characterisation at ISL=9000, OSL=30:** The TPOT study used OSL=128. The actual evaluation workload (ISL=9000, OSL=30) has not been validated directly. At ISL=9000, the mix:genonly step ratio differs significantly (1 mix + 29 genonly for OSL=30 vs 1 mix + 127 genonly for OSL=128), which affects the TPOT composition.
 
-**Factor 4 — Pipeline-bubble correction:** the `num_mix_steps − 3` constant should be reviewed with the original author (commit `5554d2eb`) to determine whether it is physically motivated or empirically fitted for H100 only.
+**Overhead characterisation for Qwen3-32B-FP8:** The ±0.99ms MAE result covers Qwen3-8B (dense, BF16) only. Whether AIC's TPOT model is equally accurate for a larger FP8 model is unknown.
 
-**Additional data collection:** the Overhead Characterisation Study covered Qwen3-8B (dense, BF16). The same sweep should be run for Qwen3-32B-FP8 and at least one MoE model to verify that the ±1 ms TPOT accuracy generalises across model architectures and quantisation modes.
+**Disagg routing overhead at varying ISL:** A single data point (ISL=9000, conc=1) shows the routing overhead is negligible. Measurements at shorter ISL would determine whether this holds for smaller KV transfer sizes and establish the correct value for AIC's routing constant.
+
+#### Proposed additional measurements
+
+**1. Single-replica sweep at ISL=9000, OSL=30 for Qwen3-8B (1 GPU):** Directly validates AIC TPOT predictions at the evaluation workload parameters. Batch sizes b=1–64. Uses the existing `run-overhead-sweep.sh` with `ISL_VALUES=9000 OUTPUT_TOKENS=30`.
+
+**2. 32B-FP8 concurrency benchmarks (re-run):** Repeat the 5-configuration benchmark suite with the completed 0.18.0 FP8 silicon data to measure whether the TTFT and TPOT gaps for 32B-FP8 are reduced.
+
+**3. Single-replica TPOT sweep for Qwen3-32B-FP8:** Same (ISL, b) grid as the 8B study to validate whether AIC's TPOT accuracy generalises to larger FP8 models.
+
+**4. Disagg concurrency=1 across ISL values:** Run Qwen3-8B disagg at concurrency=1 for ISL in {512, 2048, 9000} to characterise whether the fixed routing overhead is truly ISL-independent, establishing the correct value for AIC's routing constant.
+
+#### Open AIC code changes
+
+- **PR #1142** (`data/h200-sxm-vllm-0.18.0`): silicon data, awaiting review
+- **PR #1141** (`feat/inclusive-tpot-output`): `--inclusive-tpot` flag for guidellm-comparable reporting, awaiting review  
+- **`fix/throughput-queueing-model`**: Little's Law throughput cap (Factor 2). Awaits cross-validation at multiple ISL values and model types before upstream PR.
+- **Factor 3**: no prototype yet. Requires a queuing model parameterised from silicon-measured decode step latency.
+- **Factor 4**: `num_mix_steps − 3` constant to be reviewed with original author (commit `5554d2eb`).
 

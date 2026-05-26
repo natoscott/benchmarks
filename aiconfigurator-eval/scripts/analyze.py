@@ -75,9 +75,9 @@ CONFIGS = [
         "dir":      "Qwen3-8B-9k-30-rate-sweep",
         "prefix":   "guidellm-qwen3-8b-9k30",
         "concs":    [1, 2, 4, 8, 16, 24, 32, 40],
-        "aic_rps":  34.9,
-        "aic_ttft": 432,
-        "aic_tpot": 28.6,
+        "aic_rps":  30.4,  # vLLM 0.18.0 silicon data
+        "aic_ttft": 484,
+        "aic_tpot": 23.2,
         "color":    PALETTE[0],
         "ls":       "-",
         "marker":   "o",
@@ -88,9 +88,9 @@ CONFIGS = [
         "dir":      "Qwen3-8B-9k-30-disagg-rate-sweep",
         "prefix":   "guidellm-qwen3-8b-disagg-9k30",
         "concs":    [1, 2, 4, 8, 16],
-        "aic_rps":  28.8,
-        "aic_ttft": 394,
-        "aic_tpot": 8.9,
+        "aic_rps":  25.0,  # vLLM 0.18.0 silicon data
+        "aic_ttft": 453,
+        "aic_tpot": 7.7,
         "color":    PALETTE[3],
         "ls":       "-",
         "marker":   "^",
@@ -101,9 +101,9 @@ CONFIGS = [
         "dir":      "Qwen3-32B-FP8-9k-30-rate-sweep",
         "prefix":   "guidellm-qwen3-32b-fp8-9k30",
         "concs":    [1, 2, 4, 8, 16],
-        "aic_rps":  4.8,   # AIC TP=1 pareto point (not its top-1)
-        "aic_ttft": 315,
-        "aic_tpot": 13.7,
+        "aic_rps":  None,  # not in SLA-compliant pareto with 0.18.0 data
+        "aic_ttft": None,
+        "aic_tpot": None,
         "color":    PALETTE[1],
         "ls":       "-",
         "marker":   "o",
@@ -114,9 +114,9 @@ CONFIGS = [
         "dir":      "Qwen3-32B-FP8-9k-30-tp4-rate-sweep",
         "prefix":   "guidellm-qwen3-32b-fp8-tp4-9k30",
         "concs":    [1, 2, 4, 6, 8, 12, 16],
-        "aic_rps":  6.6,   # AIC top-1 prediction
-        "aic_ttft": 493,
-        "aic_tpot": 18.2,
+        "aic_rps":  5.4,   # vLLM 0.18.0 silicon data, AIC top-1
+        "aic_ttft": 489,
+        "aic_tpot": 28.8,
         "color":    PALETTE[2],
         "ls":       "-",
         "marker":   "s",
@@ -127,9 +127,9 @@ CONFIGS = [
         "dir":      "Qwen3-32B-FP8-9k-30-disagg-rate-sweep",
         "prefix":   "guidellm-qwen3-32b-fp8-disagg-9k30",
         "concs":    [1, 2, 4, 8, 16],
-        "aic_rps":  3.4,
-        "aic_ttft": 473,
-        "aic_tpot": 10.4,
+        "aic_rps":  3.4,   # vLLM 0.18.0 silicon data
+        "aic_ttft": 470,
+        "aic_tpot": 23.8,
         "color":    PALETTE[4],
         "ls":       "-",
         "marker":   "^",
@@ -152,7 +152,8 @@ for cfg in CONFIGS:
     ax.plot(xs, ys, marker=cfg["marker"], color=cfg["color"], ls=cfg["ls"],
             linewidth=2, label=cfg["label"])
     # AIC predicted peak as horizontal dotted line (same colour, lighter)
-    ax.axhline(cfg["aic_rps"], color=cfg["color"], ls=":", linewidth=1.2, alpha=0.6)
+    if cfg["aic_rps"] is not None:
+        ax.axhline(cfg["aic_rps"], color=cfg["color"], ls=":", linewidth=1.2, alpha=0.6)
 
 ax.axvline(16, color="grey", ls=":", linewidth=1, alpha=0.5,
            label="Original sweep ceiling (conc=16)")
@@ -200,7 +201,8 @@ for cfg in CONFIGS:
     ys = [r["ttft"] for r in cfg["data"]]
     ax.plot(xs, ys, marker=cfg["marker"], color=cfg["color"], ls=cfg["ls"],
             linewidth=2, label=cfg["label"])
-    ax.axhline(cfg["aic_ttft"], color=cfg["color"], ls=":", linewidth=1.2, alpha=0.6)
+    if cfg["aic_ttft"] is not None:
+        ax.axhline(cfg["aic_ttft"], color=cfg["color"], ls=":", linewidth=1.2, alpha=0.6)
 
 ax.axhline(500, color="red", ls="--", linewidth=1.5, label="TTFT SLA = 500 ms")
 ax.set_xlabel("Max concurrent requests")
@@ -229,7 +231,8 @@ for cfg in CONFIGS:
         continue
     ax.plot(xs, ys, marker=cfg["marker"], color=cfg["color"], ls=cfg["ls"],
             linewidth=2, label=cfg["label"])
-    ax.axhline(cfg["aic_tpot"], color=cfg["color"], ls=":", linewidth=1.2, alpha=0.6)
+    if cfg["aic_tpot"] is not None:
+        ax.axhline(cfg["aic_tpot"], color=cfg["color"], ls=":", linewidth=1.2, alpha=0.6)
 
 ax.axhline(30, color="red", ls="--", linewidth=1.5, label="TPOT SLA = 30 ms/tok")
 ax.set_xlabel("Max concurrent requests")
@@ -256,10 +259,9 @@ print("fig4-tpot.png")
 #   32B-FP8 disagg: TTFT >=731ms → no SLA-compliant point → peak=1.27
 
 fig5_data = [
-    {"label": "8B agg",           "aic": 34.9, "obs": 13.88, "note": "conc=16, TTFT=487ms"},
-    {"label": "8B disagg",        "aic": 28.8, "obs":  2.97, "note": "conc=2, TTFT=381ms"},
-    {"label": "32B-FP8\nagg TP=1","aic":  4.8, "obs":  5.14, "note": "conc=16, TTFT>SLA"},
-    {"label": "32B-FP8\nagg TP=4","aic":  6.6, "obs":  2.23, "note": "conc=16, TTFT>SLA"},
+    {"label": "8B agg",           "aic": 30.4, "obs": 13.88, "note": "conc=16, TTFT=487ms"},
+    {"label": "8B disagg",        "aic": 25.0, "obs":  2.97, "note": "conc=2, TTFT=381ms"},
+    {"label": "32B-FP8\nagg TP=4","aic":  5.4, "obs":  2.23, "note": "conc=16, TTFT>SLA"},
     {"label": "32B-FP8\ndisagg",  "aic":  3.4, "obs":  1.27, "note": "conc=8,  TTFT>SLA"},
 ]
 
