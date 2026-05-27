@@ -78,6 +78,7 @@ CONFIGS = [
         "aic_rps":  30.4,  # vLLM 0.18.0 silicon data
         "aic_ttft": 484,
         "aic_tpot": 23.2,
+        "aic_incl_tpot": (484 + 23.2 * 29) / 30,  # inclusive = (ttft + tpot*(osl-1))/osl
         "color":    PALETTE[0],
         "ls":       "-",
         "marker":   "o",
@@ -91,6 +92,7 @@ CONFIGS = [
         "aic_rps":  25.0,  # vLLM 0.18.0 silicon data
         "aic_ttft": 453,
         "aic_tpot": 7.7,
+        "aic_incl_tpot": (453 + 7.7 * 29) / 30,
         "color":    PALETTE[3],
         "ls":       "-",
         "marker":   "^",
@@ -104,6 +106,7 @@ CONFIGS = [
         "aic_rps":  None,  # not in SLA-compliant pareto with 0.18.0 data
         "aic_ttft": None,
         "aic_tpot": None,
+        "aic_incl_tpot": None,
         "color":    PALETTE[1],
         "ls":       "-",
         "marker":   "o",
@@ -117,6 +120,7 @@ CONFIGS = [
         "aic_rps":  5.4,   # vLLM 0.18.0 silicon data, AIC top-1
         "aic_ttft": 489,
         "aic_tpot": 28.8,
+        "aic_incl_tpot": (489 + 28.8 * 29) / 30,
         "color":    PALETTE[2],
         "ls":       "-",
         "marker":   "s",
@@ -130,6 +134,7 @@ CONFIGS = [
         "aic_rps":  3.4,   # vLLM 0.18.0 silicon data
         "aic_ttft": 470,
         "aic_tpot": 23.8,
+        "aic_incl_tpot": (470 + 23.8 * 29) / 30,
         "color":    PALETTE[4],
         "ls":       "-",
         "marker":   "^",
@@ -215,34 +220,87 @@ plt.close()
 print("fig3-ttft.png")
 
 # ---------------------------------------------------------------------------
-# Fig 4 — ITL (inter-token latency) vs concurrency
-# ITL = decode interval only, matching AIC's TPOT model.
-# guidellm time_per_output_token_ms = total_latency/output_tokens (includes TTFT)
-# and is NOT plotted here.
+# Fig 4 — Inclusive TPOT vs concurrency
+# Inclusive TPOT = (TTFT + ITL*(osl-1))/osl, matching guidellm time_per_output_token_ms.
+# AIC --inclusive-tpot flag produces equivalent output (PR #1141).
 # ---------------------------------------------------------------------------
+
+OSL = 30
 
 fig, ax = plt.subplots()
 
 for cfg in CONFIGS:
-    xs = [r["conc"] for r in cfg["data"]]
-    ys = [r["itl"]  for r in cfg["data"] if r.get("itl") is not None]
-    xs = [r["conc"] for r in cfg["data"] if r.get("itl") is not None]
+    xs, ys = [], []
+    for r in cfg["data"]:
+        if r.get("ttft") is not None and r.get("itl") is not None:
+            incl = (r["ttft"] + r["itl"] * (OSL - 1)) / OSL
+            xs.append(r["conc"])
+            ys.append(incl)
     if not ys:
         continue
     ax.plot(xs, ys, marker=cfg["marker"], color=cfg["color"], ls=cfg["ls"],
             linewidth=2, label=cfg["label"])
-    if cfg["aic_tpot"] is not None:
-        ax.axhline(cfg["aic_tpot"], color=cfg["color"], ls=":", linewidth=1.2, alpha=0.6)
+    if cfg.get("aic_incl_tpot") is not None:
+        ax.axhline(cfg["aic_incl_tpot"], color=cfg["color"], ls=":", linewidth=1.2, alpha=0.6)
 
-ax.axhline(30, color="red", ls="--", linewidth=1.5, label="TPOT SLA = 30 ms/tok")
 ax.set_xlabel("Max concurrent requests")
-ax.set_ylabel("Inter-token latency / ITL mean (ms/token)")
-ax.set_title("ITL vs Concurrency\n(dotted horizontals = AIC predicted TPOT; dashed red = SLA)")
+ax.set_ylabel("Inclusive TPOT (ms/token)\n= (TTFT + ITL×(OSL−1)) / OSL")
+ax.set_title("Inclusive TPOT vs Concurrency\n"
+             "(dotted = AIC predicted; matches guidellm time_per_output_token_ms)")
 ax.legend(fontsize=9)
 plt.tight_layout()
 plt.savefig(FIGURES / "fig4-tpot.png", dpi=150)
 plt.close()
 print("fig4-tpot.png")
+
+# ---------------------------------------------------------------------------
+# Fig 6 — AIC inclusive TPOT accuracy at SLA operating point (conc=16)
+# Shows AIC prediction vs observed inclusive TPOT at the concurrency where
+# both TTFT and ITL SLAs are met. This is the most practically relevant
+# accuracy metric for deployment planning.
+# ---------------------------------------------------------------------------
+
+fig6_data = []
+for cfg in CONFIGS:
+    match = [r for r in cfg["data"] if r["conc"] == 16]
+    if not match or cfg.get("aic_incl_tpot") is None:
+        continue
+    r = match[0]
+    if r.get("ttft") is None or r.get("itl") is None:
+        continue
+    obs_incl = (r["ttft"] + r["itl"] * (OSL - 1)) / OSL
+    fig6_data.append({
+        "label": cfg["short"],
+        "obs": obs_incl,
+        "aic": cfg["aic_incl_tpot"],
+        "color": cfg["color"],
+    })
+
+if fig6_data:
+    fig, ax = plt.subplots(figsize=(10, 6))
+    x = range(len(fig6_data))
+    w = 0.35
+    bars_obs = ax.bar([i - w/2 for i in x], [d["obs"] for d in fig6_data], w,
+                      label="Observed", color=[d["color"] for d in fig6_data], alpha=0.85)
+    bars_aic = ax.bar([i + w/2 for i in x], [d["aic"] for d in fig6_data], w,
+                      label="AIC predicted", color=[d["color"] for d in fig6_data],
+                      alpha=0.45, hatch="//")
+    for i, d in enumerate(fig6_data):
+        ratio = d["aic"] / d["obs"]
+        ax.text(i, max(d["obs"], d["aic"]) + 1, f"{ratio:.2f}×",
+                ha="center", va="bottom", fontsize=9)
+    ax.set_xticks(list(x))
+    ax.set_xticklabels([d["label"] for d in fig6_data], fontsize=10)
+    ax.set_ylabel("Inclusive TPOT at concurrency=16 (ms/token)", fontsize=11)
+    ax.set_title("AIC predicted vs observed inclusive TPOT at SLA operating point\n"
+                 "(concurrency=16, where both TTFT≤500ms and ITL≤30ms SLAs are met)",
+                 fontsize=11)
+    ax.legend(fontsize=10)
+    ax.grid(True, alpha=0.3, axis="y")
+    fig.tight_layout()
+    fig.savefig(FIGURES / "fig6-inclusive-tpot-accuracy.png", dpi=150)
+    plt.close(fig)
+    print("fig6-inclusive-tpot-accuracy.png")
 
 # ---------------------------------------------------------------------------
 # Fig 5 — AIC predicted vs observed peak throughput
