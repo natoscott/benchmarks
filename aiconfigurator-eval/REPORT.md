@@ -397,12 +397,14 @@ With v0.18.0 silicon data and the two mix-step fixes, AIC's inclusive TPOT predi
 
 #### Open AIC code changes
 
-- **[PR #1142](https://github.com/ai-dynamo/aiconfigurator/pull/1142)** (`data/h200-sxm-vllm-0.18.0`): silicon data (all 6 ops, BF16+FP8), awaiting review
-- **[PR #1141](https://github.com/ai-dynamo/aiconfigurator/pull/1141)** (`feat/inclusive-tpot-output`): `--inclusive-tpot` output flag, awaiting review
-- **[PR #1147](https://github.com/ai-dynamo/aiconfigurator/pull/1147)** (`fix/mix-step-gen-tokens`): correct mix-step decode token count for b ≥ osl, awaiting review
-- **[PR #1151](https://github.com/ai-dynamo/aiconfigurator/pull/1151)** (`fix/mix-step-efficiency`): mix-step latency efficiency model, removes -3 pipeline-bubble correction, awaiting review
-- **`fix/throughput-queueing-model`**: Little's Law throughput cap (Factor 2). Awaits cross-validation before upstream PR.
-- **Factor 3**: no prototype yet. Requires a decode worker queuing model parameterised from silicon-measured decode step latency.
+| PR / Branch | Description | Status |
+|---|---|---|
+| [PR #1141](https://github.com/ai-dynamo/aiconfigurator/pull/1141) | `--inclusive-tpot` output flag | Awaiting review |
+| [PR #1142](https://github.com/ai-dynamo/aiconfigurator/pull/1142) | H200 SXM vLLM 0.18.0 silicon data (6 ops, BF16+FP8) | Awaiting review |
+| [PR #1147](https://github.com/ai-dynamo/aiconfigurator/pull/1147) | Correct mix-step decode token count for b ≥ osl | Awaiting review |
+| [PR #1151](https://github.com/ai-dynamo/aiconfigurator/pull/1151) | Mix-step efficiency model; removes −3 pipeline-bubble correction | Awaiting review |
+| [PR #1128](https://github.com/ai-dynamo/aiconfigurator/pull/1128) *(Spycsh, draft)* | TTFT queuing via Kingman G/G/1 — parallel work, needs coordination | Draft |
+| `local/overhead-experiment` | Local integration of all above PRs + TTFT queuing + overhead recalibration | Experiment branch |
 
 #### Confidence assessment
 
@@ -411,4 +413,53 @@ With v0.18.0 silicon data and the two mix-step fixes, AIC's inclusive TPOT predi
 **Aggregated FP8 model serving:** individual TTFT and TPOT predictions have unexplained errors (1.61× and 0.59× respectively), but the combined inclusive TPOT is within 3% at low concurrency. The errors appear to partially cancel. Further investigation of the 32B-FP8 gaps is needed before full confidence.
 
 **Disaggregated serving:** prediction accuracy for disaggregated configurations is under active investigation. Throughput is 0.15× of prediction at the recommended concurrency, with the gap primarily attributed to decode worker queuing effects not yet modelled. Improvements are in progress.
+
+---
+
+## Work In Progress (2026-05-28)
+
+### TTFT queuing model (`local/overhead-experiment` branch)
+
+The ad-hoc TTFT correction factor `min(2 + (steps−3)/2/10, 4)` has been replaced with a physically-motivated queuing model. With b simultaneous requests, request k waits for k−1 prefills to complete before its first token arrives. Average TTFT across the batch = `(b+1)/2 × T_prefill`, where `T_prefill = mix_step_latency × ceil(ISL/ctx_tokens)`. The `_mix_step_efficiency` correction (PR #1151) is undone before computing `T_prefill`, since decode tokens sharing a forward pass do not reduce prefill cost.
+
+Validated on Qwen3-8B at ISL=9000:
+
+| b | TTFT error (before) | TTFT error (after) | Throughput error (before) | Throughput error (after) |
+|---|---|---|---|---|
+| 1 | +64% | −14% | −27% | +13% |
+| 4 | −74% | −11% | +86% | +10% |
+| 8 | −82% | −9% | +102% | +12% |
+| 16 | −81% | +38% | +104% | +9% |
+
+The `(b+1)/2` model is correct for simultaneous batch arrivals (what fixed-rate benchmarks produce). For production Poisson arrivals, the Kingman G/G/1 formula — `T_prefill × (1 + ρ/(1−ρ) × (cₐ²+cₛ²)/2)` with ρ = λ × T_prefill — is more appropriate. PR #1128 implements Kingman but with a circular λ derivation; a non-circular formulation using the input request rate directly is planned.
+
+### Overhead correction recalibration
+
+After integrating PRs #1147 and #1151, the genonly decode overhead correction was recalibrated from the fitted baseline:
+
+- **Previous (calibrated on old code):** `correction(b) = 1 + (b−1)^0.606 × 1.43`
+- **Recalibrated:** `correction(b) = 1 + (b−1)^0.662 × 0.084`
+
+The large drop in scale (1.43 → 0.084) reflects the `_mix_step_efficiency` model from PR #1151 absorbing most of what the old correction was compensating for.
+
+### Poisson arrival benchmark sweep (in progress)
+
+To validate the Kingman model against production-relevant traffic, a four-model sweep is running on psap-fire-athena using guidellm's `--rate-type poisson`:
+
+| Model | Poisson rates (req/s) | Overhead rates (conc) | Status |
+|---|---|---|---|
+| Qwen3-0.6B | 2, 5, 8, 12, 16, 20 | 2, 8, 16, 32, 64 | ✅ Complete |
+| Qwen3-8B | 0.5–3.5 (7 rates) | 4, 8, 16, 32, 64 | 🔄 In progress |
+| Qwen3-14B | 0.3–2.0 (7 rates) | 4, 8, 16, 32 | ⏳ Queued |
+| Qwen3-32B-FP8 | 0.3–2.0 (7 rates) | 1, 2, 4, 8, 16 | ⏳ Queued |
+
+Each Poisson run is 300 s (stable statistics). Results in `results/poisson-ttft-sweep-20260528/` and `results/overhead-sweep-isl9000-20260528/`. Analysis script: `scripts/analyse-poisson-ttft.py`.
+
+### Next steps after sweep
+
+1. Fit ca² from Poisson data via `analyse-poisson-ttft.py`; validate whether ca²≈1 (pure Poisson) or arrivals are more regular
+2. Compare Kingman vs `(b+1)/2` predictions at matched operating points
+3. Compare overhead ratios across model sizes to determine if `scale=0.084` generalises
+4. Coordinate with PR #1128 author on non-circular Kingman + hook architecture
+5. Open upstream PRs for TTFT queuing model and recalibrated overhead once sweep analysis is complete
 
