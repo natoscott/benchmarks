@@ -320,7 +320,7 @@ No-offload peaks at rate=1 (50.1 tok/s). All offload configs match within ±2% a
 
 **Qwen3-0.6B:** All configs show low TTFT at rate=50 (1.1–1.8 s). lmcache-local shows the largest TTFT (+48.9% vs no-offload, 1.761 s). native-offload-20k and lmcache-valkey are within 2% of no-offload on both TTFT and ITL.
 
-**Qwen3-8B:** native-offload-20k TTFT is 11.463 s at rate=50, 1.92× the no-offload baseline (5.954 s). ITL increases from 111.9 to 170.7 ms (+52.5%). fs-offload and cpu+fs-offload-20k show similar profiles (12.0–12.4 s TTFT). The TTFT elevation is consistent with KV block transfer latency adding to prefill time for a model whose GPU KV cache is not constrained — offload writes occur on every step without cache-hit benefit.
+**Qwen3-8B:** native-offload-20k TTFT is 11.463 s at rate=50, 1.92× the no-offload baseline (5.954 s). ITL increases from 111.9 to 170.7 ms (+52.5%). fs-offload and cpu+fs-offload-20k show similar profiles (12.0–12.4 s TTFT). The TTFT elevation is consistent with a request convoy effect: when concurrent requests share prefix blocks currently being loaded from CPU, the scheduler delays all of them (`return None`) until the first load completes, serialising O(n) requests through a single load job. This behaviour was introduced in vLLM PR #29087 (`_blocks_being_loaded` tracking) and is present in vLLM 0.19.1 and latest main. It is reported as [vllm-project/vllm#44294](https://github.com/vllm-project/vllm/issues/44294) with a candidate fix in [PR #44295](https://github.com/vllm-project/vllm/pull/44295).
 
 **Qwen3-14B:** lmcache-valkey TTFT (34.9 s, −13.7% vs no-offload 40.4 s) is the lowest among offload configs, consistent with remote prefix cache hits reducing prefill computation. ITL is stable across all configs (349–360 ms).
 
@@ -336,6 +336,6 @@ No-offload peaks at rate=1 (50.1 tok/s). All offload configs match within ±2% a
 - **EPP v1.5.0**: `kv-cache-utilization-scorer` replaces deprecated flag.
 - **vLLM #38515 resolved**: All four models complete all configurations without crashes.
 - **Qwen3-8B no-offload +34.1%** at gmu=0.9 — specific vLLM 0.19.1 change not isolated.
-- **Qwen3-8B native-offload regression** at gmu=0.9: −6.5% (v0.6.0) → −39.9% — cause not isolated.
+- **Qwen3-8B native-offload regression** at gmu=0.9: −6.5% (v0.6.0) → −39.9%, with 12× TTFT increase at rate=50. Traced to `_blocks_being_loaded` request convoy introduced in vLLM PR #29087. Filed as [vllm-project/vllm#44294](https://github.com/vllm-project/vllm/issues/44294); candidate fix in [PR #44295](https://github.com/vllm-project/vllm/pull/44295).
 
 **Supersedes:** REPORT-v0.6.0.md
