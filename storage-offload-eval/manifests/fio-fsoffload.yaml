@@ -1,0 +1,133 @@
+# FIO benchmark designed to characterise storage suitability for the
+# llmd_fs_connector filesystem KV cache offload backend.
+#
+# RATIONALE
+# ---------
+# The llmd_fs_connector uses block_size=256 bytes with 16 GPU KV blocks per file.
+# PCP disk metrics from actual v0.7.0 fs-offload runs show:
+#   - Effective I/O operation size: ~1 KB (consistent across Qwen3-0.6B, 8B, 32B)
+#   - Write IOPS: 17–252 ops/s (scales with request rate)
+#   - Total write throughput: 19–292 KB/s
+# The connector runs threads_per_gpu=64–128 concurrent I/O threads.
+#
+# The existing 1MB-block sequential FIO config characterises raw storage bandwidth
+# (ceiling: 890 MB/s write, 985 MB/s read on 6k-IOPS IBM VPC block) but does NOT
+# represent the actual connector access pattern. The critical question for storage
+# suitability is per-operation LATENCY at small block sizes under the connector's
+# native concurrency — not raw throughput.
+#
+# This FIO job sweeps:
+#   - Block sizes: 256B (connector native), 1K (observed effective I/O size)
+#   - Queue depths: 1, 64, 128 (idle, and saturated at threads_per_gpu)
+#   - Patterns: sequential write (eviction), sequential read (restoration)
+#   - Direct I/O: O_DIRECT required (connector bypasses page cache)
+#
+# Output: per-operation latency (mean, p50, p90, p99) is the primary metric.
+# Throughput/IOPS are secondary.
+#
+# Run against NFS first (nfs-rwx PVC), then repeat with NVMe PVC for comparison.
+# Apply:
+#   kubectl apply -f pvcs.yaml
+#   kubectl apply -f fio-fsoffload.yaml
+# Results:
+#   kubectl logs -f job/fio-fsoffload-nfs -n storage-offload-eval
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: fio-fsoffload-nfs
+  namespace: storage-offload-eval
+  labels:
+    experiment: fs-offload-characterisation
+    storage: nfs
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      nodeName: psap-fire-athena-bnfx9-worker-2-gpu-h200-k6qsd
+      containers:
+      - name: fio
+        image: nixery.dev/shell/fio
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            set -e
+            DATADIR=/data/fio
+            mkdir -p "${DATADIR}"
+
+            # Each test run:
+            #   - Creates a file sized to hold ~1000 connector writes
+            #     (1000 × max_bs = 1000 × 1K = 1MB; small so cache effects are visible)
+            #   - Reports JSON output for machine-parseable latency percentiles
+            #   - Cleans up between tests
+
+            run() {
+              local TAG=$1 RW=$2 BS=$3 JOBS=$4 DEPTH=$5
+              echo ""
+              echo "=========================================="
+              echo "TEST  rw=${RW}  bs=${BS}  numjobs=${JOBS}  iodepth=${DEPTH}"
+              echo "TAG   ${TAG}"
+              echo "=========================================="
+              fio \
+                --name="${TAG}" \
+                --directory="${DATADIR}" \
+                --direct=1 \
+                --rw="${RW}" \
+                --bs="${BS}" \
+                --ioengine=libaio \
+                --iodepth="${DEPTH}" \
+                --numjobs="${JOBS}" \
+                --size=4M \
+                --runtime=60 \
+                --time_based \
+                --group_reporting \
+                --lat_percentiles=1 \
+                --output-format=json+
+              echo "--- END TEST ${TAG} ---"
+              rm -rf "${DATADIR}"
+              mkdir -p "${DATADIR}"
+            }
+
+            echo "### FIO: fs-offload storage characterisation ###"
+            echo "### Direct I/O, latency-focused ###"
+            echo ""
+
+            # ── 256B block (connector native block_size) ──────────────────────────
+            # At this block size the storage controller's internal block alignment
+            # matters. Most storage has 4K or 512B internal sectors.
+            echo "=== 256-byte blocks ==="
+            for DEPTH in 1 64 128; do
+              run "write-256b-d${DEPTH}" write 256 1 "${DEPTH}"
+              run "read-256b-d${DEPTH}"  read  256 1 "${DEPTH}"
+            done
+
+            # ── 1K block (observed effective I/O size from PCP) ──────────────────
+            # Matches the ~1KB average observed across all model sizes.
+            # 4 × 256B connector blocks coalesced per I/O operation.
+            echo "=== 1K blocks (observed effective size) ==="
+            for DEPTH in 1 64 128; do
+              run "write-1k-d${DEPTH}" write 1k 1 "${DEPTH}"
+              run "read-1k-d${DEPTH}"  read  1k 1 "${DEPTH}"
+            done
+
+            # ── Mixed write+read (steady-state: eviction + restoration overlap) ──
+            echo "=== Mixed write/read 1K blocks (d=64) ==="
+            run "mixed-1k-d64" rw 1k 1 64
+
+            echo ""
+            echo "=== ALL TESTS COMPLETE ==="
+        volumeMounts:
+        - name: storage
+          mountPath: /data
+        resources:
+          requests:
+            cpu: "2"
+            memory: "1Gi"
+      volumes:
+      - name: storage
+        persistentVolumeClaim:
+          claimName: fio-nfs
+---
+# Identical job against NVMe for comparison.
+# To run: change claimName to fio-nvme and rename to fio-fsoffload-nvme.

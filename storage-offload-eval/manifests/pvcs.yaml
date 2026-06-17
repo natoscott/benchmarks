@@ -1,0 +1,27 @@
+# PVCs for storage-offload-eval experiments.
+# NFS: cross-node RWX — simulates networked storage.
+# NVMe: local NVMe on worker-2 via LVMS — high-performance local storage baseline.
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: fio-nfs
+  namespace: storage-offload-eval
+spec:
+  accessModes: [ReadWriteMany]
+  storageClassName: nfs-rwx
+  resources:
+    requests:
+      storage: 50Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: fio-nvme
+  namespace: storage-offload-eval
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: lvms-vg-gpu-node-n2
+  resources:
+    requests:
+      storage: 50Gi
