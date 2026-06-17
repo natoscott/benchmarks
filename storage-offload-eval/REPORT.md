@@ -10,11 +10,12 @@ source code (actual I/O call patterns).
 
 ## Background
 
-vLLM's v1 engine supports offloading GPU KV cache blocks to secondary storage when
-the GPU KV pool is under pressure. The filesystem connector
+vLLM supports offloading GPU KV cache blocks to secondary storage when the GPU KV
+pool is under pressure. The native filesystem connector
 (`vllm.v1.kv_offload.tiering.fs`) writes evicted GPU KV cache blocks to a mounted
-PVC and reads them back on cache hit. This is the connector shipped in RHOAI 3.4+
-and upstream vLLM v1.
+PVC and reads them back on cache hit. This connector landed in **vLLM 0.22.0**; the
+FIO characterisation in this report targets that connector ahead of its adoption in
+RHOAI.
 
 Characterising the storage requirements requires understanding:
 1. How large each GPU KV cache block is in bytes (model-dependent)
@@ -78,7 +79,7 @@ GPU block count × 16 tokens/block = total KV tokens reported in startup log:
 
 ## Connector Architecture
 
-Source: `vllm/vllm/v1/kv_offload/tiering/fs/`
+Source: `vllm/vllm/v1/kv_offload/tiering/fs/` (vLLM 0.22.0+)
 
 One file per GPU KV block (default `block_size_factor=1`). O_DIRECT is used when
 available on Linux:
