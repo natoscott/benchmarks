@@ -6,9 +6,9 @@
 ; I/O MODEL:
 ;   O_DIRECT, one os.write() per GPU KV block, one file per job.
 ;   Block sizes match actual GPU KV cache block sizes (TP=2, BF16 KV):
-;     Qwen3-8B:        ~256 KB
-;     gpt-oss-120b:    ~576 KB  (MoE, 36 layers)
-;     FP8-70B/BF16-70B: ~5 MB  (80 layers)
+;     Qwen3-8B:        ~2.25 MB (2304k)  36 layers × 8 KV heads × head_dim=128
+;     gpt-oss-120b:    ~576 KB           MoE, 36 layers × 4 KV heads × head_dim=64
+;     FP8-70B/BF16-70B: ~5 MB           80 layers × 8 KV heads × head_dim=128
 ;
 ; USAGE:
 ;   fio fio-v1-fs.fio --directory=/path/to/test/storage
@@ -39,30 +39,31 @@ group_reporting=1
 lat_percentiles=1
 output-format=json+
 
-; ── Qwen3-8B block size: ~256 KB ─────────────────────────────────────────────
-; 28 layers × 4 KV heads/rank × 128 head_dim × 2 × 2 B × 16 tok × 2 ranks
+; ── Qwen3-8B block size: ~2.25 MB ────────────────────────────────────────────
+; 36 layers × 4 KV heads/rank × 128 head_dim × 2 × 2 B × 16 tok × 2 ranks
+; = 2,359,296 bytes = 2304 KiB
 
 [qwen8b-write-j1]
 rw=write
-bs=256k
+bs=2304k
 numjobs=1
 stonewall
 
 [qwen8b-read-j1]
 rw=read
-bs=256k
+bs=2304k
 numjobs=1
 stonewall
 
 [qwen8b-write-j16]
 rw=write
-bs=256k
+bs=2304k
 numjobs=16
 stonewall
 
 [qwen8b-read-j16]
 rw=read
-bs=256k
+bs=2304k
 numjobs=16
 stonewall
 
