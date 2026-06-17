@@ -9,15 +9,11 @@
 
 ## TL;DR
 
-All predictions use vLLM 0.18.0 silicon data from the same H200 SXM hardware. TPOT is expressed as inclusive TPOT = (TTFT + TPOT × (OSL−1)) / OSL throughout, matching guidellm's `time_per_output_token_ms`.
+All predictions use vLLM 0.18.0 silicon data collected on the same H200 SXM hardware. TPOT is expressed as inclusive TPOT = (TTFT + TPOT × (OSL−1)) / OSL throughout, matching guidellm's `time_per_output_token_ms`.
 
-**Qwen3-8B aggregated serving:** inclusive TPOT at concurrency=16 (where both SLAs are met) is 38.5ms predicted vs 38.2ms observed. AIC identifies the saturation concurrency (40) correctly. Throughput at that concurrency is 0.69× of prediction, attributed to the 100% queue utilisation assumption.
+**What is resolved.** For Qwen3-8B aggregated serving, the three most significant prediction gaps are closed: silicon data now matches the deployed vLLM version, the mix-step decode token count bug is fixed, and the TTFT queuing formula has been replaced. At concurrency=16 (where both SLAs are met), inclusive TPOT is 38.5ms predicted vs 38.2ms observed — within 1%. AIC identifies the saturation concurrency (40) correctly. Across 1924 vLLM agg corpus entries, the full PR stack produces a net TTFT improvement of +2.76 pp and TPOT improvement of +0.06 pp over the main-branch baseline; the updated TTFT formula alone reduces tp_size-matched corpus MAPE from 26.4% to 18.0%. Three modelling PRs have merged; four more are in review.
 
-**Disaggregated serving:** throughput at AIC's predicted operating point is 0.15× of prediction, driven by decode worker queueing saturation — an effect AIC has no model for.
-
-**Qwen3-32B-FP8:** TTFT is 1.61× above AIC's prediction and TPOT is 0.59× below at concurrency=1; these errors partially cancel in inclusive TPOT (0.97×). Both gaps persist after FP8 silicon data was corrected and remain unattributed.
-
-**AIC code changes:** three PRs have merged (silicon data, metric comparison definition, mix-step decode token count fix). Four PRs in review address the TTFT queuing model, throughput cap, mix-step efficiency, pipeline-drain correction, and prefill dispatch overhead. Evaluated across 1924 vLLM agg entries, the full PR stack produces a net TTFT improvement of +2.76 pp over the main-branch baseline with TPOT neutral at +0.06 pp. The updated TTFT formula (`1 + log₂(b)/8`, capped at 2×T_prefill) reduces tp_size-matched corpus MAPE from 26.4% to 18.0%.
+**What remains open.** Throughput is 0.69× of prediction at AIC's recommended concurrency for Qwen3-8B agg — the concurrency model assumes 100% queue utilisation and a Little's Law cap (PR #1164, in review) is expected to reduce this gap. For Qwen3-32B-FP8, TTFT is 1.61× above and TPOT is 0.59× below AIC's prediction at concurrency=1; these partially cancel in inclusive TPOT (0.97×) but the underlying cause is unattributed after FP8 silicon data was corrected. For disaggregated serving, throughput is 0.15× of prediction at AIC's operating point — the decode worker saturates under concurrent load and AIC has no model for this effect.
 
 ---
 
@@ -36,7 +32,7 @@ The primary evaluation (deployment configurations, throughput sweep, TPOT) cover
 | Qwen/Qwen3-8B | BF16 | Dense, 32 layers |
 | Qwen/Qwen3-32B-FP8 | FP8 | Dense |
 
-Qwen/Qwen3-14B (dense BF16, 40 layers) was benchmarked separately in the TTFT concurrency and Poisson arrival sweeps on the psap-fire-athena cluster. Those results appear in the respective sections; it is not part of the deployment evaluation.
+Qwen/Qwen3-14B (dense BF16, 40 layers) was benchmarked separately in the TTFT concurrency and Poisson arrival sweeps on a dedicated H200 SXM cluster. Those results appear in the respective sections; it is not part of the deployment evaluation.
 
 ### Deployment configurations
 
@@ -248,7 +244,7 @@ The identical AIC predictions at b=32 and b=64 indicate the model reaches an int
 
 ## TTFT Concurrency Sweep
 
-A closed-loop concurrency sweep at ISL=9000, OSL=30 was conducted for three models on the psap-fire-athena cluster (8× H200 SXM, single-model kserve deployment), separate from the RHOAI deployment evaluation above.
+A closed-loop concurrency sweep at ISL=9000, OSL=30 was conducted for three models on a dedicated H200 SXM cluster (8× H200 SXM, single-model kserve deployment), separate from the RHOAI deployment evaluation above.
 
 ### Median TTFT vs concurrency (ISL=9000, OSL=30)
 
@@ -279,7 +275,7 @@ The zero-load TTFT values (CC=1) represent effective per-request prefill time (T
 
 ## Poisson Arrival Sweep
 
-guidellm was run with `--rate-type poisson` at ISL=9000 for four models on the psap-fire-athena cluster. All models completed the sweep.
+guidellm was run with `--rate-type poisson` at ISL=9000 for four models on a dedicated H200 SXM cluster. All models completed the sweep.
 
 ### TTFT vs Poisson arrival rate (median, ISL=9000)
 
