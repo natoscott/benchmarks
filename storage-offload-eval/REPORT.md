@@ -115,17 +115,19 @@ Block sizes are the actual GPU KV block sizes per server, per model family:
 | `kv-qwen8b` | 2304k | Qwen3-8B (TP=2) |
 | `kv-qwen32b` | 4m | Qwen3-32B (TP=2) |
 
-All tests use `direct=1` (O_DIRECT), `ioengine=libaio`, `iodepth=16`, `numjobs` ∈ {1, 16},
-`runtime=60s`. The primary metric is **per-operation latency** (p50 and p99), not
-throughput — block load latency is on the critical path to first token.
+All tests use `direct=1` (O_DIRECT), `ioengine=libaio`, `iodepth=1`, `numjobs` ∈ {1, 16},
+`runtime=60s`. Each model also has a `mixed-j16` section (`rw=randrw`, `rwmixread=75`)
+representing steady-state prefix-cache serving: 75% reads (block restorations) and
+25% writes (evictions). The primary metric is **per-operation latency** (p50 and p99)
+— block load latency is on the critical path to first token.
 
 The standalone FIO configuration is available for direct download:
 
-**[fio/fio-v1-fs.fio](fio/fio-v1-fs.fio)**
+**[fio/fio-kv-fs.fio](fio/fio-kv-fs.fio)**
 
 ```bash
 # Run against any mounted filesystem:
-fio fio/fio-v1-fs.fio --directory=/path/to/your/storage
+fio fio/fio-kv-fs.fio --directory=/path/to/your/storage
 ```
 
 Requires 32 GiB of free space (16 jobs × 2 GiB) and fio ≥ 3.x.
