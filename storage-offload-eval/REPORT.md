@@ -138,6 +138,29 @@ representing steady-state prefix-cache serving: 75% reads (block restorations) a
 
 See [TL;DR](#tldr) above for the FIO configuration download and usage.
 
+### Reading the output
+
+Write results to a file to avoid mixing with FIO progress text:
+
+```bash
+fio fio-kv-fs.fio --directory=/path/to/storage --output-format=json+ --output=results.json
+```
+
+Extract p99 read latency (in ms) for each `*-read-j16` section:
+
+```bash
+jq '[.jobs[] | select(.jobname | test("read-j16"))
+     | {job: .jobname,
+        p99_ms: (.read.lat_ns.percentile["99.000000"] / 1e6)}]' results.json
+```
+
+`lat_ns` values are in **nanoseconds** — divide by 1,000,000 for milliseconds.
+
+**Which section to focus on:**
+- `*-read-j16`: primary signal — block restoration latency at full thread concurrency
+- `*-write-j16`: eviction throughput; rarely the bottleneck in practice
+- `*-mixed-j16`: 75/25 read/write mix; use for workloads where eviction and restoration overlap
+
 ### Latency targets
 
 | p99 read latency (j=16) | Recommendation |
