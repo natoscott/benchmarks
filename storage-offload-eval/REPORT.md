@@ -1,8 +1,23 @@
 # Storage Characterisation for vLLM KV Cache Filesystem Offload
 
-This report documents the derivation of FIO benchmark configurations that accurately
-represent the I/O access patterns of the vLLM v1 filesystem offload connector, and
-presents measured results on NVMe-backed XFS storage.
+## TL;DR
+
+Download the FIO configuration and run it against your mounted storage:
+
+**[fio/fio-kv-fs.fio](fio/fio-kv-fs.fio)**
+
+```bash
+fio fio-kv-fs.fio --directory=/path/to/your/storage
+```
+
+Requires 32 GiB free space and fio ≥ 3.x. Compare `lat_ns.percentile["99.000000"]`
+at `numjobs=16` for your model's block size against the [latency targets](#latency-targets)
+table. Targets the native vLLM filesystem offload connector (vLLM 0.22.0+).
+
+---
+
+This report documents the derivation of the FIO benchmark configurations from first
+principles, and presents measured results on NVMe-backed XFS storage.
 
 The analysis draws on three sources: vLLM startup logs (GPU KV cache block structure),
 PCP archives (observed disk-level I/O from production benchmark runs), and connector
@@ -64,8 +79,8 @@ For a full server (TP=2), multiply by world_size=2.
 ¹ kv_cache_dtype=auto resolves to BF16 even for FP8 weight models.
 ² KV shape derived from HuggingFace config.json (num_hidden_layers, num_key_value_heads, head_dim) + block count from vLLM startup logs at gmu=0.9 on 2× L40S (48 GiB each). vLLM 0.19 does not log the full tensor shape directly.
 
-**Key observation:** Block size spans two orders of magnitude across model families —
-from ~112 KB for Qwen3-0.6B to ~5 MB for Llama-70B. Any FIO configuration must
+**Key observation:** Block size spans more than 2× across model families —
+from ~1.75 MB for Qwen3-0.6B to ~5 MB for Llama-70B. Any FIO configuration must
 account for this range.
 
 ### GPU KV block tokens (16) confirmed by token count
@@ -121,16 +136,7 @@ representing steady-state prefix-cache serving: 75% reads (block restorations) a
 25% writes (evictions). The primary metric is **per-operation latency** (p50 and p99)
 — block load latency is on the critical path to first token.
 
-The standalone FIO configuration is available for direct download:
-
-**[fio/fio-kv-fs.fio](fio/fio-kv-fs.fio)**
-
-```bash
-# Run against any mounted filesystem:
-fio fio/fio-kv-fs.fio --directory=/path/to/your/storage
-```
-
-Requires 32 GiB of free space (16 jobs × 2 GiB) and fio ≥ 3.x.
+See [TL;DR](#tldr) above for the FIO configuration download and usage.
 
 ### Latency targets
 
@@ -182,7 +188,6 @@ Still a large gain over recomputing 16-token blocks from a 10,000-token prompt
 restoration under maximum thread pressure on a single NVMe drive. Accept for
 long-context workloads; consider CPU offload for latency-critical short-context serving.
 
-**FP8-70B (bs=5m) at j=16: 14.1 ms p99 → Good tier. Qwen3-8B (bs=2304k) at j=16: 11.6 ms write / 2.3 ms read p99 → Good/Excellent.**
 
 ---
 
