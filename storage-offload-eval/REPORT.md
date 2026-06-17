@@ -57,12 +57,12 @@ For a full server (TP=2), multiply by world_size=2.
 | Llama-3.1-70B-FP8, TP=2, gmu=0.75 | 27,421 | (27421, 80, 2, **16**, 4, 128) | BF16¹ | 2,621,440 B | **~5 MB** |
 | Llama-3.1-70B-BF16, TP=2, gmu=0.90 | 22,955 | (22955, 80, 2, **16**, 4, 128) | BF16 | 2,621,440 B | **~5 MB** |
 | gpt-oss-120b (MoE), TP=2, gmu=0.35 | 18,569 | (18569, 36, 2, **16**, 4, 64) | BF16 | 589,824 B | **~1.2 MB** |
-| Qwen3-0.6B, TP=2² | 43,517 | (N, 28, 2, **4**, 16, 128) | BF16 | 917,504 B | **~1.75 MB** |
-| Qwen3-8B, TP=2² | 27,377 | (N, 36, 2, **4**, 16, 128) | BF16 | 1,179,648 B | **~2.25 MB** |
-| Qwen3-32B-AWQ, TP=2² | 14,645 | (N, 64, 2, **4**, 16, 128) | BF16 | 2,097,152 B | **~4 MB** |
+| Qwen3-0.6B, TP=2² | 43,517 | (43517, 28, 2, **4**, 16, 128) | BF16 | 917,504 B | **~1.75 MB** |
+| Qwen3-8B, TP=2² | 27,377 | (27377, 36, 2, **4**, 16, 128) | BF16 | 1,179,648 B | **~2.25 MB** |
+| Qwen3-32B-AWQ, TP=2² | 14,645 | (14645, 64, 2, **4**, 16, 128) | BF16 | 2,097,152 B | **~4 MB** |
 
 ¹ kv_cache_dtype=auto resolves to BF16 even for FP8 weight models.
-² KV shape derived from HuggingFace config.json (num_hidden_layers, num_key_value_heads, head_dim). Block count from vLLM startup logs at gmu=0.9 on 2× L40S (48 GiB each).
+² KV shape derived from HuggingFace config.json (num_hidden_layers, num_key_value_heads, head_dim) + block count from vLLM startup logs at gmu=0.9 on 2× L40S (48 GiB each). vLLM 0.19 does not log the full tensor shape directly.
 
 **Key observation:** Block size spans two orders of magnitude across model families —
 from ~112 KB for Qwen3-0.6B to ~5 MB for Llama-70B. Any FIO configuration must
