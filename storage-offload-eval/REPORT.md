@@ -10,7 +10,7 @@ Download the FIO configuration and run it against your mounted storage:
 fio fio-kv-fs.fio --directory=/path/to/your/storage
 ```
 
-Requires 32 GiB free space and fio ≥ 3.x. Compare `lat_ns.percentile["99.000000"]`
+Requires ~15 GiB free space and fio ≥ 3.x. Compare `lat_ns.percentile["99.000000"]`
 at `numjobs=16` for your model's block size against the [latency targets](#latency-targets)
 table. Targets the native vLLM filesystem offload connector (vLLM 0.22.0+).
 
