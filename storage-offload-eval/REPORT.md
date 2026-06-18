@@ -146,6 +146,20 @@ representing steady-state prefix-cache serving: 75% reads (block restorations) a
 
 See [TL;DR](#tldr) above for the FIO configuration download and usage.
 
+### Running a subset
+
+By default the config runs all 15 sections (~15 minutes). To test only your
+model's block size, use `--section`:
+
+```bash
+# Example: just the Qwen3-8B read sections
+fio fio-kv-fs.fio --section=qwen8b-read-j1 --section=qwen8b-read-j16 \
+  --directory=/your/storage --output-format=json+ --output=results.json
+```
+
+Section names follow the pattern `<model>-<rw>-j<concurrency>`:
+`fp8-70b`, `gpt120b`, `qwen8b`, `qwen32b` × `write`/`read`/`mixed` × `j1`/`j16`.
+
 ### Reading the output
 
 Write results to a file to avoid mixing with FIO progress text:
