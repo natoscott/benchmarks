@@ -87,33 +87,34 @@ numjobs=16
 filename_format=qwen8b-j16.$jobnum.dat
 stonewall
 
-; ── gpt-oss-120b block size: ~576 KB ─────────────────────────────────────────
+; ── gpt-oss-120b block size: ~1.15 MB ────────────────────────────────────────
 ; 36 layers × 4 KV heads/rank × 64 head_dim × 2 × 2 B × 16 tok × 2 ranks
+; = 1,179,648 bytes = 1152 KiB (server-wide, TP=2)
 
 [gpt120b-write-j1]
 rw=write
-bs=576k
+bs=1152k
 numjobs=1
 filename_format=gpt120b-j1.$jobnum.dat
 stonewall
 
 [gpt120b-read-j1]
 rw=read
-bs=576k
+bs=1152k
 numjobs=1
 filename_format=gpt120b-j1.$jobnum.dat
 stonewall
 
 [gpt120b-write-j16]
 rw=write
-bs=576k
+bs=1152k
 numjobs=16
 filename_format=gpt120b-j16.$jobnum.dat
 stonewall
 
 [gpt120b-read-j16]
 rw=read
-bs=576k
+bs=1152k
 numjobs=16
 filename_format=gpt120b-j16.$jobnum.dat
 stonewall
@@ -121,7 +122,7 @@ stonewall
 [gpt120b-mixed-j16]
 rw=randrw
 rwmixread=75
-bs=576k
+bs=1152k
 numjobs=16
 filename_format=gpt120b-j16.$jobnum.dat
 stonewall

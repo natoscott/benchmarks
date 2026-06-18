@@ -10,9 +10,15 @@ Download the FIO configuration and run it against your mounted storage:
 fio fio-kv-fs.fio --directory=/path/to/your/storage
 ```
 
-Requires ~15 GiB free space and fio ≥ 3.x. Compare `lat_ns.percentile["99.000000"]`
-at `numjobs=16` for your model's block size against the [latency targets](#latency-targets)
-table. Targets the native vLLM filesystem offload connector (vLLM 0.22.0+).
+Requires ~15 GiB free space and fio ≥ 3.x.
+
+```bash
+fio fio-kv-fs.fio --directory=/path/to/storage --output-format=json+ --output=results.json
+jq '[.jobs[] | select(.jobname | test("read-j16")) | {job: .jobname, p99_ms: (.read.lat_ns.percentile["99.000000"] / 1e6)}]' results.json
+```
+
+Compare the `p99_ms` at `numjobs=16` against the [latency targets](#latency-targets) table.
+Targets the native vLLM filesystem offload connector (vLLM 0.22.0+).
 
 ---
 
@@ -79,7 +85,7 @@ For a full server (TP=2), multiply by world_size=2.
 ¹ kv_cache_dtype=auto resolves to BF16 even for FP8 weight models.
 ² KV shape derived from HuggingFace config.json (num_hidden_layers, num_key_value_heads, head_dim) + block count from vLLM startup logs at gmu=0.9 on 2× L40S (48 GiB each). vLLM 0.19 does not log the full tensor shape directly.
 
-**Key observation:** Block size spans more than 2× across model families —
+**Key observation:** Block size spans nearly 3× across model families —
 from ~1.75 MB for Qwen3-0.6B to ~5 MB for Llama-70B. Any FIO configuration must
 account for this range.
 
@@ -126,9 +132,11 @@ Block sizes are the actual GPU KV block sizes per server, per model family:
 | Test name | `bs` | Target model |
 |---|---|---|
 | `kv-fp8-70b` | 5m | FP8-70B, BF16-70B (TP=2) |
-| `kv-gpt120b` | 576k | gpt-oss-120b (TP=2) |
+| `kv-gpt120b` | 1152k | gpt-oss-120b (TP=2) |
 | `kv-qwen8b` | 2304k | Qwen3-8B (TP=2) |
 | `kv-qwen32b` | 4m | Qwen3-32B (TP=2) |
+
+All block sizes are server-wide (both TP=2 ranks combined).
 
 All tests use `direct=1` (O_DIRECT), `ioengine=libaio`, `iodepth=1`, `numjobs` ∈ {1, 16},
 `runtime=60s`. Each model also has a `mixed-j16` section (`rw=randrw`, `rwmixread=75`)
@@ -177,10 +185,9 @@ jq '[.jobs[] | select(.jobname | test("read-j16"))
 
 Hardware: single 7.68 TB Micron 7450 NVMe (PCIe Gen 4, 4Kn native sector size),
 provisioned via LVM thin pool (linear, not striped), XFS (bsize=4096, sectsz=4096,
-sunit=1 MiB, swidth=32 MiB). O_DIRECT, 1 file per job, 2 GiB per file, 60 s runtime.
-
-Note: the LVM thin pool is linear across multiple drives; a single PVC lands on one
-drive. Results represent single-drive performance.
+sunit=1 MiB, swidth=32 MiB). O_DIRECT, `size=225m` per file, 60 s runtime.
+The LVM thin pool is linear; a single PVC lands on one drive. Results represent
+single-drive performance.
 
 | Test | RW | BW (MB/s) | IOPS | lat p50 | lat p99 |
 |---|---|---|---|---|---|
@@ -188,10 +195,12 @@ drive. Results represent single-drive performance.
 | Qwen3-8B bs=2304k j=1 | read | 3,000 | 1,334 | 0.7 ms | 0.9 ms |
 | Qwen3-8B bs=2304k j=16 | write | 4,830 | 2,147 | 6.6 ms | 11.6 ms |
 | Qwen3-8B bs=2304k j=16 | read | 6,227 | 2,768 | 1.4 ms | 2.3 ms |
-| gpt-oss-120b bs=576k j=1 | write | 4,639 | 7,866 | 0.1 ms | 0.1 ms |
-| gpt-oss-120b bs=576k j=1 | read | 1,211 | 2,053 | 0.5 ms | 0.5 ms |
-| gpt-oss-120b bs=576k j=16 | write | 5,286 | 8,961 | 1.6 ms | 4.1 ms |
-| gpt-oss-120b bs=576k j=16 | read | 6,681 | 11,328 | 1.4 ms | 2.8 ms |
+| Qwen3-8B mixed j=16 | read | 4,616 | 2,051 | 7.2 ms | 12.3 ms |
+| gpt-oss-120b bs=1152k j=1 | write | 4,794 | 4,261 | 0.2 ms | 0.4 ms |
+| gpt-oss-120b bs=1152k j=1 | read | 1,989 | 1,768 | 0.6 ms | 0.6 ms |
+| gpt-oss-120b bs=1152k j=16 | write | 5,278 | 4,691 | 3.3 ms | 4.8 ms |
+| gpt-oss-120b bs=1152k j=16 | read | 6,603 | 5,870 | 2.7 ms | 4.0 ms |
+| gpt-oss-120b mixed j=16 | read | 4,674 | 4,155 | 3.3 ms | 8.0 ms |
 | FP8-70B bs=5m j=1 | write | 5,322 | 1,015 | 0.9 ms | 1.4 ms |
 | FP8-70B bs=5m j=1 | read | 4,576 | 873 | 1.1 ms | 1.3 ms |
 | FP8-70B bs=5m j=16 | write | 5,274 | 1,006 | 14.5 ms | 21.9 ms |
@@ -200,23 +209,22 @@ drive. Results represent single-drive performance.
 | FP8-70B mixed j=16 | read | 2,809 | 536 | 26.1 ms | 41.7 ms |
 
 **Single-thread latency is sub-millisecond for all block sizes** — a single GPU KV
-block load completes in 0.1–1.1 ms. The drive sustains 3.6–5.3 GB/s per file write,
-approaching its rated sequential bandwidth.
+block load completes in 0.1–1.1 ms. The drive sustains 4.8–5.3 GB/s per file write.
 
-**At j=16 (connector default `threads_per_gpu`), FP8-70B blocks show p99 = 14–22 ms.**
-Still a large gain over recomputing 16-token blocks from a 10,000-token prompt
-(~100 s at Llama-70B decode rates). Smaller models remain below 5 ms p99 at j=16.
+**At j=16 read p99:** Qwen3-8B 2.3 ms (Excellent), gpt-oss-120b 4.0 ms (Excellent),
+FP8-70B 14.1 ms (Good). Smaller block sizes benefit from higher IOPS.
 
-**Mixed RW at j=16 (worst case): p99 read = 41.7 ms.** Simultaneous eviction and
-restoration under maximum thread pressure on a single NVMe drive. Accept for
-long-context workloads; consider CPU offload for latency-critical short-context serving.
+**Mixed RW at j=16 (75% read / 25% write) p99 read:** Qwen3-8B 12.3 ms (Good),
+gpt-oss-120b 8.0 ms (Good), FP8-70B 41.7 ms (Acceptable). Simultaneous eviction and
+restoration at full concurrency. For FP8-70B under mixed load on a single NVMe drive,
+consider CPU offload for latency-critical short-context serving.
 
 
 ---
 
 ## Appendix: XFS Configuration (LVM thin pool PVC)
 
-Obtained via `xfs_growfs -n /data` on a 100 Gi PVC provisioned from an LVM thin pool:
+Obtained via `xfs_growfs -n /data` on a PVC provisioned from an LVM thin pool:
 
 ```
 meta-data  isize=512    agcount=17   agsize=1638144 blks
