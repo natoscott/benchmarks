@@ -17,3 +17,6 @@
 *hftoken*
 *.key
 *.crt
+
+# MLflow import sentinels (local state, MLflow server is authoritative)
+.mlflow-imported
