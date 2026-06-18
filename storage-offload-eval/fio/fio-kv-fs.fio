@@ -169,3 +169,47 @@ bs=5m
 numjobs=16
 filename_format=fp8-70b-j16.$jobnum.dat
 stonewall
+
+; ── Custom model ──────────────────────────────────────────────────────────────
+; Derive bs from your vLLM startup log — see REPORT.md "KV Cache Block Sizes"
+; section. Formula (TP=2, BF16 KV):
+;   bs = num_layers × 2 × (num_kv_heads/2) × tokens_per_block × head_dim × 2
+; Confirm: GPU KV cache size (tokens) / 16 = num_gpu_blocks in startup log.
+;
+; Uncomment and set bs= to your model's block size before running.
+
+;[custom-write-j1]
+;rw=write
+;bs=REPLACE_WITH_BLOCK_SIZE
+;numjobs=1
+;filename_format=custom-j1.$jobnum.dat
+;stonewall
+
+;[custom-read-j1]
+;rw=read
+;bs=REPLACE_WITH_BLOCK_SIZE
+;numjobs=1
+;filename_format=custom-j1.$jobnum.dat
+;stonewall
+
+;[custom-write-j16]
+;rw=write
+;bs=REPLACE_WITH_BLOCK_SIZE
+;numjobs=16
+;filename_format=custom-j16.$jobnum.dat
+;stonewall
+
+;[custom-read-j16]
+;rw=read
+;bs=REPLACE_WITH_BLOCK_SIZE
+;numjobs=16
+;filename_format=custom-j16.$jobnum.dat
+;stonewall
+
+;[custom-mixed-j16]
+;rw=randrw
+;rwmixread=75
+;bs=REPLACE_WITH_BLOCK_SIZE
+;numjobs=16
+;filename_format=custom-j16.$jobnum.dat
+;stonewall
