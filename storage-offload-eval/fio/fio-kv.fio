@@ -1,0 +1,419 @@
+; FIO configuration: vLLM KV cache storage characterisation
+;
+; Covers two backends:
+;   FILESYSTEM  — native fs offload connector (vllm/v1/kv_offload/tiering/fs/)
+;                 Sections below are active by default. Run with --directory.
+;   S3 / RGW    — object store secondary tier (vllm/v1/kv_offload/tiering/obj/)
+;                 Sections below are commented for reference. Use
+;                 scripts/run-fio-s3.sh to inject RGW credentials and run them.
+;
+; FILESYSTEM USAGE:
+;   fio fio-kv.fio --directory=/path/to/mounted/storage \
+;       --output-format=json+ --output=results-fs.json
+;   jq '[.jobs[] | select(.jobname | test("read-j16")) | {job: .jobname, p99_ms: (.read.lat_ns.percentile["99.000000"] / 1e6)}]' results-fs.json
+;
+; S3 / RGW USAGE:
+;   scripts/run-fio-s3.sh   # fetches credentials, writes temp config, prints fio command
+;   # or manually fill PLACEHOLDER_ values in the S3 sections below and uncomment
+;
+; REQUIREMENTS:
+;   Filesystem: ~15 GiB free, fio >= 3.x
+;   S3/RGW:     fio built with HTTP engine (check: fio --enghelp=http),
+;               RGW reachable, bucket pre-created (scripts/create-bucket.sh)
+;
+; PRIMARY METRIC: lat_ns.percentile p99 on *-read-j16 sections.
+;   A block load is on the critical path before the first inference token.
+;   Acceptable p99 < 20 ms at j=16 for large models.
+;
+; I/O MODEL (filesystem):
+;   O_DIRECT, one os.write() per GPU KV block, one file per job.
+;   Read and mixed sections share filenames with write counterparts
+;   so total disk use is ~15 GiB across all sections.
+;
+; I/O MODEL (S3):
+;   S3 PUT (write) / GET (read) per GPU KV block, one object per job.
+;   size=bs so each I/O is one complete block; no partial-object access.
+;   No mixed test — randrw has no meaningful S3 semantics.
+;
+; Block sizes (TP=2, BF16 KV) — keep S3 sections below in sync with these:
+;   Qwen3-8B:         2304k  36 layers × 4 KV heads/rank × 128 head_dim × 2 × 2B × 16 tok × 2 ranks
+;   gpt-oss-120b:     1152k  36 layers × 4 KV heads/rank ×  64 head_dim × 2 × 2B × 16 tok × 2 ranks
+;   FP8-70B/BF16-70B: 5m     80 layers × 4 KV heads/rank × 128 head_dim × 2 × 2B × 16 tok × 2 ranks
+;
+; Reference data (single Micron 7450 NVMe / XFS):
+;   FP8-70B  read j=16: p99 = 14.1 ms   <- borderline for large model serving
+;   gpt-120b read j=16: p99 =  2.8 ms   <- excellent
+;   Qwen3-8B read j=16: p99 =  2.3 ms   <- excellent
+
+; ── Filesystem global settings ────────────────────────────────────────────────
+
+[global]
+direct=1
+ioengine=libaio
+iodepth=1
+; size=225m is divisible by all block sizes (2304k, 1152k, 5m).
+; Read and mixed sections share filenames with write counterparts.
+size=225m
+runtime=60
+time_based=1
+group_reporting=1
+lat_percentiles=1
+
+; ── Qwen3-8B  ─────────────────────────────────────────────────────────────────
+
+[qwen8b-write-j1]
+rw=write
+bs=2304k
+numjobs=1
+filename_format=qwen8b-j1.$jobnum.dat
+stonewall
+
+[qwen8b-read-j1]
+rw=read
+bs=2304k
+numjobs=1
+filename_format=qwen8b-j1.$jobnum.dat
+stonewall
+
+[qwen8b-write-j16]
+rw=write
+bs=2304k
+numjobs=16
+filename_format=qwen8b-j16.$jobnum.dat
+stonewall
+
+[qwen8b-read-j16]
+rw=read
+bs=2304k
+numjobs=16
+filename_format=qwen8b-j16.$jobnum.dat
+stonewall
+
+[qwen8b-mixed-j16]
+rw=randrw
+rwmixread=75
+bs=2304k
+numjobs=16
+filename_format=qwen8b-j16.$jobnum.dat
+stonewall
+
+; ── gpt-oss-120b  ─────────────────────────────────────────────────────────────
+
+[gpt120b-write-j1]
+rw=write
+bs=1152k
+numjobs=1
+filename_format=gpt120b-j1.$jobnum.dat
+stonewall
+
+[gpt120b-read-j1]
+rw=read
+bs=1152k
+numjobs=1
+filename_format=gpt120b-j1.$jobnum.dat
+stonewall
+
+[gpt120b-write-j16]
+rw=write
+bs=1152k
+numjobs=16
+filename_format=gpt120b-j16.$jobnum.dat
+stonewall
+
+[gpt120b-read-j16]
+rw=read
+bs=1152k
+numjobs=16
+filename_format=gpt120b-j16.$jobnum.dat
+stonewall
+
+[gpt120b-mixed-j16]
+rw=randrw
+rwmixread=75
+bs=1152k
+numjobs=16
+filename_format=gpt120b-j16.$jobnum.dat
+stonewall
+
+; ── FP8-70B / BF16-70B  ──────────────────────────────────────────────────────
+
+[fp8-70b-write-j1]
+rw=write
+bs=5m
+numjobs=1
+filename_format=fp8-70b-j1.$jobnum.dat
+stonewall
+
+[fp8-70b-read-j1]
+rw=read
+bs=5m
+numjobs=1
+filename_format=fp8-70b-j1.$jobnum.dat
+stonewall
+
+[fp8-70b-write-j16]
+rw=write
+bs=5m
+numjobs=16
+filename_format=fp8-70b-j16.$jobnum.dat
+stonewall
+
+[fp8-70b-read-j16]
+rw=read
+bs=5m
+numjobs=16
+filename_format=fp8-70b-j16.$jobnum.dat
+stonewall
+
+[fp8-70b-mixed-j16]
+rw=randrw
+rwmixread=75
+bs=5m
+numjobs=16
+filename_format=fp8-70b-j16.$jobnum.dat
+stonewall
+
+; ── Custom model (filesystem)  ────────────────────────────────────────────────
+; Derive bs from vLLM startup log — see REPORT.md "KV Cache Block Sizes".
+; Formula (TP=2, BF16 KV):
+;   bs = num_layers × 2 × (num_kv_heads/2) × tokens_per_block × head_dim × 2
+
+;[custom-write-j1]
+;rw=write
+;bs=REPLACE_WITH_BLOCK_SIZE
+;numjobs=1
+;filename_format=custom-j1.$jobnum.dat
+;stonewall
+
+;[custom-read-j1]
+;rw=read
+;bs=REPLACE_WITH_BLOCK_SIZE
+;numjobs=1
+;filename_format=custom-j1.$jobnum.dat
+;stonewall
+
+;[custom-write-j16]
+;rw=write
+;bs=REPLACE_WITH_BLOCK_SIZE
+;numjobs=16
+;filename_format=custom-j16.$jobnum.dat
+;stonewall
+
+;[custom-read-j16]
+;rw=read
+;bs=REPLACE_WITH_BLOCK_SIZE
+;numjobs=16
+;filename_format=custom-j16.$jobnum.dat
+;stonewall
+
+;[custom-mixed-j16]
+;rw=randrw
+;rwmixread=75
+;bs=REPLACE_WITH_BLOCK_SIZE
+;numjobs=16
+;filename_format=custom-j16.$jobnum.dat
+;stonewall
+
+; === S3/RGW sections (commented) — use scripts/run-fio-s3.sh to run ===
+;
+; These sections override the filesystem [global] above with S3 engine settings.
+; Each section carries its own ioengine, http_*, and size=bs overrides.
+; The [global] direct=1 and ioengine=libaio are ignored by the HTTP engine.
+;
+; To run manually: fill in PLACEHOLDER_ values, uncomment sections, then:
+;   fio fio-kv.fio --output-format=json+ --output=results-s3.json
+;
+; Extract p99 read latencies:
+;   jq '[.jobs[] | select(.jobname | test("s3.*read-j16")) | {job: .jobname, p99_ms: (.read.lat_ns.percentile["99.000000"] / 1e6)}]' results-s3.json
+;
+; RGW endpoint (ClusterIP of rook-ceph-rgw-kvcache-store in openshift-storage):
+;   PLACEHOLDER_RGW_HOST
+; S3 credentials (from secret rook-ceph-object-user-kvcache-store-kvcache-user):
+;   PLACEHOLDER_S3_ACCESS_KEY
+;   PLACEHOLDER_S3_SECRET_KEY
+
+; ── S3: Qwen3-8B  ─────────────────────────────────────────────────────────────
+
+;[qwen8b-s3-write-j1]
+;ioengine=http
+;http_mode=s3
+;http_host=PLACEHOLDER_RGW_HOST
+;http_port=80
+;http_s3_keyid=PLACEHOLDER_S3_ACCESS_KEY
+;http_s3_key=PLACEHOLDER_S3_SECRET_KEY
+;http_s3_region=us-east-1
+;rw=write
+;bs=2304k
+;size=2304k
+;numjobs=1
+;filename_format=/kvcache/qwen8b-j1.$jobnum.dat
+;stonewall
+
+;[qwen8b-s3-read-j1]
+;ioengine=http
+;http_mode=s3
+;http_host=PLACEHOLDER_RGW_HOST
+;http_port=80
+;http_s3_keyid=PLACEHOLDER_S3_ACCESS_KEY
+;http_s3_key=PLACEHOLDER_S3_SECRET_KEY
+;http_s3_region=us-east-1
+;rw=read
+;bs=2304k
+;size=2304k
+;numjobs=1
+;filename_format=/kvcache/qwen8b-j1.$jobnum.dat
+;stonewall
+
+;[qwen8b-s3-write-j16]
+;ioengine=http
+;http_mode=s3
+;http_host=PLACEHOLDER_RGW_HOST
+;http_port=80
+;http_s3_keyid=PLACEHOLDER_S3_ACCESS_KEY
+;http_s3_key=PLACEHOLDER_S3_SECRET_KEY
+;http_s3_region=us-east-1
+;rw=write
+;bs=2304k
+;size=2304k
+;numjobs=16
+;filename_format=/kvcache/qwen8b-j16.$jobnum.dat
+;stonewall
+
+;[qwen8b-s3-read-j16]
+;ioengine=http
+;http_mode=s3
+;http_host=PLACEHOLDER_RGW_HOST
+;http_port=80
+;http_s3_keyid=PLACEHOLDER_S3_ACCESS_KEY
+;http_s3_key=PLACEHOLDER_S3_SECRET_KEY
+;http_s3_region=us-east-1
+;rw=read
+;bs=2304k
+;size=2304k
+;numjobs=16
+;filename_format=/kvcache/qwen8b-j16.$jobnum.dat
+;stonewall
+
+; ── S3: gpt-oss-120b  ─────────────────────────────────────────────────────────
+
+;[gpt120b-s3-write-j1]
+;ioengine=http
+;http_mode=s3
+;http_host=PLACEHOLDER_RGW_HOST
+;http_port=80
+;http_s3_keyid=PLACEHOLDER_S3_ACCESS_KEY
+;http_s3_key=PLACEHOLDER_S3_SECRET_KEY
+;http_s3_region=us-east-1
+;rw=write
+;bs=1152k
+;size=1152k
+;numjobs=1
+;filename_format=/kvcache/gpt120b-j1.$jobnum.dat
+;stonewall
+
+;[gpt120b-s3-read-j1]
+;ioengine=http
+;http_mode=s3
+;http_host=PLACEHOLDER_RGW_HOST
+;http_port=80
+;http_s3_keyid=PLACEHOLDER_S3_ACCESS_KEY
+;http_s3_key=PLACEHOLDER_S3_SECRET_KEY
+;http_s3_region=us-east-1
+;rw=read
+;bs=1152k
+;size=1152k
+;numjobs=1
+;filename_format=/kvcache/gpt120b-j1.$jobnum.dat
+;stonewall
+
+;[gpt120b-s3-write-j16]
+;ioengine=http
+;http_mode=s3
+;http_host=PLACEHOLDER_RGW_HOST
+;http_port=80
+;http_s3_keyid=PLACEHOLDER_S3_ACCESS_KEY
+;http_s3_key=PLACEHOLDER_S3_SECRET_KEY
+;http_s3_region=us-east-1
+;rw=write
+;bs=1152k
+;size=1152k
+;numjobs=16
+;filename_format=/kvcache/gpt120b-j16.$jobnum.dat
+;stonewall
+
+;[gpt120b-s3-read-j16]
+;ioengine=http
+;http_mode=s3
+;http_host=PLACEHOLDER_RGW_HOST
+;http_port=80
+;http_s3_keyid=PLACEHOLDER_S3_ACCESS_KEY
+;http_s3_key=PLACEHOLDER_S3_SECRET_KEY
+;http_s3_region=us-east-1
+;rw=read
+;bs=1152k
+;size=1152k
+;numjobs=16
+;filename_format=/kvcache/gpt120b-j16.$jobnum.dat
+;stonewall
+
+; ── S3: FP8-70B / BF16-70B  ──────────────────────────────────────────────────
+
+;[fp8-70b-s3-write-j1]
+;ioengine=http
+;http_mode=s3
+;http_host=PLACEHOLDER_RGW_HOST
+;http_port=80
+;http_s3_keyid=PLACEHOLDER_S3_ACCESS_KEY
+;http_s3_key=PLACEHOLDER_S3_SECRET_KEY
+;http_s3_region=us-east-1
+;rw=write
+;bs=5m
+;size=5m
+;numjobs=1
+;filename_format=/kvcache/fp8-70b-j1.$jobnum.dat
+;stonewall
+
+;[fp8-70b-s3-read-j1]
+;ioengine=http
+;http_mode=s3
+;http_host=PLACEHOLDER_RGW_HOST
+;http_port=80
+;http_s3_keyid=PLACEHOLDER_S3_ACCESS_KEY
+;http_s3_key=PLACEHOLDER_S3_SECRET_KEY
+;http_s3_region=us-east-1
+;rw=read
+;bs=5m
+;size=5m
+;numjobs=1
+;filename_format=/kvcache/fp8-70b-j1.$jobnum.dat
+;stonewall
+
+;[fp8-70b-s3-write-j16]
+;ioengine=http
+;http_mode=s3
+;http_host=PLACEHOLDER_RGW_HOST
+;http_port=80
+;http_s3_keyid=PLACEHOLDER_S3_ACCESS_KEY
+;http_s3_key=PLACEHOLDER_S3_SECRET_KEY
+;http_s3_region=us-east-1
+;rw=write
+;bs=5m
+;size=5m
+;numjobs=16
+;filename_format=/kvcache/fp8-70b-j16.$jobnum.dat
+;stonewall
+
+;[fp8-70b-s3-read-j16]
+;ioengine=http
+;http_mode=s3
+;http_host=PLACEHOLDER_RGW_HOST
+;http_port=80
+;http_s3_keyid=PLACEHOLDER_S3_ACCESS_KEY
+;http_s3_key=PLACEHOLDER_S3_SECRET_KEY
+;http_s3_region=us-east-1
+;rw=read
+;bs=5m
+;size=5m
+;numjobs=16
+;filename_format=/kvcache/fp8-70b-j16.$jobnum.dat
+;stonewall

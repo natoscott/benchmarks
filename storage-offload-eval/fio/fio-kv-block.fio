@@ -1,0 +1,137 @@
+; FIO configuration: vLLM KV cache storage characterisation — raw block device.
+;
+; Tests the IBM VPC block volume directly, without filesystem or Ceph overhead.
+; Provides the performance floor against which CephFS and RGW results are compared.
+;
+; USAGE (via script — substitutes PLACEHOLDER_DEVICE with the actual device path):
+;   scripts/run-fio-vpc-block.sh
+;
+; BLOCK SIZES: identical to fio-kv.fio filesystem sections for direct comparability.
+;   Qwen3-8B:         2304k
+;   gpt-oss-120b:     1152k
+;   FP8-70B/BF16-70B: 5m
+;
+; j=16 sequential sections use offset_increment=225m so each job operates on a
+; non-overlapping 225m region of the device (total: 16 × 225m = 3.6 GiB of the 20 Gi volume).
+; Mixed (randrw) sections omit offset_increment — random access naturally distributes
+; across the region and is representative of concurrent KV cache block access patterns.
+;
+; PRIMARY METRIC: lat_ns.percentile p99 on *-blk-read-j16 sections.
+; Compare directly against fio-kv.fio filesystem sections run against CephFS:
+;   vpc-block p99 read → CephFS p99 read difference = CephFS protocol overhead.
+
+[global]
+direct=1
+ioengine=libaio
+iodepth=1
+size=225m
+runtime=60
+time_based=1
+group_reporting=1
+lat_percentiles=1
+filename=PLACEHOLDER_DEVICE
+
+; ── Qwen3-8B  ─────────────────────────────────────────────────────────────────
+
+[qwen8b-blk-write-j1]
+rw=write
+bs=2304k
+numjobs=1
+stonewall
+
+[qwen8b-blk-read-j1]
+rw=read
+bs=2304k
+numjobs=1
+stonewall
+
+[qwen8b-blk-write-j16]
+rw=write
+bs=2304k
+numjobs=16
+offset_increment=225m
+stonewall
+
+[qwen8b-blk-read-j16]
+rw=read
+bs=2304k
+numjobs=16
+offset_increment=225m
+stonewall
+
+[qwen8b-blk-mixed-j16]
+rw=randrw
+rwmixread=75
+bs=2304k
+numjobs=16
+stonewall
+
+; ── gpt-oss-120b  ─────────────────────────────────────────────────────────────
+
+[gpt120b-blk-write-j1]
+rw=write
+bs=1152k
+numjobs=1
+stonewall
+
+[gpt120b-blk-read-j1]
+rw=read
+bs=1152k
+numjobs=1
+stonewall
+
+[gpt120b-blk-write-j16]
+rw=write
+bs=1152k
+numjobs=16
+offset_increment=225m
+stonewall
+
+[gpt120b-blk-read-j16]
+rw=read
+bs=1152k
+numjobs=16
+offset_increment=225m
+stonewall
+
+[gpt120b-blk-mixed-j16]
+rw=randrw
+rwmixread=75
+bs=1152k
+numjobs=16
+stonewall
+
+; ── FP8-70B / BF16-70B  ──────────────────────────────────────────────────────
+
+[fp8-70b-blk-write-j1]
+rw=write
+bs=5m
+numjobs=1
+stonewall
+
+[fp8-70b-blk-read-j1]
+rw=read
+bs=5m
+numjobs=1
+stonewall
+
+[fp8-70b-blk-write-j16]
+rw=write
+bs=5m
+numjobs=16
+offset_increment=225m
+stonewall
+
+[fp8-70b-blk-read-j16]
+rw=read
+bs=5m
+numjobs=16
+offset_increment=225m
+stonewall
+
+[fp8-70b-blk-mixed-j16]
+rw=randrw
+rwmixread=75
+bs=5m
+numjobs=16
+stonewall

@@ -1,0 +1,54 @@
+# FIO benchmark pod for CephFS and S3/RGW storage characterisation.
+#
+# IMAGE: registry.fedoraproject.org/fedora:latest with fio+jq pre-installed.
+# Fedora's fio RPM includes the http ioengine (libcurl). Verify before S3 tests:
+#   kubectl exec -n storage-offload-eval fio-pod -- fio --enghelp=http
+# For clusters without internet access, build from manifests/Containerfile and
+# push to the internal registry, then update the image field below.
+#
+# BACKENDS (run from host, no pod restart needed):
+#   VPC block — scripts/run-fio-vpc-block.sh (/dev/vpc-block raw block, no filesystem, no Ceph)
+#   CephFS    — scripts/run-fio-cephfs.sh    (/mnt/cephfs from fio-cephfs PVC)
+#   S3/RGW    — scripts/run-fio-s3.sh        (no PVC; uses http ioengine)
+#
+# NVMe baseline is already captured in results/fio-kv-fs-nvme.log.
+# For fresh NVMe results on this cluster, deploy a separate pod with the
+# lvms-vg-gpu-node PVC and nodeSelector pinned to the NVMe node.
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: fio-pod
+  namespace: storage-offload-eval
+  labels:
+    app: fio-pod
+spec:
+  containers:
+    - name: fio
+      image: registry.fedoraproject.org/fedora:latest
+      command: [sleep, infinity]
+      resources:
+        requests:
+          cpu: "2"
+          memory: 4Gi
+        limits:
+          cpu: "8"
+          memory: 8Gi
+      volumeMounts:
+        - name: cephfs
+          mountPath: /mnt/cephfs
+      volumeDevices:
+        - name: vpc-block
+          devicePath: /dev/vpc-block
+  volumes:
+    - name: vpc-block
+      persistentVolumeClaim:
+        claimName: fio-vpc-block
+    - name: cephfs
+      persistentVolumeClaim:
+        claimName: fio-cephfs
+  tolerations:
+    - key: nvidia.com/gpu
+      operator: Exists
+      effect: NoSchedule
+  restartPolicy: Never

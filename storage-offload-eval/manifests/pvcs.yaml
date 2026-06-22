@@ -1,6 +1,18 @@
-# PVC for storage-offload-eval FIO benchmarking.
-# Update storageClassName to match the local NVMe storage class on your cluster.
-# Use ReadWriteOnce; a single PVC lands on one physical drive (linear LVM pool).
+# PVCs for storage-offload-eval FIO benchmarking.
+# Apply after ODF is deployed and StorageClasses are available:
+#   kubectl apply -f manifests/pvcs.yaml
+#
+# Storage classes:
+#   lvms-vg-gpu-node         — local NVMe LVM pool on GPU workers (RWO, WaitForFirstConsumer)
+#   ocs-cephfs-kvcache       — Ceph kvcache-fs CephFilesystem, size:1 (RWX, Immediate)
+#                              Must be pre-created before applying this file.
+#   ibmc-vpc-block-10iops-tier — raw IBM VPC block, volumeMode:Block (no filesystem, no Ceph)
+#                              Baseline: pure block device performance floor.
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: storage-offload-eval
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -10,6 +22,33 @@ metadata:
 spec:
   accessModes: [ReadWriteOnce]
   storageClassName: lvms-vg-gpu-node
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: fio-cephfs
+  namespace: storage-offload-eval
+spec:
+  accessModes: [ReadWriteMany]
+  storageClassName: ocs-cephfs-kvcache
+  resources:
+    requests:
+      storage: 20Gi
+---
+# Raw block device — no filesystem, no Ceph overhead. Used by run-fio-vpc-block.sh.
+# volumeMode: Block exposes the device directly at /dev/vpc-block in fio-pod.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: fio-vpc-block
+  namespace: storage-offload-eval
+spec:
+  accessModes: [ReadWriteOnce]
+  volumeMode: Block
+  storageClassName: ibmc-vpc-block-10iops-tier
   resources:
     requests:
       storage: 20Gi

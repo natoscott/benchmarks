@@ -1,0 +1,93 @@
+# PCP monitoring deployment for storage benchmark analysis.
+# Captures disk, network, CPU, and memory metrics (kernel PMDAs) on the
+# benchmark node throughout each FIO run. Co-locates with fio-pod via podAffinity.
+# Archives written to hostPath so they survive pod restarts and can be retrieved
+# via scripts/transfer-large-file-chunked.sh after each run.
+#
+# Deploy before starting any FIO run:
+#   kubectl apply -f manifests/pcp-serviceaccount.yaml
+#   kubectl apply -f manifests/pcp-deployment.yaml
+#   kubectl rollout status deployment/pcp -n storage-offload-eval
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pcp
+  namespace: storage-offload-eval
+  labels:
+    app.kubernetes.io/name: pcp
+    app.kubernetes.io/instance: pcp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: pcp
+      app.kubernetes.io/instance: pcp
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: pcp
+        app.kubernetes.io/instance: pcp
+        app: pcp
+        name: pcp
+    spec:
+      serviceAccountName: pcp
+      affinity:
+        podAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: fio-pod
+                topologyKey: kubernetes.io/hostname
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+      terminationGracePeriodSeconds: 15
+      containers:
+        - name: pcp
+          image: quay.io/performancecopilot/pcp:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/bash
+            - -c
+            - |
+              sed -i 's/PMCD_LOCAL=1/PMCD_LOCAL=0/' /etc/sysconfig/pmcd
+              exec /usr/bin/container-entrypoint /usr/sbin/init
+          env:
+            # Kernel PMDAs only (disk, network, cpu, memory) — no openmetrics needed.
+            - name: PCP_SERVICES
+              value: pmcd,pmlogger
+          ports:
+            - name: pmcd-port
+              containerPort: 44321
+              protocol: TCP
+          readinessProbe:
+            tcpSocket:
+              port: pmcd-port
+            initialDelaySeconds: 15
+            periodSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            exec:
+              command: [/bin/bash, -c, "systemctl is-active pmcd"]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 3
+          securityContext:
+            privileged: true
+            allowPrivilegeEscalation: true
+            runAsNonRoot: false
+            seccompProfile:
+              type: Unconfined
+          volumeMounts:
+            - name: pmlogger-storage
+              mountPath: /var/log/pcp/pmlogger
+      volumes:
+        - name: pmlogger-storage
+          hostPath:
+            path: /var/log/pcp/pmlogger
+            type: DirectoryOrCreate

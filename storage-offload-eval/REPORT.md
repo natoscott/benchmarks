@@ -1,24 +1,35 @@
-# Storage Characterisation for vLLM KV Cache Filesystem Offload
+# Storage Characterisation for vLLM KV Cache Offload
 
 ## TL;DR
 
-Download the FIO configuration and run it against your mounted storage:
+**[fio/fio-kv.fio](fio/fio-kv.fio)** covers two backends in one file:
+- **Filesystem** sections (active by default) — targets the native fs offload connector
+- **S3/RGW** sections (commented) — targets the object store secondary tier via Ceph RGW
 
-**[fio/fio-kv-fs.fio](fio/fio-kv-fs.fio)**
+### Filesystem backend
 
 ```bash
-fio fio-kv-fs.fio --directory=/path/to/your/storage
+fio fio-kv.fio --directory=/path/to/mounted/storage \
+    --output-format=json+ --output=results-fs.json
+jq '[.jobs[] | select(.jobname | test("read-j16")) | {job: .jobname, p99_ms: (.read.lat_ns.percentile["99.000000"] / 1e6)}]' results-fs.json
 ```
 
 Requires ~15 GiB free space and fio ≥ 3.x.
 
+### S3 / RGW backend
+
 ```bash
-fio fio-kv-fs.fio --directory=/path/to/storage --output-format=json+ --output=results.json
-jq '[.jobs[] | select(.jobname | test("read-j16")) | {job: .jobname, p99_ms: (.read.lat_ns.percentile["99.000000"] / 1e6)}]' results.json
+# Fetches credentials from the Rook secret and generates a runnable config:
+scripts/run-fio-s3.sh
+# Then copy the generated temp config to your FIO pod and run it.
 ```
 
+Requires fio built with HTTP engine support (`fio --enghelp=http`) and a running Ceph RGW
+instance with the `kvcache` bucket pre-created. See [S3 / RGW Backend](#s3--rgw-backend) below.
+
 Compare the `p99_ms` at `numjobs=16` against the [latency targets](#latency-targets) table.
-Targets the native vLLM filesystem offload connector (vLLM 0.22.0+).
+Targets the native vLLM filesystem offload connector (vLLM 0.22.0+) and the NIXL OBJ
+object store secondary tier.
 
 ---
 
@@ -148,12 +159,12 @@ See [TL;DR](#tldr) above for the FIO configuration download and usage.
 
 ### Running a subset
 
-By default the config runs all 15 sections (~15 minutes). To test only your
+By default the config runs all 15 filesystem sections (~15 minutes). To test only your
 model's block size, use `--section`:
 
 ```bash
 # Example: just the Qwen3-8B read sections
-fio fio-kv-fs.fio --section=qwen8b-read-j1 --section=qwen8b-read-j16 \
+fio fio-kv.fio --section=qwen8b-read-j1 --section=qwen8b-read-j16 \
   --directory=/your/storage --output-format=json+ --output=results.json
 ```
 
@@ -165,7 +176,7 @@ Section names follow the pattern `<model>-<rw>-j<concurrency>`:
 Write results to a file to avoid mixing with FIO progress text:
 
 ```bash
-fio fio-kv-fs.fio --directory=/path/to/storage --output-format=json+ --output=results.json
+fio fio-kv.fio --directory=/path/to/storage --output-format=json+ --output=results-fs.json
 ```
 
 Extract p99 read latency (in ms) for each `*-read-j16` section:
@@ -192,6 +203,55 @@ jq '[.jobs[] | select(.jobname | test("read-j16"))
 | 20–50 ms | **Acceptable** — worthwhile where recompute cost exceeds 50 ms |
 | 50–200 ms | **Marginal** — CPU offload likely better except for very long prefills |
 | > 200 ms | **Avoid** — fs offload will increase TTFT; use CPU offload only |
+
+---
+
+## S3 / RGW Backend
+
+The `fio-kv.fio` file also characterises the **object store secondary tier**
+(`vllm/v1/kv_offload/tiering/obj/`, NIXL OBJ backend). This tier stores KV cache blocks
+as S3 objects in Ceph RGW, bypassing the CephFS metadata server entirely. Each GPU KV
+block maps to one S3 object; block hashes become object keys.
+
+### I/O model differences
+
+| | Filesystem | S3 / RGW |
+|---|---|---|
+| Engine | `libaio`, O_DIRECT | `http`, S3 PUT/GET |
+| Eviction path | POSIX `write()` → file | S3 PUT → RADOS object |
+| Restoration path | POSIX `read()` → memory | S3 GET → memory |
+| Metadata overhead | One MDS op per file open/close | None — key lookup goes directly to RADOS |
+| Eviction policy | Space-based LRU via pvc_evictor | S3 lifecycle rules (TTL-based) |
+
+### Running the S3 benchmark
+
+The S3 sections in `fio-kv.fio` are commented out. `scripts/run-fio-s3.sh` fetches
+credentials from the Rook secret (`rook-ceph-object-user-kvcache-store-kvcache-user`
+in `openshift-storage`), generates a runnable config with credentials substituted, and
+prints the fio command to run from inside your FIO pod.
+
+```bash
+# On the host (outside the cluster pod):
+scripts/run-fio-s3.sh
+
+# Copy the generated config to your FIO pod, then:
+fio /tmp/fio-kv-s3-XXXXXX.fio --output-format=json+ --output=results-s3.json
+
+# Extract p99 read latencies:
+jq '[.jobs[] | select(.jobname | test("s3.*read-j16")) | {job: .jobname, p99_ms: (.read.lat_ns.percentile["99.000000"] / 1e6)}]' results-s3.json
+```
+
+### Prerequisites
+
+- Ceph RGW deployed via ODF and `kvcache-store` CephObjectStore created
+- `kvcache` bucket created (see deployment manifests)
+- fio built with HTTP engine (`fio --enghelp=http` should list options)
+
+### Interpreting results
+
+Use the same [latency targets](#latency-targets) table. RGW adds network round-trip
+overhead vs local NVMe; the comparison between filesystem and S3 results quantifies
+that cost at each block size and concurrency level.
 
 ---
 

@@ -1,0 +1,152 @@
+#!/bin/bash
+# Run FIO against the raw IBM VPC block volume in fio-pod.
+# Tests block device performance without filesystem or Ceph overhead —
+# the baseline against which CephFS and RGW overhead is measured.
+#
+# Two phases:
+#   1. Probe (30s, j=1, fp8-70b block size): device class fingerprint.
+#      Prints p50/p99 latency — review before committing to the 15-section full run.
+#      SSD/NVMe: write p50 < 1ms. SATA SSD: 1-5ms. Spinning disk: > 5ms.
+#   2. Full suite: 15 sections (3 models × write/read/mixed × j1/j16), 60s each.
+#
+# NOTE: Phase 1 prompts for confirmation before Phase 2. Set SKIP_CONFIRM=1 to bypass.
+#
+# USAGE:
+#   KUBECONFIG=/path/to/kubeconfig ./scripts/run-fio-vpc-block.sh
+#
+# ENVIRONMENT:
+#   KUBECONFIG    path to kubeconfig (required)
+#   NAMESPACE     pod namespace (default: storage-offload-eval)
+#   POD           fio pod name (default: fio-pod)
+#   RESULTS       output filename under results/ (default: results-vpc-block.json)
+#   SKIP_CONFIRM  set to 1 to skip the probe confirmation prompt
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+FIO_BLOCK_CONFIG="${SCRIPT_DIR}/../fio/fio-kv-block.fio"
+RESULTS_DIR="${SCRIPT_DIR}/../results"
+
+KC="kubectl ${KUBECONFIG:+--kubeconfig ${KUBECONFIG}}"
+NS="${NAMESPACE:-storage-offload-eval}"
+POD="${POD:-fio-pod}"
+RESULTS="${RESULTS:-results-vpc-block.json}"
+DEVICE="/dev/vpc-block"
+SKIP_CONFIRM="${SKIP_CONFIRM:-}"
+
+# Locate PCP pod.
+PCP_POD=$($KC -n "$NS" get pods -l app=pcp --field-selector=status.phase=Running \
+  -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+if [ -z "$PCP_POD" ]; then
+  echo "WARNING: No running PCP pod found in ${NS}."
+  echo "  Deploy manifests/pcp-serviceaccount.yaml + manifests/pcp-deployment.yaml before benchmarking."
+else
+  echo "==> PCP pod: ${PCP_POD} (collecting system metrics)"
+fi
+
+mkdir -p "$RESULTS_DIR"
+
+# ── Phase 1: Device probe ─────────────────────────────────────────────────────
+echo ""
+echo "==> Phase 1: Device probe (j=1, 30s, bs=5m) — device class fingerprint..."
+
+PROBE_CONFIG=$(mktemp /tmp/fio-probe-XXXXXX.fio)
+trap 'rm -f "$PROBE_CONFIG"' EXIT
+
+cat > "$PROBE_CONFIG" <<EOF
+[global]
+direct=1
+ioengine=libaio
+iodepth=1
+size=225m
+runtime=30
+time_based=1
+group_reporting=1
+lat_percentiles=1
+filename=${DEVICE}
+
+[probe-write-j1]
+rw=write
+bs=5m
+numjobs=1
+stonewall
+
+[probe-read-j1]
+rw=read
+bs=5m
+numjobs=1
+stonewall
+EOF
+
+$KC -n "$NS" cp "$PROBE_CONFIG" "${POD}:/tmp/fio-probe.fio"
+$KC -n "$NS" exec "$POD" -- \
+  fio /tmp/fio-probe.fio \
+    --output-format=json+ \
+    --output=/tmp/probe-vpc-block.json
+
+"${SCRIPT_DIR}/transfer-large-file-chunked.sh" \
+  "${KUBECONFIG:?KUBECONFIG must be set}" \
+  "$NS" "$POD" \
+  "/tmp/probe-vpc-block.json" \
+  "${RESULTS_DIR}/probe-vpc-block.json"
+
+echo ""
+echo "Device fingerprint (p50 / p99 latency at j=1, bs=5m):"
+jq -r '
+  .jobs[] |
+  if .jobname == "probe-write-j1" then
+    "  write  p50=\(.write.lat_ns.percentile["50.000000"] / 1e6 | . * 100 | round / 100)ms  p99=\(.write.lat_ns.percentile["99.000000"] / 1e6 | . * 100 | round / 100)ms  bw=\(.write.bw_bytes / 1048576 | . * 10 | round / 10)MB/s"
+  elif .jobname == "probe-read-j1" then
+    "  read   p50=\(.read.lat_ns.percentile["50.000000"] / 1e6 | . * 100 | round / 100)ms  p99=\(.read.lat_ns.percentile["99.000000"] / 1e6 | . * 100 | round / 100)ms  bw=\(.read.bw_bytes / 1048576 | . * 10 | round / 10)MB/s"
+  else empty end
+' "${RESULTS_DIR}/probe-vpc-block.json"
+
+echo ""
+echo "  Expected for ibmc-vpc-block-10iops-tier (SSD-backed):"
+echo "    write p50 < 1ms,  read p50 < 1ms"
+echo "  If write p50 > 5ms the device may be spinning disk — do not proceed."
+
+if [ -z "$SKIP_CONFIRM" ]; then
+  echo ""
+  read -r -p "Proceed with full benchmark suite (~15 min)? [y/N] " CONFIRM
+  [[ "${CONFIRM}" =~ ^[Yy]$ ]] || { echo "Aborted."; exit 0; }
+fi
+
+# ── Phase 2: Full benchmark suite ─────────────────────────────────────────────
+echo ""
+echo "==> Phase 2: Full suite (15 sections × 60s)..."
+
+TMPFILE=$(mktemp /tmp/fio-vpc-block-XXXXXX.fio)
+trap 'rm -f "$PROBE_CONFIG" "$TMPFILE"' EXIT
+
+sed "s|PLACEHOLDER_DEVICE|${DEVICE}|g" "$FIO_BLOCK_CONFIG" > "$TMPFILE"
+
+$KC -n "$NS" cp "$TMPFILE" "${POD}:/tmp/fio-kv-block.fio"
+$KC -n "$NS" exec "$POD" -- \
+  fio /tmp/fio-kv-block.fio \
+    --output-format=json+ \
+    --output=/tmp/${RESULTS}
+
+echo "==> Transferring results..."
+"${SCRIPT_DIR}/transfer-large-file-chunked.sh" \
+  "${KUBECONFIG}" "$NS" "$POD" \
+  "/tmp/${RESULTS}" \
+  "${RESULTS_DIR}/${RESULTS}"
+
+# Collect PCP archives.
+if [ -n "$PCP_POD" ]; then
+  echo "==> Collecting PCP archives from ${PCP_POD}..."
+  ARCHIVE_NAME="pcp-fio-vpc-block-$(date +%Y%m%d-%H%M%S).tar.gz"
+  $KC -n "$NS" exec "$PCP_POD" -- \
+    bash -c "tar czf /tmp/${ARCHIVE_NAME} -C /var/log/pcp/pmlogger ."
+  "${SCRIPT_DIR}/transfer-large-file-chunked.sh" \
+    "${KUBECONFIG}" "$NS" "$PCP_POD" \
+    "/tmp/${ARCHIVE_NAME}" \
+    "${RESULTS_DIR}/${ARCHIVE_NAME}"
+  echo "    PCP archive: results/${ARCHIVE_NAME}"
+fi
+
+echo ""
+echo "Results: results/${RESULTS}  (probe: results/probe-vpc-block.json)"
+echo ""
+echo "p99 read latencies (j=16):"
+echo "  jq '[.jobs[] | select(.jobname | test(\"blk.*read-j16\")) | {job: .jobname, p99_ms: (.read.lat_ns.percentile[\"99.000000\"] / 1e6)}]' results/${RESULTS}"

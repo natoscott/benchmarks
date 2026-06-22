@@ -1,0 +1,15 @@
+# fio-bench image: Fedora with pre-built fio (includes http engine via libcurl)
+# and jq for result processing.
+#
+# Build and push to the OpenShift internal registry:
+#   NS=storage-offload-eval
+#   ROUTE=$(oc get route default-route -n openshift-image-registry -o jsonpath='{.spec.host}')
+#   oc registry login --skip-check
+#   podman build --platform=linux/amd64 \
+#     -t ${ROUTE}/${NS}/fio-bench:latest manifests/
+#   podman push ${ROUTE}/${NS}/fio-bench:latest
+#
+# Then update fio-pod.yaml image to:
+#   image-registry.openshift-image-registry.svc:5000/${NS}/fio-bench:latest
+FROM registry.fedoraproject.org/fedora:latest
+RUN dnf install -y fio jq && dnf clean all
