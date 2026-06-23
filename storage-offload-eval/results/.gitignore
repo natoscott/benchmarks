@@ -1,0 +1,9 @@
+# Allow only compressed archives and FIO JSON/log results.
+# Raw pmlogger files (*.meta, *.index, *.0, *.1, ...) must never be committed.
+*
+!.gitignore
+!*.tar.gz
+!*.tar.xz
+!*.tar.zst
+!*.json
+!*.log
