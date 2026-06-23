@@ -99,7 +99,8 @@ if [ -n "$PCP_POD" ]; then
   "${TRANSFER}" \
     "${KUBECONFIG}" "$POD_NS" "$PCP_POD" \
     "/tmp/${ARCHIVE_NAME}" \
-    "${RESULTS_DIR}/${ARCHIVE_NAME}"
+    "${RESULTS_DIR}/${ARCHIVE_NAME}" \
+    $((4 * 1024 * 1024))
   echo "    PCP archive: results/${ARCHIVE_NAME}"
 fi
 

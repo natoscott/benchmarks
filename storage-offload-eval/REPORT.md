@@ -194,15 +194,26 @@ jq '[.jobs[] | select(.jobname | test("read-j16"))
 - `*-write-j16`: eviction throughput; rarely the bottleneck in practice
 - `*-mixed-j16`: 75/25 read/write mix; use for workloads where eviction and restoration overlap
 
-### Latency targets
+### Latency reference points
 
-| p99 read latency (j=16) | Recommendation |
+The p99 read latency at j=16 is a cold-cache-hit latency. Whether that latency is
+acceptable depends entirely on the serving workload — specifically, how it compares
+to the cost of recomputing the same prefix without the cached KV blocks.
+
+Recomputation cost scales with context length and model size. A tier that is
+"too slow" for short-context serving may be highly effective for long-context
+workloads where recomputation is measured in seconds.
+
+| p99 read latency (j=16) | Context: when offload adds value |
 |---|---|
-| < 5 ms | **Excellent** — fs offload recommended for all workloads |
-| 5–20 ms | **Good** — beneficial for long-context; validate at target concurrency |
-| 20–50 ms | **Acceptable** — worthwhile where recompute cost exceeds 50 ms |
-| 50–200 ms | **Marginal** — CPU offload likely better except for very long prefills |
-| > 200 ms | **Avoid** — fs offload will increase TTFT; use CPU offload only |
+| < 5 ms | Any workload; overhead negligible relative to TTFT |
+| 5–20 ms | Long-context (≥1K tokens); compare against prefill time |
+| 20–100 ms | Beneficial where prefill cost exceeds this latency — typical for 8K+ contexts |
+| 100–500 ms | Worthwhile for very long contexts (32K+) where recompute takes seconds |
+| > 500 ms | Only beneficial for very large models / extremely long contexts |
+
+These are reference points, not pass/fail criteria. Measure recomputation cost for
+your specific model and context distribution before drawing conclusions.
 
 ---
 

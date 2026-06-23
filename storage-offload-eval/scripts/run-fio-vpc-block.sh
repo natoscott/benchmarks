@@ -102,9 +102,15 @@ jq -r '
 ' "${RESULTS_DIR}/probe-vpc-block.json"
 
 echo ""
-echo "  Expected for ibmc-vpc-block-10iops-tier (SSD-backed):"
-echo "    write p50 < 1ms,  read p50 < 1ms"
-echo "  If write p50 > 5ms the device may be spinning disk — do not proceed."
+echo "  Storage class indicators (read bandwidth is the reliable discriminator):"
+echo "    Local NVMe:           read bw ~3-7 GB/s,   write/read p50 < 1ms"
+echo "    Network-attached SSD: read bw 300-800 MB/s, write/read p50 5-20ms (network RTT)"
+echo "    HDD:                  read bw < 200 MB/s,   p50 > 5ms"
+echo ""
+echo "  NOTE: latency alone does not determine usefulness for KV cache offload."
+echo "  The relevant comparison is cache-hit latency vs prefix recomputation cost,"
+echo "  which scales with context length and model size. Even high-latency tiers"
+echo "  can be beneficial for long-context workloads."
 
 if [ -z "$SKIP_CONFIRM" ]; then
   echo ""
@@ -142,7 +148,8 @@ if [ -n "$PCP_POD" ]; then
   "${TRANSFER}" \
     "${KUBECONFIG}" "$NS" "$PCP_POD" \
     "/tmp/${ARCHIVE_NAME}" \
-    "${RESULTS_DIR}/${ARCHIVE_NAME}"
+    "${RESULTS_DIR}/${ARCHIVE_NAME}" \
+    $((4 * 1024 * 1024))
   echo "    PCP archive: results/${ARCHIVE_NAME}"
 fi
 

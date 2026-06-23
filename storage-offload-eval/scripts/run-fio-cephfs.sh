@@ -35,6 +35,9 @@ fi
 echo "==> Copying FIO config to ${POD}..."
 $KC -n "$NS" cp "$FIO_CONFIG" "${POD}:/tmp/fio-kv.fio"
 
+# Marker file in PCP pod: only archive files created after this point.
+$KC -n "$NS" exec "$PCP_POD" -- touch /tmp/fio-start-marker 2>/dev/null || true
+
 echo "==> Running FIO against CephFS (/mnt/cephfs)..."
 $KC -n "$NS" exec "$POD" -- \
   fio /tmp/fio-kv.fio \
@@ -55,11 +58,13 @@ if [ -n "$PCP_POD" ]; then
   echo "==> Collecting PCP archives from ${PCP_POD}..."
   ARCHIVE_NAME="pcp-fio-cephfs-$(date +%Y%m%d-%H%M%S).tar.gz"
   $KC -n "$NS" exec "$PCP_POD" -- \
-    bash -c "tar czf /tmp/${ARCHIVE_NAME} --ignore-failed-read -C /var/log/pcp/pmlogger ."
+    bash -c "find /var/log/pcp/pmlogger -newer /tmp/fio-start-marker | \
+      tar czf /tmp/${ARCHIVE_NAME} --ignore-failed-read -T - 2>/dev/null; true"
   "${TRANSFER}" \
     "${KUBECONFIG}" "$NS" "$PCP_POD" \
     "/tmp/${ARCHIVE_NAME}" \
-    "${RESULTS_DIR}/${ARCHIVE_NAME}"
+    "${RESULTS_DIR}/${ARCHIVE_NAME}" \
+    $((4 * 1024 * 1024))
   echo "    PCP archive: results/${ARCHIVE_NAME}"
 fi
 
