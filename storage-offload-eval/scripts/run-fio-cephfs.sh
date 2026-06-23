@@ -64,7 +64,7 @@ echo "==> Copying FIO config to ${POD}..."
 $KC -n "$NS" cp "$FIO_CONFIG" "${POD}:/tmp/fio-kv.fio"
 mkdir -p "$RESULTS_DIR"
 
-FIO_START=$(date "+%Y-%m-%d %H:%M:%S")
+FIO_START=$(date -u "+%Y-%m-%d %H:%M:%S")
 
 # ── Phase 1: Writes ───────────────────────────────────────────────────────────
 echo ""
@@ -87,12 +87,20 @@ sleep 10
 # ── Phase 2: Reads + mixed ────────────────────────────────────────────────────
 echo ""
 echo "==> Phase 2: Read + mixed sections (cold reads from VPC block)..."
-$KC -n "$NS" exec "$POD" -- \
-  fio /tmp/fio-kv.fio \
-    --directory=/mnt/cephfs \
-    "${READ_SECTIONS[@]}" \
-    --output-format=json+ \
-    --output=/tmp/reads-cephfs.json
+for attempt in 1 2 3; do
+  $KC -n "$NS" exec "$POD" -- \
+    fio /tmp/fio-kv.fio \
+      --directory=/mnt/cephfs \
+      "${READ_SECTIONS[@]}" \
+      --output-format=json+ \
+      --output=/tmp/reads-cephfs.json || true
+  JSON_SIZE=$($KC -n "$NS" exec "$POD" -- stat -c '%s' /tmp/reads-cephfs.json 2>/dev/null || echo 0)
+  [ "$JSON_SIZE" -gt 0 ] && break
+  echo "  WARNING: empty output on attempt ${attempt}/3, retrying..."
+  sleep 5
+done
+[ "$($KC -n "$NS" exec "$POD" -- stat -c '%s' /tmp/reads-cephfs.json 2>/dev/null || echo 0)" -gt 0 ] || \
+  { echo "ERROR: fio Phase 2 produced no output after 3 attempts"; exit 1; }
 
 # ── Merge and transfer ────────────────────────────────────────────────────────
 echo ""
@@ -110,7 +118,7 @@ json.dump(w, sys.stdout)
   "${KUBECONFIG:?KUBECONFIG must be set}" \
   "$NS" "$POD" "/tmp/${RESULTS}" "${RESULTS_DIR}/${RESULTS}"
 
-FIO_END=$(date "+%Y-%m-%d %H:%M:%S")
+FIO_END=$(date -u "+%Y-%m-%d %H:%M:%S")
 
 # ── PCP extracts — focused metrics, FIO window only, one per node ─────────────
 # Full archives remain on node hostPath (/var/log/pcp/pmlogger) for later use.

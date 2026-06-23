@@ -87,7 +87,7 @@ echo "==> Copying FIO config to ${POD}..."
 $KC -n "$POD_NS" cp "$TMPFILE" "${POD}:/tmp/fio-kv-s3.fio"
 mkdir -p "$RESULTS_DIR"
 
-FIO_START=$(date "+%Y-%m-%d %H:%M:%S")
+FIO_START=$(date -u "+%Y-%m-%d %H:%M:%S")
 
 # ── Phase 1: Writes ───────────────────────────────────────────────────────────
 echo ""
@@ -131,7 +131,7 @@ json.dump(w, sys.stdout)
   "${KUBECONFIG:?KUBECONFIG must be set}" \
   "$POD_NS" "$POD" "/tmp/${RESULTS}" "${RESULTS_DIR}/${RESULTS}"
 
-FIO_END=$(date "+%Y-%m-%d %H:%M:%S")
+FIO_END=$(date -u "+%Y-%m-%d %H:%M:%S")
 
 # ── PCP extracts — focused metrics, FIO window only, one per node ─────────────
 if [ -n "$PCP_PODS" ]; then

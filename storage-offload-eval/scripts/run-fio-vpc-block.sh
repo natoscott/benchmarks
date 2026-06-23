@@ -117,7 +117,7 @@ if [ -z "$SKIP_CONFIRM" ]; then
   [[ "${CONFIRM}" =~ ^[Yy]$ ]] || { echo "Aborted."; exit 0; }
 fi
 
-FIO_START=$(date "+%Y-%m-%d %H:%M:%S")
+FIO_START=$(date -u "+%Y-%m-%d %H:%M:%S")
 
 # ── Phase 2: Full benchmark suite ─────────────────────────────────────────────
 echo ""
@@ -140,7 +140,7 @@ echo "==> Transferring results..."
   "/tmp/${RESULTS}" \
   "${RESULTS_DIR}/${RESULTS}"
 
-FIO_END=$(date "+%Y-%m-%d %H:%M:%S")
+FIO_END=$(date -u "+%Y-%m-%d %H:%M:%S")
 
 # ── PCP extracts — focused metrics, FIO window only, one per node ─────────────
 if [ -n "$PCP_PODS" ]; then
