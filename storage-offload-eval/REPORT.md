@@ -7,7 +7,7 @@ characterised using fio I/O patterns matching the vLLM KV cache connector.
 
 KV cache block restoration — read p50 / p99 at j=16 (ms):
 
-| Model (bs) | NVMe ref¹ | VPC block | CephFS | RGW/S3 |
+| Model (block size) | NVMe ref¹ | VPC block | CephFS | RGW/S3 |
 |---|---|---|---|---|
 | Qwen3-8B (2304k) | 1.4 / 2.3 | 48 / 49 | 173 / 259 | 98 / 451 |
 | gpt-120b (1152k) | 2.7 / 4.0 | 24 / 25 | 88 / 108 | 57 / 144 |
@@ -15,7 +15,7 @@ KV cache block restoration — read p50 / p99 at j=16 (ms):
 
 KV cache block eviction — write p50 / p99 at j=16 (ms):
 
-| Model (bs) | NVMe ref¹ | VPC block | CephFS | RGW/S3 |
+| Model (block size) | NVMe ref¹ | VPC block | CephFS | RGW/S3 |
 |---|---|---|---|---|
 | Qwen3-8B (2304k) | 6.6 / 11.6 | 146 / 244 | 171 / 271 | 202 / 438 |
 | gpt-120b (1152k) | 3.3 / 4.8 | 35 / 135 | 87 / 163 | 96 / 196 |
@@ -138,7 +138,7 @@ page cache. An atomic `rename()` commits the file after write.
 
 Block sizes are the actual GPU KV block sizes per server, per model family:
 
-| Test name | `bs` | Target model |
+| Test name | Block size | Target model |
 |---|---|---|
 | `kv-fp8-70b` | 5m | FP8-70B, BF16-70B (TP=2) |
 | `kv-gpt120b` | 1152k | gpt-oss-120b (TP=2) |
