@@ -1,0 +1,122 @@
+# PCP DaemonSet for storage benchmark analysis.
+# Runs one PCP pod per GPU worker (where Ceph OSDs are co-located), giving
+# per-node kernel metrics (disk, net, cpu, mem) and Ceph openmetrics for
+# each OSD node throughout FIO runs.
+#
+# Targets nvidia.com/gpu.present=true nodes — the two GPU workers hosting
+# OSD 0 and OSD 1. Tolerates the GPU taint so it schedules there.
+#
+# Supersedes pcp-deployment.yaml (single pod, single node).
+#
+# Deploy before starting any FIO run:
+#   kubectl apply -f manifests/openmetrics-configmap.yaml
+#   kubectl apply -f manifests/pcp-serviceaccount.yaml
+#   kubectl apply -f manifests/pcp-daemonset.yaml
+#   kubectl rollout status daemonset/pcp -n storage-offload-eval
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: pcp
+  namespace: storage-offload-eval
+  labels:
+    app.kubernetes.io/name: pcp
+    app.kubernetes.io/instance: pcp
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: pcp
+      app.kubernetes.io/instance: pcp
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: pcp
+        app.kubernetes.io/instance: pcp
+        app: pcp
+        name: pcp
+    spec:
+      serviceAccountName: pcp
+      nodeSelector:
+        nvidia.com/gpu.present: "true"
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+      terminationGracePeriodSeconds: 15
+      containers:
+        - name: pcp
+          image: ghcr.io/performancecopilot/pcp:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/bash
+            - -c
+            - |
+              sed -i 's/PMCD_LOCAL=1/PMCD_LOCAL=0/' /etc/sysconfig/pmcd
+              sed -i 's/# PMPROXY_LOCAL=1/PMPROXY_LOCAL=0/' /etc/sysconfig/pmproxy
+              exec /usr/bin/container-entrypoint /usr/sbin/init
+          env:
+            - name: PCP_DOMAIN_AGENTS
+              value: openmetrics
+            - name: PCP_SERVICES
+              value: pmcd,pmlogger,pmproxy
+          ports:
+            - name: pmcd-port
+              containerPort: 44321
+              protocol: TCP
+            - name: pmproxy-port
+              containerPort: 44322
+              protocol: TCP
+          readinessProbe:
+            tcpSocket:
+              port: pmcd-port
+            initialDelaySeconds: 15
+            periodSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            exec:
+              command: [/bin/bash, -c, "systemctl is-active pmcd"]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 3
+          securityContext:
+            privileged: true
+            allowPrivilegeEscalation: true
+            runAsNonRoot: false
+            seccompProfile:
+              type: Unconfined
+          volumeMounts:
+            - name: openmetrics-pmlogconf
+              mountPath: /var/lib/pcp/config/pmlogconf/openmetrics
+              readOnly: true
+            - name: openmetrics-pmda
+              mountPath: /var/lib/pcp/pmdas/openmetrics/config.d/ceph_mgr.url
+              subPath: ceph_mgr.url
+              readOnly: true
+            - name: openmetrics-pmda
+              mountPath: /var/lib/pcp/pmdas/openmetrics/config.d/ceph_exporter.url
+              subPath: ceph_exporter.url
+              readOnly: true
+            - name: pmlogger-storage
+              mountPath: /var/log/pcp/pmlogger
+            - name: pmproxy-storage
+              mountPath: /var/log/pcp/pmproxy
+      volumes:
+        - name: openmetrics-pmlogconf
+          configMap:
+            name: openmetrics-pmlogconf-configmap
+        - name: openmetrics-pmda
+          configMap:
+            name: openmetrics-pmda-configmap
+            defaultMode: 0644
+        - name: pmlogger-storage
+          hostPath:
+            path: /var/log/pcp/pmlogger
+            type: DirectoryOrCreate
+        - name: pmproxy-storage
+          hostPath:
+            path: /var/log/pcp/pmproxy
+            type: DirectoryOrCreate

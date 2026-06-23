@@ -34,15 +34,14 @@ RESULTS="${RESULTS:-results-vpc-block.json}"
 DEVICE="/dev/vpc-block"
 SKIP_CONFIRM="${SKIP_CONFIRM:-}"
 
-# Locate PCP pod.
-PCP_POD=$($KC -n "$NS" get pods -l app=pcp --field-selector=status.phase=Running \
-  -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
-if [ -z "$PCP_POD" ]; then
-  echo "WARNING: No running PCP pod found in ${NS}."
-  echo "  Deploy manifests/pcp-serviceaccount.yaml + manifests/pcp-deployment.yaml before benchmarking."
-else
-  echo "==> PCP pod: ${PCP_POD} (collecting system metrics)"
-fi
+# ── Restart PCP DaemonSet for clean archives ─────────────────────────────────
+echo "==> Restarting PCP DaemonSet for clean archives..."
+$KC -n "$NS" rollout restart daemonset/pcp 2>/dev/null
+$KC -n "$NS" rollout status daemonset/pcp --timeout=120s 2>/dev/null
+PCP_PODS=$($KC -n "$NS" get pods -l app=pcp --field-selector=status.phase=Running \
+  -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || true)
+[ -z "$PCP_PODS" ] && echo "WARNING: No PCP pods ready — continuing without metrics collection."
+[ -n "$PCP_PODS" ] && echo "==> PCP pods: ${PCP_PODS}"
 
 mkdir -p "$RESULTS_DIR"
 
@@ -139,18 +138,20 @@ echo "==> Transferring results..."
   "/tmp/${RESULTS}" \
   "${RESULTS_DIR}/${RESULTS}"
 
-# Collect PCP archives.
-if [ -n "$PCP_POD" ]; then
-  echo "==> Collecting PCP archives from ${PCP_POD}..."
-  ARCHIVE_NAME="pcp-fio-vpc-block-$(date +%Y%m%d-%H%M%S).tar.gz"
-  $KC -n "$NS" exec "$PCP_POD" -- \
-    bash -c "tar czf /tmp/${ARCHIVE_NAME} --ignore-failed-read -C /var/log/pcp/pmlogger ."
-  "${TRANSFER}" \
-    "${KUBECONFIG}" "$NS" "$PCP_POD" \
-    "/tmp/${ARCHIVE_NAME}" \
-    "${RESULTS_DIR}/${ARCHIVE_NAME}" \
-    $((4 * 1024 * 1024))
-  echo "    PCP archive: results/${ARCHIVE_NAME}"
+# ── PCP archives — one per node ───────────────────────────────────────────────
+if [ -n "$PCP_PODS" ]; then
+  ARCHIVE_TS=$(date +%Y%m%d-%H%M%S)
+  for PCP_POD in $PCP_PODS; do
+    NODE=$($KC -n "$NS" get pod "$PCP_POD" -o jsonpath='{.spec.nodeName}' 2>/dev/null | \
+      awk -F- '{print $(NF-1)"-"$NF}')
+    ARCHIVE_NAME="pcp-fio-vpc-block-${NODE}-${ARCHIVE_TS}.tar.gz"
+    echo "==> Collecting PCP archive from ${PCP_POD} (${NODE})..."
+    $KC -n "$NS" exec "$PCP_POD" -- \
+      bash -c "tar czf /tmp/${ARCHIVE_NAME} --ignore-failed-read -C /var/log/pcp/pmlogger . 2>/dev/null; true"
+    "${TRANSFER}" "${KUBECONFIG}" "$NS" "$PCP_POD" \
+      "/tmp/${ARCHIVE_NAME}" "${RESULTS_DIR}/${ARCHIVE_NAME}" $((4 * 1024 * 1024))
+    echo "    PCP archive: results/${ARCHIVE_NAME}"
+  done
 fi
 
 echo ""
