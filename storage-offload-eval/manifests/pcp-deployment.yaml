@@ -1,10 +1,11 @@
 # PCP (Performance Co-Pilot) collector for storage benchmark analysis.
-# Co-locates with fio-pod via podAffinity. Captures:
-#   - Kernel PMDAs: disk, network, cpu, memory on the benchmark node
-#   - openmetrics PMDA: Ceph cluster metrics + ODF metrics via three endpoints:
-#       ceph-mgr:9283       — OSD I/O, pool stats, RGW rates (HTTP, no auth)
-#       ceph-exporter:9926  — per-node Ceph perf counters (HTTP, no auth)
-#       ocs-metrics-exporter:8443 — ODF capacity/health (HTTPS, SA token auth)
+# Co-locates with fio-pod (via podAffinity) to capture disk, network, CPU,
+# and memory metrics on the benchmark node throughout each FIO run.
+#
+# Also captures Ceph/ODF metrics via the openmetrics PMDA:
+#   ceph-mgr:9283       — Ceph cluster metrics (OSD I/O, pool stats, RGW rates,
+#                         BlueStore cache hit/miss, cluster health)
+#   ceph-exporter:9926  — per-OSD and per-node Ceph perf counters
 #
 # Deploy before starting any FIO run:
 #   kubectl apply -f manifests/openmetrics-configmap.yaml
@@ -60,17 +61,19 @@ spec:
             - -c
             - |
               sed -i 's/PMCD_LOCAL=1/PMCD_LOCAL=0/' /etc/sysconfig/pmcd
-              # Make the ocs.sh fetch script executable (ConfigMap mounts are not +x).
-              chmod +x /var/lib/pcp/pmdas/openmetrics/config.d/ocs.sh 2>/dev/null || true
+              sed -i 's/# PMPROXY_LOCAL=1/PMPROXY_LOCAL=0/' /etc/sysconfig/pmproxy
               exec /usr/bin/container-entrypoint /usr/sbin/init
           env:
             - name: PCP_DOMAIN_AGENTS
               value: openmetrics
             - name: PCP_SERVICES
-              value: pmcd,pmlogger
+              value: pmcd,pmlogger,pmproxy
           ports:
             - name: pmcd-port
               containerPort: 44321
+              protocol: TCP
+            - name: pmproxy-port
+              containerPort: 44322
               protocol: TCP
           readinessProbe:
             tcpSocket:
@@ -95,9 +98,17 @@ spec:
               mountPath: /var/lib/pcp/config/pmlogconf/openmetrics
               readOnly: true
             - name: openmetrics-pmda
-              mountPath: /var/lib/pcp/pmdas/openmetrics/config.d
+              mountPath: /var/lib/pcp/pmdas/openmetrics/config.d/ceph_mgr.url
+              subPath: ceph_mgr.url
+              readOnly: true
+            - name: openmetrics-pmda
+              mountPath: /var/lib/pcp/pmdas/openmetrics/config.d/ceph_exporter.url
+              subPath: ceph_exporter.url
+              readOnly: true
             - name: pmlogger-storage
               mountPath: /var/log/pcp/pmlogger
+            - name: pmproxy-storage
+              mountPath: /var/log/pcp/pmproxy
       volumes:
         - name: openmetrics-pmlogconf
           configMap:
@@ -105,8 +116,12 @@ spec:
         - name: openmetrics-pmda
           configMap:
             name: openmetrics-pmda-configmap
-            defaultMode: 0755
+            defaultMode: 0644
         - name: pmlogger-storage
           hostPath:
             path: /var/log/pcp/pmlogger
+            type: DirectoryOrCreate
+        - name: pmproxy-storage
+          hostPath:
+            path: /var/log/pcp/pmproxy
             type: DirectoryOrCreate

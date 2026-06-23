@@ -1,13 +1,16 @@
-# PCP openmetrics PMDA configuration for storage benchmarking.
-# Three endpoints:
-#   ceph-mgr.url      — Ceph cluster metrics (HTTP, no auth): OSD I/O, pool stats, RGW rates
-#   ceph-exporter.url — per-node Ceph perf counters (HTTP, no auth)
-#   ocs.sh            — ODF-level metrics from ocs-metrics-exporter (HTTPS, SA token auth)
+# PCP openmetrics PMDA configuration for storage benchmark analysis.
 #
-# The .url files are fetched directly by the openmetrics PMDA.
-# The .sh script is executed; its stdout must be Prometheus text format.
-# ocs.sh uses the pod's automounted SA token; the SA must have cluster-monitoring-view
-# (see pcp-serviceaccount.yaml).
+# Two ConfigMaps:
+#   openmetrics-pmda-configmap    — .url files scraped by the openmetrics PMDA
+#   openmetrics-pmlogconf-configmap — pmlogconf directives telling pmlogger to log them
+#
+# Endpoints (plain HTTP, no auth required):
+#   ceph-mgr:9283     — Ceph cluster metrics: OSD I/O, pool throughput, RGW op rates,
+#                       BlueStore cache stats, cluster health
+#   ceph-exporter:9926 — per-OSD and per-node Ceph perf counters
+#
+# Metrics appear under openmetrics.ceph_mgr.* and openmetrics.ceph_exporter.*
+# (openmetrics PMDA derives the namespace from the .url filename, replacing - with _)
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -15,30 +18,14 @@ metadata:
   name: openmetrics-pmda-configmap
   namespace: storage-offload-eval
 data:
-  ceph-mgr.url: "http://rook-ceph-mgr.openshift-storage.svc:9283/metrics"
-  ceph-exporter.url: "http://rook-ceph-exporter.openshift-storage.svc:9926/metrics"
-  ocs.sh: |
-    #!/bin/bash
-    # Fetch ocs-metrics-exporter metrics using the pod's automounted SA token.
-    # -k skips TLS verification for the internal cluster endpoint; acceptable here
-    # because the connection never leaves the cluster network.
-    TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token 2>/dev/null)
-    if [ -z "$TOKEN" ]; then
-      echo "# ERROR: no SA token at /var/run/secrets/kubernetes.io/serviceaccount/token"
-      exit 0
-    fi
-    curl -sf -k \
-      -H "Authorization: Bearer ${TOKEN}" \
-      https://ocs-metrics-exporter.openshift-storage.svc:8443/metrics
+  ceph_mgr.url: "http://rook-ceph-mgr.openshift-storage.svc:9283/metrics"
+  ceph_exporter.url: "http://rook-ceph-exporter.openshift-storage.svc:9926/metrics"
 ---
-# pmlogger configuration: log all openmetrics metrics.
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: openmetrics-pmlogconf-configmap
   namespace: storage-offload-eval
 data:
-  storage: |
-    # Log all metrics from the openmetrics PMDA (ceph-mgr, ceph-exporter, ocs).
-    [openmetrics]
-    access = enquire
+  ceph_mgr: "#pmlogconf-setup 2.0\nident   Ceph cluster metrics (MGR Prometheus exporter)\nforce   include\n\topenmetrics.ceph_mgr\n"
+  ceph_exporter: "#pmlogconf-setup 2.0\nident   Ceph per-node perf counters (ceph-exporter)\nforce   include\n\topenmetrics.ceph_exporter\n"
