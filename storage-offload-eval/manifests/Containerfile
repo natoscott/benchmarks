@@ -12,4 +12,4 @@
 # Then update fio-pod.yaml image to:
 #   image-registry.openshift-image-registry.svc:5000/${NS}/fio-bench:latest
 FROM registry.fedoraproject.org/fedora:latest
-RUN dnf install -y fio jq && dnf clean all
+RUN dnf install -y fio jq util-linux && dnf clean all

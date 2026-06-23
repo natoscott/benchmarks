@@ -25,7 +25,7 @@ metadata:
 spec:
   containers:
     - name: fio
-      image: registry.fedoraproject.org/fedora:latest
+      image: image-registry.openshift-image-registry.svc:5000/storage-offload-eval/fio-bench:latest
       command: [sleep, infinity]
       resources:
         requests:

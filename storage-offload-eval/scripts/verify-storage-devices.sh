@@ -1,12 +1,19 @@
 #!/bin/bash
 # Verify storage device types across the fio test volume and Ceph OSD volumes.
 #
-# Checks the ROTA (rotational) flag for every relevant block device:
-#   ROTA=0 -> SSD / NVMe  (expected for ibmc-vpc-block-10iops-tier)
-#   ROTA=1 -> spinning disk (results are not comparable across different ROTA values)
+# Checks the ROTA (rotational) flag for every relevant block device and reports
+# the storage path (virtio vs NVMe vs dm).
 #
-# Run this before benchmarking and after Ceph is deployed. If any device shows
-# ROTA=1, investigate before proceeding — benchmark comparisons will be invalid.
+# NOTE ON VIRTIO BLOCK DEVICES (IBM VPC block):
+#   virtio-blk always reports ROTA=1 regardless of underlying media.
+#   IBM VPC block 10iops-tier volumes are SSD-backed but appear ROTA=1.
+#   ROTA=0 confirms NVMe (direct-attach); ROTA=1 is ambiguous in a VM.
+#   Use the FIO probe latency (run-fio-vpc-block.sh Phase 1) as the true
+#   storage characterisation — < 1ms write p50 confirms SSD regardless of ROTA.
+#
+# What to look for here: consistency — all VPC block volumes should appear
+# as virtio (vd*) devices with the same ROTA value, confirming they are from
+# the same storage subsystem and are comparable to each other.
 #
 # USAGE:
 #   KUBECONFIG=/path/to/kubeconfig ./scripts/verify-storage-devices.sh
