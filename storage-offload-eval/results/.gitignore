@@ -2,8 +2,10 @@
 # Raw pmlogger files (*.meta, *.index, *.0, *.1, ...) must never be committed.
 *
 !.gitignore
+!.gitattributes
 !*.tar.gz
 !*.tar.xz
 !*.tar.zst
 !*.json
 !*.log
+!*.png
