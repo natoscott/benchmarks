@@ -13,6 +13,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TRANSFER="${SCRIPT_DIR}/../../scripts/transfer-large-file-chunked.sh"
 FIO_CONFIG="${SCRIPT_DIR}/../fio/fio-kv.fio"
 RESULTS_DIR="${SCRIPT_DIR}/../results"
 
@@ -43,7 +44,7 @@ $KC -n "$NS" exec "$POD" -- \
 
 echo "==> Transferring FIO results..."
 mkdir -p "$RESULTS_DIR"
-"${SCRIPT_DIR}/transfer-large-file-chunked.sh" \
+"${TRANSFER}" \
   "${KUBECONFIG:?KUBECONFIG must be set}" \
   "$NS" "$POD" \
   "/tmp/${RESULTS}" \
@@ -54,8 +55,8 @@ if [ -n "$PCP_POD" ]; then
   echo "==> Collecting PCP archives from ${PCP_POD}..."
   ARCHIVE_NAME="pcp-fio-cephfs-$(date +%Y%m%d-%H%M%S).tar.gz"
   $KC -n "$NS" exec "$PCP_POD" -- \
-    bash -c "tar czf /tmp/${ARCHIVE_NAME} -C /var/log/pcp/pmlogger ."
-  "${SCRIPT_DIR}/transfer-large-file-chunked.sh" \
+    bash -c "tar czf /tmp/${ARCHIVE_NAME} --ignore-failed-read -C /var/log/pcp/pmlogger ."
+  "${TRANSFER}" \
     "${KUBECONFIG}" "$NS" "$PCP_POD" \
     "/tmp/${ARCHIVE_NAME}" \
     "${RESULTS_DIR}/${ARCHIVE_NAME}"
