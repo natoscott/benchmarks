@@ -1,2 +1,1 @@
-# Override repo-level LFS rule: figures are small and needed inline in the report.
-*.png -filter -diff -merge -text
+# Results directory: no overrides needed (figures are in analysis/).

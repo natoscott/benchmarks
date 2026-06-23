@@ -2,37 +2,23 @@
 
 ## TL;DR
 
-Three cold-tier storage backends were characterised on IBM VPC block (10 IOPS/GB tier)
-using fio I/O patterns derived from the vLLM KV cache filesystem connector:
-`O_DIRECT`, one I/O per GPU KV block, 16 concurrent threads. The Ceph OSD BlueStore
-cache was dropped between write and read phases to measure cold-storage read latency.
+Three Ceph cold-tier backends on IBM VPC block (network-attached SSD) were
+characterised using fio I/O patterns matching the vLLM KV cache connector.
+Read p99 at j=16 — the restoration latency added to TTFT on a cold cache hit:
 
-**Read p99 at j=16 — KV cache restoration latency:**
-
-| Model (bs) | NVMe ref | VPC block | CephFS | RGW/S3 |
+| Model (bs) | NVMe ref¹ | VPC block | CephFS | RGW/S3 |
 |---|---|---|---|---|
 | Qwen3-8B (2304k) | 2.3 ms | 49 ms | 259 ms | 451 ms |
 | gpt-120b (1152k) | 4.0 ms | 25 ms | 108 ms | 144 ms |
 | FP8-70B (5m) | 14.1 ms | 109 ms | 451 ms | 1,133 ms |
 
-NVMe reference is from a single locally-attached PCIe Gen 4 NVMe on a separate cluster.
-VPC block, CephFS, and RGW numbers are from this cluster (IBM VPC, network-attached SSD).
+¹ Separate cluster, single locally-attached PCIe Gen 4 NVMe.
 
-**Read bandwidth at j=16:** VPC block reads saturate at 762 MB/s regardless of block size.
-CephFS and RGW both cap at ~200–270 MB/s independent of block size.
-
-**Kernel CPU overhead (sys ms/s mean, j=16 run):** VPC block: 301 ms/s (both nodes).
-CephFS: 360 ms/s (fio node), 460 ms/s (OSD-serving node). RGW: 499 ms/s (fio node),
-633 ms/s (OSD-serving node).
-
-**PCP system metrics** confirmed cold-cache reads reached disk on OSD 1 (k6qsd):
-215 MB/s peak (CephFS) and 284 MB/s peak (RGW). OSD 0 (co-located with fio-pod)
-showed zero disk reads throughout both Ceph backend runs — all data reads were served
-by OSD 1, consistent with CRUSH placement distributing objects to OSD 1.
-
-The relevant comparison for KV cache offload usefulness is cold-cache read p99 versus
-the cost of prefix recomputation for the target workload and context length — see
-[Latency reference points](#latency-reference-points) below.
+VPC block reads saturate at 762 MB/s regardless of block size — the device bandwidth
+ceiling. CephFS and RGW both cap at ~200–270 MB/s across all block sizes. RGW p50
+latency is competitive with VPC block; the p99 tail under 16-job concurrent load is
+3–10× higher. PCP disk I/O metrics confirmed cold-cache reads reached physical storage
+on OSD 1 across both Ceph backends.
 
 ---
 
@@ -356,9 +342,9 @@ NVMe reference is from a single Micron 7450 PCIe Gen 4 NVMe on a separate cluste
 | | CephFS | 633 ms | 228 MB/s | 392 ms | 451 ms | 203 MB/s | 489 ms |
 | | RGW | 1,250 ms | 190 MB/s | 209 ms | 1,133 ms | 269 MB/s | — |
 
-![Read p99 latency comparison](results/fig-read-p99-comparison.png)
+![Read p99 latency comparison](analysis/fig-read-p99-comparison.png)
 
-![Read bandwidth and CPU overhead](results/fig-bandwidth-cpu.png)
+![Read bandwidth and CPU overhead](analysis/fig-bandwidth-cpu.png)
 
 ### Observations from FIO results
 
