@@ -1,2 +1,2 @@
 # Override repo-level LFS rule: figures are small and needed inline in the report.
-*.png -filter -diff -merge text
+*.png -filter -diff -merge -text
