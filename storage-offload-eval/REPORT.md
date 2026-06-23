@@ -6,11 +6,13 @@ Three Ceph cold-tier backends on IBM VPC block (network-attached SSD) were
 characterised using fio I/O patterns matching the vLLM KV cache connector.
 Read p99 at j=16 — the restoration latency added to TTFT on a cold cache hit:
 
+p50 / p99 at j=16 (ms):
+
 | Model (bs) | NVMe ref¹ | VPC block | CephFS | RGW/S3 |
 |---|---|---|---|---|
-| Qwen3-8B (2304k) | 2.3 ms | 49 ms | 259 ms | 451 ms |
-| gpt-120b (1152k) | 4.0 ms | 25 ms | 108 ms | 144 ms |
-| FP8-70B (5m) | 14.1 ms | 109 ms | 451 ms | 1,133 ms |
+| Qwen3-8B (2304k) | 1.4 / 2.3 | 48 / 49 | 173 / 259 | 98 / 451 |
+| gpt-120b (1152k) | 2.7 / 4.0 | 24 / 25 | 88 / 108 | 57 / 144 |
+| FP8-70B (5m) | 12.1 / 14.1 | 106 / 109 | 392 / 451 | 209 / 1,133 |
 
 ¹ Separate cluster, single locally-attached PCIe Gen 4 NVMe.
 
