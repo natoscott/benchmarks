@@ -296,14 +296,101 @@ single-drive performance.
 **Single-thread latency is sub-millisecond for all block sizes** — a single GPU KV
 block load completes in 0.1–1.1 ms. The drive sustains 4.8–5.3 GB/s per file write.
 
-**At j=16 read p99:** Qwen3-8B 2.3 ms (Excellent), gpt-oss-120b 4.0 ms (Excellent),
-FP8-70B 14.1 ms (Good). Smaller block sizes benefit from higher IOPS.
+**At j=16 read p99:** Qwen3-8B 2.3 ms, gpt-oss-120b 4.0 ms, FP8-70B 14.1 ms.
+Smaller block sizes benefit from higher IOPS at a given bandwidth.
 
-**Mixed RW at j=16 (75% read / 25% write) p99 read:** Qwen3-8B 12.3 ms (Good),
-gpt-oss-120b 8.0 ms (Good), FP8-70B 41.7 ms (Acceptable). Simultaneous eviction and
-restoration at full concurrency. For FP8-70B under mixed load on a single NVMe drive,
-consider CPU offload for latency-critical short-context serving.
+**Mixed RW at j=16 (75% read / 25% write) p99 read:** Qwen3-8B 12.3 ms,
+gpt-oss-120b 8.0 ms, FP8-70B 41.7 ms. Simultaneous eviction and restoration at
+full concurrency elevates read latency ~3–5× vs pure read for the two larger models.
 
+
+---
+
+## Results: Ceph Cold Tier — IBM VPC Block Storage
+
+### Test environment
+
+- **Cluster:** OpenShift 4.20 on IBM VPC
+- **Storage:** 2× IBM VPC block 10iops-tier, 4Ti each, as Ceph OSDs (size:1 pools)
+- **fio-pod:** GPU worker node (H200), co-located with OSD 0 on same IBM VPC storage fabric
+- **PCP:** co-located with fio-pod, collecting kernel PMDAs + Ceph openmetrics throughout each run
+- **fio version:** 3.40
+- **Backends:** IBM VPC block (raw, no filesystem), CephFS (kvcache-fs, size:1), Ceph RGW/S3 (kvcache-store, size:1)
+
+All Ceph pools use `size:1` — single replica, no redundancy. Data loss equals a
+cache miss, which is acceptable for a cold KV cache tier.
+
+### VPC block device probe (j=1, bs=5m)
+
+A 30-second j=1 probe at the FP8-70B block size characterises the raw device
+before the full suite. Results shown with and without concurrent Ceph OSD I/O
+on the same IBM VPC fabric.
+
+| Condition | write p50 | write p99 | write BW | read p50 | read p99 | read BW |
+|---|---|---|---|---|---|---|
+| With OSD I/O | 14.9 ms | 88.6 ms | 197 MB/s | 6.6 ms | 7.9 ms | 775 MB/s |
+| Without OSD I/O | 10.4 ms | 24.3 ms | 440 MB/s | 6.7 ms | 7.8 ms | 775 MB/s |
+
+Read bandwidth (775 MB/s) is consistent across both runs. Write bandwidth varies
+with concurrent OSD I/O load on the shared fabric.
+
+### j=16 results — KV cache restoration (primary metric: read p99)
+
+The NVMe reference row is from a single Micron 7450 PCIe Gen 4 NVMe on a
+separate cluster (see [Results: Single PCIe Gen 4 NVMe / XFS](#results-single-pcie-gen-4-nvme--xfs)).
+No mixed section for RGW — randrw has no defined semantics for S3 objects.
+
+| Model | Backend | write p99 | write BW | read p50 | read p99 | read BW | mixed rd p99 |
+|---|---|---|---|---|---|---|---|
+| **Qwen3-8B** | NVMe (ref) | 11.6 ms | 4,830 MB/s | 1.4 ms | 2.3 ms | 6,227 MB/s | 12.3 ms |
+| bs=2304k | VPC block | 244 ms | 240 MB/s | 48 ms | 49 ms | 762 MB/s | 105 ms |
+| | CephFS | 271 ms | 212 MB/s | 125 ms | 190 ms | 281 MB/s | 194 ms |
+| | RGW | 468 ms | 186 MB/s | 49 ms | 784 ms | 328 MB/s | — |
+| **gpt-oss-120b** | NVMe (ref) | 4.8 ms | 5,278 MB/s | 2.7 ms | 4.0 ms | 6,603 MB/s | 8.0 ms |
+| bs=1152k | VPC block | 140 ms | 312 MB/s | 24 ms | 25 ms | 762 MB/s | 64 ms |
+| | CephFS | 124 ms | 228 MB/s | 65 ms | 91 ms | 275 MB/s | 88 ms |
+| | RGW | 184 ms | 202 MB/s | 55 ms | 134 ms | 315 MB/s | — |
+| **FP8-70B** | NVMe (ref) | 21.9 ms | 5,274 MB/s | 12.1 ms | 14.1 ms | 6,919 MB/s | 41.7 ms |
+| bs=5m | VPC block | 468 ms | 269 MB/s | 106 ms | 109 ms | 763 MB/s | 198 ms |
+| | CephFS | 522 ms | 227 MB/s | 287 ms | 354 ms | 272 MB/s | 392 ms |
+| | RGW | 1,216 ms | 232 MB/s | 99 ms | 1,044 ms | 336 MB/s | — |
+
+### Observations
+
+**VPC block reads saturate at ~762 MB/s regardless of block size.**
+At j=16, IBM VPC block 10iops-tier hits a consistent read throughput ceiling.
+Read latency scales proportionally with block size at this bandwidth: gpt-120b
+(1152k) at 25ms, Qwen3-8B (2304k) at 49ms, FP8-70B (5m) at 109ms — ratios
+match the block size ratios 1:2:4.3.
+
+**CephFS read bandwidth is ~64% lower than VPC block at j=16.**
+VPC block reads at ~762 MB/s; CephFS reads at ~275 MB/s across all three block
+sizes. Read p99 is 2.6–3.9× higher than VPC block (Qwen3-8B: 49→190ms;
+FP8-70B: 109→354ms).
+
+**RGW read p50 is close to VPC block, but p99 diverges substantially at j=16.**
+S3 read p50 is within 2ms of VPC block for all three models. Under 16-job
+concurrent load, p99 is 16× higher for Qwen3-8B (784ms vs 49ms) and 10×
+higher for FP8-70B (1,044ms vs 109ms). gpt-120b shows moderate divergence
+(134ms vs 25ms, 5.4×).
+
+**Write latency is high and variable across all backends.**
+Write p99 ranges from 124ms (CephFS gpt-120b) to 1,216ms (RGW FP8-70B).
+Run-to-run variation in write bandwidth is visible in the VPC block probe
+(197 vs 440 MB/s with and without OSD I/O), reflecting shared fabric usage.
+
+**Backend ordering by read p99 (lower is better):**
+
+| Model | VPC block | CephFS | RGW |
+|---|---|---|---|
+| Qwen3-8B | 49 ms | 190 ms | 784 ms |
+| gpt-oss-120b | 25 ms | 91 ms | 134 ms |
+| FP8-70B | 109 ms | 354 ms | 1,044 ms |
+
+**Relevance to KV cache offload.**
+The cold-cache restoration latency (read p99 above) is added to TTFT on a
+cache hit. The net benefit of offload depends on the cost of the alternative
+— prefix recomputation — which is workload-dependent and not measured here.
 
 ---
 
