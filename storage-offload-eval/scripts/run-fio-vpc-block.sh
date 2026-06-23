@@ -117,6 +117,8 @@ if [ -z "$SKIP_CONFIRM" ]; then
   [[ "${CONFIRM}" =~ ^[Yy]$ ]] || { echo "Aborted."; exit 0; }
 fi
 
+FIO_START=$(date "+%Y-%m-%d %H:%M:%S")
+
 # ── Phase 2: Full benchmark suite ─────────────────────────────────────────────
 echo ""
 echo "==> Phase 2: Full suite (15 sections × 60s)..."
@@ -138,20 +140,46 @@ echo "==> Transferring results..."
   "/tmp/${RESULTS}" \
   "${RESULTS_DIR}/${RESULTS}"
 
-# ── PCP archives — one per node ───────────────────────────────────────────────
+FIO_END=$(date "+%Y-%m-%d %H:%M:%S")
+
+# ── PCP extracts — focused metrics, FIO window only, one per node ─────────────
 if [ -n "$PCP_PODS" ]; then
   ARCHIVE_TS=$(date +%Y%m%d-%H%M%S)
+  WANTED_CONF=$(mktemp /tmp/pcp-wanted-XXXXXX.conf)
+  cat > "$WANTED_CONF" << 'METRICS'
+disk.dev.read_bytes
+disk.dev.write_bytes
+disk.dev.util
+disk.dev.r_await
+disk.dev.w_await
+network.all.in.bytes
+network.all.out.bytes
+kernel.all.cpu.user
+kernel.all.cpu.sys
+openmetrics.ceph_mgr.ceph_health_status
+openmetrics.ceph_mgr.ceph_osd_op_r
+openmetrics.ceph_mgr.ceph_osd_op_w
+openmetrics.ceph_mgr.ceph_pool_rd_bytes
+openmetrics.ceph_mgr.ceph_pool_wr_bytes
+METRICS
   for PCP_POD in $PCP_PODS; do
     NODE=$($KC -n "$NS" get pod "$PCP_POD" -o jsonpath='{.spec.nodeName}' 2>/dev/null | \
       awk -F- '{print $(NF-1)"-"$NF}')
-    ARCHIVE_NAME="pcp-fio-vpc-block-${NODE}-${ARCHIVE_TS}.tar.gz"
-    echo "==> Collecting PCP archive from ${PCP_POD} (${NODE})..."
-    $KC -n "$NS" exec "$PCP_POD" -- \
-      bash -c "tar czf /tmp/${ARCHIVE_NAME} --ignore-failed-read -C /var/log/pcp/pmlogger . 2>/dev/null; true"
+    EXTRACT="pcp-fio-vpc-block-${NODE}-${ARCHIVE_TS}"
+    echo "==> Extracting PCP metrics from ${PCP_POD} (${NODE}) [${FIO_START} → ${FIO_END}]..."
+    $KC -n "$NS" cp "$WANTED_CONF" "${PCP_POD}:/tmp/wanted.conf" 2>/dev/null
+    $KC -n "$NS" exec "$PCP_POD" -- bash -c "
+      ARCH=\$(ls /var/log/pcp/pmlogger/\${HOSTNAME}/*.meta 2>/dev/null | head -1 | sed 's/\.meta//')
+      pmlogextract -S '${FIO_START}' -T '${FIO_END}' \
+        -c /tmp/wanted.conf \"\${ARCH}\" /tmp/${EXTRACT} 2>/dev/null
+      tar --zstd -cf /tmp/${EXTRACT}.tar.zst \
+        /tmp/${EXTRACT}.meta /tmp/${EXTRACT}.index /tmp/${EXTRACT}.0 2>/dev/null; true
+    " 2>/dev/null
     "${TRANSFER}" "${KUBECONFIG}" "$NS" "$PCP_POD" \
-      "/tmp/${ARCHIVE_NAME}" "${RESULTS_DIR}/${ARCHIVE_NAME}" $((4 * 1024 * 1024))
-    echo "    PCP archive: results/${ARCHIVE_NAME}"
+      "/tmp/${EXTRACT}.tar.zst" "${RESULTS_DIR}/${EXTRACT}.tar.zst" $((256 * 1024))
+    echo "    PCP extract: results/${EXTRACT}.tar.zst"
   done
+  rm -f "$WANTED_CONF"
 fi
 
 echo ""
