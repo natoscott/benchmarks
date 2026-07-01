@@ -11,9 +11,9 @@
 
 All predictions use vLLM 0.18.0 silicon data collected on the same H200 SXM hardware. TPOT is expressed as inclusive TPOT = (TTFT + TPOT × (OSL−1)) / OSL throughout, matching guidellm's `time_per_output_token_ms`.
 
-**What is resolved.** For Qwen3-8B aggregated serving, the three most significant prediction gaps are closed: silicon data now matches the deployed vLLM version, the mix-step decode token count bug is fixed, and the TTFT queuing formula has been replaced. At concurrency=16 (where both SLAs are met), inclusive TPOT is 38.5ms predicted vs 38.2ms observed — within 1%. AIC identifies the saturation concurrency (40) correctly. Across 1924 vLLM agg corpus entries, the full PR stack produces a net TTFT improvement of +2.76 pp and TPOT improvement of +0.06 pp over the main-branch baseline; the updated TTFT formula alone reduces tp_size-matched corpus MAPE from 26.4% to 18.0%. Three modelling PRs have merged; four more are in review.
+**What is resolved.** For Qwen3-8B aggregated serving, the three most significant prediction gaps are closed: silicon data now matches the deployed vLLM version, the mix-step decode token count bug is fixed, and the TTFT queuing formula has been replaced. At concurrency=16 (where both SLAs are met), inclusive TPOT is 38.5ms predicted vs 38.2ms observed — within 1%. AIC identifies the saturation concurrency (40) correctly. Across 1924 vLLM agg corpus entries, the full PR stack produces a net TTFT improvement of +2.76 pp and TPOT improvement of +0.06 pp over the main-branch baseline; the updated TTFT formula alone reduces tp_size-matched corpus MAPE from 26.4% to 18.0%. All seven modelling PRs have merged (PRs #1151, #1164, #1165 were squash-merged through #1166 on 2026-06-23).
 
-**What remains open.** Throughput is 0.69× of prediction at AIC's recommended concurrency for Qwen3-8B agg — the concurrency model assumes 100% queue utilisation and a Little's Law cap (PR #1164, in review) is expected to reduce this gap. For Qwen3-32B-FP8, TTFT is 1.61× above and TPOT is 0.59× below AIC's prediction at concurrency=1; these partially cancel in inclusive TPOT (0.97×) but the underlying cause is unattributed after FP8 silicon data was corrected. For disaggregated serving, throughput is 0.15× of prediction at AIC's operating point — the decode worker saturates under concurrent load and AIC has no model for this effect.
+**What remains open.** Throughput is 0.69× of prediction at AIC's recommended concurrency for Qwen3-8B agg — the concurrency model assumes 100% queue utilisation and a Little's Law cap (PR #1164, merged) reduces this gap. For Qwen3-32B-FP8, TTFT is 1.61× above and TPOT is 0.59× below AIC's prediction at concurrency=1; these partially cancel in inclusive TPOT (0.97×) but the underlying cause is unattributed after FP8 silicon data was corrected. For disaggregated serving, throughput is 0.15× of prediction at AIC's operating point — the decode worker saturates under concurrent load and AIC has no model for this effect.
 
 ---
 
@@ -334,11 +334,11 @@ AIC treats its chosen batch size as the perpetually-full in-flight request count
 
 **[PR #1147](https://github.com/ai-dynamo/aiconfigurator/pull/1147) (merged)** — `_mix_step_gen_tokens()` corrects the decode token count per mix step. For `b ≥ osl`, the previous formula collapsed to `≈ osl` for all batch sizes, causing identical TPOT predictions at b=32 and b=64 (238.58ms each; measured ITL was 236.8ms and 308.8ms respectively). The corrected formula `b − ceil(ctx_tokens / isl)` is derived from vLLM v1's `max_num_partial_prefills=1` scheduler.
 
-**[PR #1151](https://github.com/ai-dynamo/aiconfigurator/pull/1151) (in review)** — Two hooks:
+**[PR #1151](https://github.com/ai-dynamo/aiconfigurator/pull/1151) (merged via #1166)** — Two hooks:
 - `_mix_step_efficiency(ctx_tokens, gen_tokens)`: Addresses systematic mix-step latency over-estimation. Per-op silicon data measures operations in isolation; shared weight loads reduce the marginal prefill cost per step. Default returns 1.0. VLLMBackend overrides to 1.0 — full-corpus analysis (967 vLLM agg entries) shows vLLM's gen_frac ≈ 0.001 at typical operating points, making the base-class power-law parameterisation inapplicable in this regime.
 - `_tpot_mix_steps(num_mix_steps)`: Replaces the hardcoded `num_mix_steps − 3` pipeline-drain correction with an overridable hook. TRTLLMBackend and SGLANGBackend override with `max(1, num_mix_steps − 3)` to restore the empirical correction for their scheduling policies. VLLMBackend inherits the default (no correction), as vLLM v1's scheduler does not introduce a 3-step grace period.
 
-**[PR #1164](https://github.com/ai-dynamo/aiconfigurator/pull/1164) (in review)** — `_throughput_cap` hook applies a Little's Law upper bound: `throughput ≤ b × (osl−1) × 1000 / request_latency_ms`. This prevents throughput predictions from exceeding what is sustainably achievable given the predicted per-request latency.
+**[PR #1164](https://github.com/ai-dynamo/aiconfigurator/pull/1164) (merged via #1166)** — `_throughput_cap` hook applies a Little's Law upper bound: `throughput ≤ b × (osl−1) × 1000 / request_latency_ms`. This prevents throughput predictions from exceeding what is sustainably achievable given the predicted per-request latency.
 
 The 31% throughput over-prediction for aggregated serving at AIC's predicted concurrency is attributed to the 100% queue utilisation assumption. The `_throughput_cap` hook in PR #1164 is intended to address this; cross-validation against measured data is pending.
 
@@ -354,13 +354,13 @@ The 31% throughput over-prediction for aggregated serving at AIC's predicted con
 
 The negative values reflect AIC's TTFT correction factor being over-conservative at low concurrency, not disagg adding latency. Routing overhead is negligible for this configuration (prefill and decode co-located on the same host, KV transfer over shared memory). The throughput gap (0.15×) and TTFT blowout at higher concurrency are queueing-driven: the decode worker saturates under concurrent load, an effect AIC has no model for.
 
-### Factor 4 — TPOT metric mismatch (resolved) and pipeline-bubble correction (in review)
+### Factor 4 — TPOT metric mismatch (resolved) and pipeline-bubble correction (merged)
 
 guidellm's `time_per_output_token_ms` includes TTFT; AIC's `--inclusive-tpot` flag ([PR #1141](https://github.com/ai-dynamo/aiconfigurator/pull/1141), merged) closes the metric comparison gap by computing `(ttft + tpot × (osl−1)) / osl`.
 
-The `num_mix_steps − 3` pipeline-bubble correction has been moved from a hardcoded value to the per-backend `_tpot_mix_steps` hook in PR #1151 (in review). Source code investigation confirmed vLLM v1's scheduler does not introduce a 3-step grace period; the correction is retained for TRT-LLM and SGLang where it was empirically observed.
+The `num_mix_steps − 3` pipeline-bubble correction has been moved from a hardcoded value to the per-backend `_tpot_mix_steps` hook in PR #1151 (merged via #1166). Source code investigation confirmed vLLM v1's scheduler does not introduce a 3-step grace period; the correction is retained for TRT-LLM and SGLang where it was empirically observed.
 
-### Factor 5 — TTFT queuing model ([PR #1165](https://github.com/ai-dynamo/aiconfigurator/pull/1165), in review)
+### Factor 5 — TTFT queuing model ([PR #1165](https://github.com/ai-dynamo/aiconfigurator/pull/1165), merged via #1166)
 
 The previous TTFT heuristic `min(2 + (steps−3)/2/10, 4)` has been replaced with an overridable `_ttft_queuing_factor(b, steps_to_finish_ctx)` hook. The default preserves the previous formula for non-vLLM backends.
 
@@ -387,7 +387,7 @@ Per-batch-size breakdown of median absolute error:
 
 The TTFT calculation uses the pure prefill cost (the `_mix_step_efficiency` reduction is undone before TTFT computation), since decode tokens sharing a forward pass do not reduce the prefill step time.
 
-### Factor 6 — Prefill dispatch overhead ([PR #1166](https://github.com/ai-dynamo/aiconfigurator/pull/1166), in review)
+### Factor 6 — Prefill dispatch overhead ([PR #1166](https://github.com/ai-dynamo/aiconfigurator/pull/1166), merged via #1166)
 
 Silicon benchmarks measure isolated GPU kernel time. vLLM adds CPU-side Python dispatch overhead per prefill request that scales with layer count. A `_prefill_dispatch_overhead_ms(model)` hook has been added to BaseBackend (default 0.0). VLLMBackend overrides with `model._num_layers × 0.8 ms`, calibrated against the full silicon corpus (947 vLLM agg entries, b=4..512) across hardware platforms and model families. Full-corpus analysis confirms the overhead is approximately constant across batch sizes, consistent with CUDA graph capture where per-step dispatch cost is fixed per graph replay.
 
@@ -427,11 +427,11 @@ The Llama-3.1-70B h200 regression (−5.12%) remains within the 10% threshold. K
 | [PR #1141](https://github.com/ai-dynamo/aiconfigurator/pull/1141) | `--inclusive-tpot` output flag | Merged |
 | [PR #1142](https://github.com/ai-dynamo/aiconfigurator/pull/1142) | H200 SXM vLLM 0.18.0 silicon data (6 ops, BF16+FP8) | Merged |
 | [PR #1147](https://github.com/ai-dynamo/aiconfigurator/pull/1147) | Correct mix-step decode token count for b ≥ osl | Merged |
-| [PR #1151](https://github.com/ai-dynamo/aiconfigurator/pull/1151) | `_mix_step_efficiency` + `_tpot_mix_steps` hooks | In review |
-| [PR #1164](https://github.com/ai-dynamo/aiconfigurator/pull/1164) | `_throughput_cap` hook (Little's Law bound) | In review |
-| [PR #1165](https://github.com/ai-dynamo/aiconfigurator/pull/1165) | `_ttft_queuing_factor` hook; VLLMBackend: `1 + log₂(b)/8` | In review |
-| [PR #1166](https://github.com/ai-dynamo/aiconfigurator/pull/1166) | `_prefill_dispatch_overhead_ms` hook; VLLMBackend: 0.8 ms/layer | In review |
-| [PR #1212](https://github.com/ai-dynamo/aiconfigurator/pull/1212) | Test mock-torch pollution fixes | In review |
+| [PR #1151](https://github.com/ai-dynamo/aiconfigurator/pull/1151) | `_mix_step_efficiency` + `_tpot_mix_steps` hooks | Merged (via #1166) |
+| [PR #1164](https://github.com/ai-dynamo/aiconfigurator/pull/1164) | `_throughput_cap` hook (Little's Law bound) | Merged (via #1166) |
+| [PR #1165](https://github.com/ai-dynamo/aiconfigurator/pull/1165) | `_ttft_queuing_factor` hook; VLLMBackend: `1 + log₂(b)/8` | Merged (via #1166) |
+| [PR #1166](https://github.com/ai-dynamo/aiconfigurator/pull/1166) | `_prefill_dispatch_overhead_ms` hook; VLLMBackend: 0.8 ms/layer | Merged |
+| [PR #1212](https://github.com/ai-dynamo/aiconfigurator/pull/1212) | Test mock-torch pollution fixes | Merged |
 | [PR #1128](https://github.com/ai-dynamo/aiconfigurator/pull/1128) *(Spycsh, draft)* | TTFT queuing via Kingman G/G/1 — parallel exploration | Draft |
 
 ---
@@ -452,7 +452,7 @@ The Llama-3.1-70B h200 regression (−5.12%) remains within the 10% threshold. K
 
 ## Confidence Assessment
 
-**Aggregated dense model serving (BF16):** with the current PR stack, inclusive TPOT is within 1% at the SLA operating point and AIC identifies the throughput saturation concurrency correctly. Throughput predictions at high concurrency carry approximately 30% optimism under the current main code; the throughput-cap hook in PR #1164 reduces this gap when merged.
+**Aggregated dense model serving (BF16):** with the current PR stack, inclusive TPOT is within 1% at the SLA operating point and AIC identifies the throughput saturation concurrency correctly. Throughput predictions at high concurrency carry approximately 30% optimism under the current main code; the throughput-cap hook in PR #1164 reduces this gap.
 
 **Aggregated FP8 model serving:** TTFT 1.61× and TPOT 0.59× errors at conc=1 persist and do not cancel cleanly at higher concurrency. Inclusive TPOT is within 3% at concurrency=1. The cause is not yet identified.
 

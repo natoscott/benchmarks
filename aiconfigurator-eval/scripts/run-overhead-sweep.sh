@@ -106,8 +106,8 @@ done
 # --- wait for vLLM health endpoint ---
 echo "==> Waiting for $TARGET to respond..."
 elapsed=0
-until kubectl exec -n "$NS" "$GUIDELLM_POD" -- \
-    bash -c "curl -sk '$TARGET/v1/models' 2>/dev/null | grep -q '\"data\"'" ; do
+until kubectl exec -n "$NS" "$GUIDELLM_POD" --request-timeout=20s -- \
+    bash -c "curl -sk '$TARGET/v1/models' 2>/dev/null | grep -q '\"data\"'" 2>/dev/null ; do
     echo "    ${elapsed}s: not ready..."
     sleep 15
     elapsed=$((elapsed + 15))
