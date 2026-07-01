@@ -12,19 +12,18 @@ NAMESPACE="${2:?NAMESPACE required}"
 POD="${3:?POD required}"
 REMOTE_FILE="${4:?REMOTE_FILE required}"
 LOCAL_FILE="${5:?LOCAL_FILE required}"
-CHUNK_SIZE_MB="${6:-1}"  # Default 1MB chunks
+CHUNK_SIZE_BYTES="${6:-$((1024 * 1024))}"  # Default 1MB; pass bytes directly
 
 echo "Chunked file transfer (base64):"
 echo "  Remote: ${REMOTE_FILE}"
 echo "  Local: ${LOCAL_FILE}"
-echo "  Chunk size: ${CHUNK_SIZE_MB}MB"
+echo "  Chunk size: $((CHUNK_SIZE_BYTES / 1024))KB"
 
 # Get file size in pod
 FILE_SIZE=$(kubectl --kubeconfig="${KUBECONFIG}" exec -n "${NAMESPACE}" "${POD}" -- stat -c '%s' "${REMOTE_FILE}")
 echo "  File size: $((FILE_SIZE / 1024 / 1024))MB (${FILE_SIZE} bytes)"
 
 # Calculate number of chunks needed
-CHUNK_SIZE_BYTES=$((CHUNK_SIZE_MB * 1024 * 1024))
 NUM_CHUNKS=$(( (FILE_SIZE + CHUNK_SIZE_BYTES - 1) / CHUNK_SIZE_BYTES ))
 echo "  Chunks needed: ${NUM_CHUNKS}"
 

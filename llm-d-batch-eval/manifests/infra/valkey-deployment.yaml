@@ -28,6 +28,8 @@ spec:
         - ""
         - --appendonly
         - "no"
+        - --protected-mode
+        - "no"
         ports:
         - containerPort: 6379
           name: valkey
