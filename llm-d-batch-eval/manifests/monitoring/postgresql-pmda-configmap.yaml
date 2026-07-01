@@ -1,0 +1,14 @@
+# Non-secret PostgreSQL PMDA connection parameters.
+# The PCP startup script combines these with the password from
+# batch-gateway-secrets to produce the final pmdapostgresql config.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgresql-pmda-configmap
+  namespace: llm-d-batch
+data:
+  postgresql-base.conf: |
+    host=postgresql.llm-d-batch.svc.cluster.local
+    port=5432
+    dbname=batchgateway
+    user=postgres

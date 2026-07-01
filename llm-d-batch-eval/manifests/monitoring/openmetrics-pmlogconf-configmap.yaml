@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openmetrics-pmlogconf-configmap
+  namespace: llm-d-batch
+data:
+  vllm: "#pmlogconf-setup 2.0\nident   vLLM metrics from openmetrics PMDA\nforce   include\n\topenmetrics.vllm\n"
+  dcgm: "#pmlogconf-setup 2.0\nident   DCGM metrics from openmetrics PMDA\nforce   include\n\topenmetrics.dcgm\n"
+  epp: "#pmlogconf-setup 2.0\nident   EPP inference-scheduler metrics from openmetrics PMDA\nforce   include\n\topenmetrics.epp\n"
+  kserve: "#pmlogconf-setup 2.0\nident   KServe controller metrics from openmetrics PMDA\nforce   include\n\topenmetrics.kserve\n"
+  batch-gateway-processor: "#pmlogconf-setup 2.0\nident   Batch gateway processor metrics\nforce   include\n\topenmetrics.batch_gateway_processor\n"
+  batch-gateway-apiserver: "#pmlogconf-setup 2.0\nident   Batch gateway apiserver metrics\nforce   include\n\topenmetrics.batch_gateway_apiserver\n"
+  valkey: "#pmlogconf-setup 2.0\nident   Valkey metrics from pmdavalkey\nforce   include\n\tvalkey\n"
+  postgresql: "#pmlogconf-setup 2.0\nident   PostgreSQL metrics from pmdapostgresql\nforce   include\n\tpostgresql\n"

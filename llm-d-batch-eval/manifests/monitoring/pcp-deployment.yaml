@@ -1,0 +1,169 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pcp
+  namespace: llm-d-batch
+  labels:
+    app.kubernetes.io/name: pcp
+    app.kubernetes.io/instance: pcp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: pcp
+      app.kubernetes.io/instance: pcp
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: pcp
+        app.kubernetes.io/instance: pcp
+        name: pcp
+    spec:
+      serviceAccountName: pcp
+      nodeSelector:
+        nvidia.com/gpu.present: "true"
+      affinity:
+        podAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: kserve.io/component
+                  operator: In
+                  values: ["workload"]
+              topologyKey: kubernetes.io/hostname
+      terminationGracePeriodSeconds: 15
+      containers:
+      - name: pcp
+        image: ghcr.io/performancecopilot/pcp:latest
+        imagePullPolicy: IfNotPresent
+        command:
+        - /bin/bash
+        - -c
+        - |
+          sed -i 's/PMCD_LOCAL=1/PMCD_LOCAL=0/' /etc/sysconfig/pmcd
+          sed -i 's/# PMPROXY_LOCAL=1/PMPROXY_LOCAL=0/' /etc/sysconfig/pmproxy
+
+          cp /etc/pki/kserve-certs/service-ca.crt \
+              /etc/pki/ca-trust/source/anchors/openshift-service-ca.crt
+          update-ca-trust extract
+
+          # pmdavalkey requires PCP >= 7.1.1; will fail silently on older builds
+          mkdir -p /var/lib/pcp/pmdas/valkey
+          cp /etc/pcp-config/valkey/valkey.conf /var/lib/pcp/pmdas/valkey/valkey.conf
+
+          # pmdapostgresql expects INI format in pmdapostgresql.conf
+          PG_PASS=$(cat /etc/pcp-secrets/postgresql-password)
+          printf '[authentication]\nhost=postgresql.llm-d-batch.svc.cluster.local\nport=5432\ndbname=batchgateway\nuser=batchgw\npassword=%s\nosuser=root\n' "${PG_PASS}" > /var/lib/pcp/pmdas/postgresql/pmdapostgresql.conf
+
+          exec /usr/bin/container-entrypoint /usr/sbin/init
+        env:
+        - name: PCP_DOMAIN_AGENTS
+          value: openmetrics,valkey,postgresql
+        - name: PCP_SERVICES
+          value: pmcd,pmlogger,pmproxy
+        ports:
+        - name: pmcd-port
+          containerPort: 44321
+          protocol: TCP
+        - name: pmproxy-port
+          containerPort: 44322
+          protocol: TCP
+        readinessProbe:
+          tcpSocket:
+            port: pmcd-port
+          initialDelaySeconds: 15
+          periodSeconds: 5
+          failureThreshold: 3
+        livenessProbe:
+          exec:
+            command: [/bin/bash, -c, "systemctl is-active pmcd"]
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          failureThreshold: 3
+        securityContext:
+          privileged: true
+          allowPrivilegeEscalation: true
+          runAsNonRoot: false
+          seccompProfile:
+            type: Unconfined
+        volumeMounts:
+        - name: openmetrics-pmlogconf-volume
+          mountPath: /var/lib/pcp/config/pmlogconf/openmetrics
+          readOnly: true
+        - name: openmetrics-pmda-volume
+          mountPath: /var/lib/pcp/pmdas/openmetrics/config.d/vllm.url
+          subPath: vllm.url
+          readOnly: true
+        - name: openmetrics-pmda-volume
+          mountPath: /var/lib/pcp/pmdas/openmetrics/config.d/dcgm.url
+          subPath: dcgm.url
+          readOnly: true
+        - name: openmetrics-pmda-volume
+          mountPath: /var/lib/pcp/pmdas/openmetrics/config.d/epp.url
+          subPath: epp.url
+          readOnly: true
+        - name: openmetrics-pmda-volume
+          mountPath: /var/lib/pcp/pmdas/openmetrics/config.d/kserve.url
+          subPath: kserve.url
+          readOnly: true
+        - name: openmetrics-pmda-volume
+          mountPath: /var/lib/pcp/pmdas/openmetrics/config.d/batch-gateway-processor.url
+          subPath: batch-gateway-processor.url
+          readOnly: true
+        - name: openmetrics-pmda-volume
+          mountPath: /var/lib/pcp/pmdas/openmetrics/config.d/batch-gateway-apiserver.url
+          subPath: batch-gateway-apiserver.url
+          readOnly: true
+        - name: valkey-pmda-config
+          mountPath: /etc/pcp-config/valkey
+          readOnly: true
+        - name: postgresql-pmda-config
+          mountPath: /etc/pcp-config/postgresql
+          readOnly: true
+        - name: pcp-secrets
+          mountPath: /etc/pcp-secrets
+          readOnly: true
+        - name: kserve-certs
+          mountPath: /etc/pki/kserve-certs
+          readOnly: true
+        - name: pmlogger-storage
+          mountPath: /var/log/pcp/pmlogger
+        - name: pmproxy-storage
+          mountPath: /var/log/pcp/pmproxy
+      volumes:
+      - name: openmetrics-pmlogconf-volume
+        configMap:
+          name: openmetrics-pmlogconf-configmap
+      - name: openmetrics-pmda-volume
+        configMap:
+          name: openmetrics-pmda-configmap
+      - name: valkey-pmda-config
+        configMap:
+          name: valkey-pmda-configmap
+      - name: postgresql-pmda-config
+        configMap:
+          name: postgresql-pmda-configmap
+      - name: pcp-secrets
+        secret:
+          secretName: batch-gateway-secrets
+          items:
+          - key: postgresql-password
+            path: postgresql-password
+      - name: kserve-certs
+        configMap:
+          name: openshift-service-ca.crt
+          items:
+          - key: service-ca.crt
+            path: service-ca.crt
+      - name: pmlogger-storage
+        hostPath:
+          path: /var/log/pcp/pmlogger
+          type: DirectoryOrCreate
+      - name: pmproxy-storage
+        hostPath:
+          path: /var/log/pcp/pmproxy
+          type: DirectoryOrCreate

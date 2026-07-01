@@ -1,0 +1,13 @@
+# ReadWriteMany required: apiserver and processor pods both need access.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: batch-gateway-files
+  namespace: llm-d-batch
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 50Gi
+  storageClassName: nfs-rwx

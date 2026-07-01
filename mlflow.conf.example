@@ -1,0 +1,16 @@
+# MLflow connection configuration
+# Copy this file to mlflow.conf and fill in real values.
+# mlflow.conf is gitignored — never commit credentials.
+#
+# This file is sourced by bash scripts and parsed by Python scripts.
+# Format: KEY=VALUE, no quotes needed, # for comments.
+
+MLFLOW_TRACKING_URI=https://mlflow.example.com
+MLFLOW_TRACKING_USERNAME=your-username
+MLFLOW_TRACKING_PASSWORD=your-password
+
+# Workspace to log experiments into (leave blank for server default)
+MLFLOW_WORKSPACE=your-workspace
+
+# Set to "true" if the server uses a self-signed certificate
+MLFLOW_TRACKING_INSECURE_TLS=true

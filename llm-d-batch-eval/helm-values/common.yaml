@@ -1,0 +1,31 @@
+global:
+  secretName: batch-gateway-secrets
+  dbClient:
+    type: postgresql
+  fileClient:
+    type: fs
+    fs:
+      pvcName: batch-gateway-files
+
+apiserver:
+  image:
+    repository: registry.redhat.io/rhoai/odh-llm-d-batch-gateway-apiserver-rhel9
+    tag: "@sha256:54290b9a0e3ff65af5d02a53fed7d65cb1eda2e3b6d3f038a3a41e2b9a1e8580"
+    pullPolicy: IfNotPresent
+  podSecurityContext: {}
+  config:
+    batchAPI:
+      passThroughHeaders:
+      - Authorization
+
+processor:
+  image:
+    repository: registry.redhat.io/rhoai/odh-llm-d-batch-gateway-processor-rhel9
+    tag: "@sha256:2491b371b9928e180c735bd4d37860bf8d4be895820f9d64c68438d2d9fadad5"
+    pullPolicy: IfNotPresent
+  podSecurityContext: {}
+  workDirVolume:
+    sizeLimit: 10Gi
+
+gc:
+  enabled: false

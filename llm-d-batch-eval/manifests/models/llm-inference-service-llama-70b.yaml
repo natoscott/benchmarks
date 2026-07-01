@@ -1,0 +1,40 @@
+# LLMInferenceService for RedHatAI/Meta-Llama-3.1-70B-Instruct-FP8 — batch gateway evaluation.
+#
+# TP=2, gpu-memory-utilization=0.90.
+# Dense FP8-quantised model on 2x H200 GPUs.
+apiVersion: serving.kserve.io/v1alpha2
+kind: LLMInferenceService
+metadata:
+  name: llama-70b
+  namespace: llm-d-batch
+spec:
+  baseRefs:
+  - name: v3-5-0-ea-1-kserve-config-llm-template
+  - name: epp-scheduler-valkey
+  - name: v3-5-0-ea-1-kserve-config-llm-router-route
+  model:
+    name: "RedHatAI/Meta-Llama-3.1-70B-Instruct-FP8"
+    uri: "pvc://model-storage-nfs/models/RedHatAI/Meta-Llama-3.1-70B-Instruct-FP8"
+  parallelism:
+    tensor: 2
+  replicas: 1
+  template:
+    containers:
+    - name: main
+      env:
+      - name: HUGGING_FACE_HUB_TOKEN
+        valueFrom:
+          secretKeyRef:
+            name: llm-d-hf-token
+            key: HF_TOKEN
+      - name: VLLM_ADDITIONAL_ARGS
+        value: >-
+          --tensor-parallel-size 2
+          --gpu-memory-utilization 0.90
+          --max-num-seq 1024
+      resources:
+        requests:
+          nvidia.com/gpu: "2"
+          memory: 200Gi
+        limits:
+          nvidia.com/gpu: "2"

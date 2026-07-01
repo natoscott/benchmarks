@@ -1,0 +1,32 @@
+# EPP EndpointPickerConfig for Valkey-backed prefix-cache routing.
+# Referenced by epp-scheduler-valkey LLMInferenceServiceConfig.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: epp-config-valkey
+  namespace: llm-d-batch
+data:
+  config.yaml: |
+    apiVersion: inference.networking.x-k8s.io/v1alpha1
+    kind: EndpointPickerConfig
+    plugins:
+    - type: single-profile-handler
+    - type: queue-scorer
+    - type: kv-cache-utilization-scorer
+    - type: prefix-cache-scorer
+      name: gpu-prefix-cache-scorer
+      parameters:
+        indexerConfig:
+          kvBlockIndexConfig:
+            redisConfig:
+              address: "valkey://valkey.llm-d-batch.svc.cluster.local:6379"
+              backendType: "valkey"
+    schedulingProfiles:
+    - name: default
+      plugins:
+      - pluginRef: queue-scorer
+        weight: 2
+      - pluginRef: kv-cache-utilization-scorer
+        weight: 2
+      - pluginRef: gpu-prefix-cache-scorer
+        weight: 1

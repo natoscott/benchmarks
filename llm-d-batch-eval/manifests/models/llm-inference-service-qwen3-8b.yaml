@@ -1,0 +1,40 @@
+# LLMInferenceService for Qwen/Qwen3-8B — batch gateway evaluation.
+#
+# Single GPU (tp=1), gpu-memory-utilization=0.90.
+# Start with this model for fast turnaround and tooling validation.
+apiVersion: serving.kserve.io/v1alpha2
+kind: LLMInferenceService
+metadata:
+  name: qwen3-8b
+  namespace: llm-d-batch
+spec:
+  baseRefs:
+  - name: v3-5-0-ea-1-kserve-config-llm-template
+  - name: epp-scheduler-valkey
+  - name: v3-5-0-ea-1-kserve-config-llm-router-route
+  model:
+    name: "Qwen/Qwen3-8B"
+    uri: "pvc://model-storage-nfs/models/Qwen/Qwen3-8B"
+  parallelism:
+    tensor: 1
+  replicas: 1
+  template:
+    containers:
+    - name: main
+      env:
+      - name: HUGGING_FACE_HUB_TOKEN
+        valueFrom:
+          secretKeyRef:
+            name: llm-d-hf-token
+            key: HF_TOKEN
+      - name: VLLM_ADDITIONAL_ARGS
+        value: >-
+          --tensor-parallel-size 1
+          --gpu-memory-utilization 0.90
+          --max-num-seq 1024
+      resources:
+        requests:
+          nvidia.com/gpu: "1"
+          memory: 32Gi
+        limits:
+          nvidia.com/gpu: "1"

@@ -1,0 +1,40 @@
+# LLMInferenceService for openai/gpt-oss-120b — batch gateway evaluation.
+#
+# TP=4, gpu-memory-utilization=0.90.
+# MoE model (MXFP4) on 4x H200 GPUs.
+apiVersion: serving.kserve.io/v1alpha2
+kind: LLMInferenceService
+metadata:
+  name: gpt-oss-120b
+  namespace: llm-d-batch
+spec:
+  baseRefs:
+  - name: v3-5-0-ea-1-kserve-config-llm-template
+  - name: epp-scheduler-valkey
+  - name: v3-5-0-ea-1-kserve-config-llm-router-route
+  model:
+    name: "openai/gpt-oss-120b"
+    uri: "pvc://model-storage-nfs/models/openai/gpt-oss-120b"
+  parallelism:
+    tensor: 4
+  replicas: 1
+  template:
+    containers:
+    - name: main
+      env:
+      - name: HUGGING_FACE_HUB_TOKEN
+        valueFrom:
+          secretKeyRef:
+            name: llm-d-hf-token
+            key: HF_TOKEN
+      - name: VLLM_ADDITIONAL_ARGS
+        value: >-
+          --tensor-parallel-size 4
+          --gpu-memory-utilization 0.90
+          --max-num-seq 1024
+      resources:
+        requests:
+          nvidia.com/gpu: "4"
+          memory: 400Gi
+        limits:
+          nvidia.com/gpu: "4"

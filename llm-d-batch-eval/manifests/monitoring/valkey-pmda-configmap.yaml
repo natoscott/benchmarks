@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: valkey-pmda-configmap
+  namespace: llm-d-batch
+data:
+  valkey.conf: |
+    host=valkey.llm-d-batch.svc.cluster.local
+    port=6379
