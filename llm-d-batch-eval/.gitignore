@@ -14,6 +14,9 @@ __pycache__/
 *.pyc
 .ipynb_checkpoints/
 
+# Regenerable prompt files (14 MB each, same seed reproduces them)
+job-*.jsonl
+
 # Notes and planning
 *_NOTES.md
 *_TODO.md

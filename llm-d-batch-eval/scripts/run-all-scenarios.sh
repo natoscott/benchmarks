@@ -47,6 +47,8 @@ echo "================================================================"
 echo "  Model: Qwen/Qwen3-8B (TP=1)"
 echo "================================================================"
 run_model "Qwen/Qwen3-8B" "Qwen3-8B" "qwen3-8b" 1 1
+run_model "Qwen/Qwen3-8B" "Qwen3-8B" "qwen3-8b" 1 4
+run_model "Qwen/Qwen3-8B" "Qwen3-8B" "qwen3-8b" 1 8
 
 # ── FP8-70B (TP=2) ──────────────────────────────────────────────────────────
 echo ""
@@ -54,7 +56,8 @@ echo "================================================================"
 echo "  Model: RedHatAI/Meta-Llama-3.1-70B-Instruct-FP8 (TP=2)"
 echo "================================================================"
 run_model "RedHatAI/Meta-Llama-3.1-70B-Instruct-FP8" "Meta-Llama-3.1-70B-Instruct-FP8" "llama-70b" 2 1
-run_model "RedHatAI/Meta-Llama-3.1-70B-Instruct-FP8" "Meta-Llama-3.1-70B-Instruct-FP8" "llama-70b" 2 2
+run_model "RedHatAI/Meta-Llama-3.1-70B-Instruct-FP8" "Meta-Llama-3.1-70B-Instruct-FP8" "llama-70b" 2 4
+run_model "RedHatAI/Meta-Llama-3.1-70B-Instruct-FP8" "Meta-Llama-3.1-70B-Instruct-FP8" "llama-70b" 2 8
 
 # ── gpt-oss-120b (TP=4) ─────────────────────────────────────────────────────
 echo ""
@@ -62,6 +65,8 @@ echo "================================================================"
 echo "  Model: openai/gpt-oss-120b (TP=4)"
 echo "================================================================"
 run_model "openai/gpt-oss-120b" "gpt-oss-120b" "gpt-oss-120b" 4 1
+run_model "openai/gpt-oss-120b" "gpt-oss-120b" "gpt-oss-120b" 4 2
+run_model "openai/gpt-oss-120b" "gpt-oss-120b" "gpt-oss-120b" 4 4
 
 echo ""
 echo "============================================================"

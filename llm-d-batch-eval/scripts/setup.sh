@@ -22,6 +22,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MANIFESTS="${SCRIPT_DIR}/../manifests"
+SHARED_SCRIPTS="${SCRIPT_DIR}/../../scripts"
 NAMESPACE="llm-d-batch"
 
 export KUBECONFIG="${KUBECONFIG:-${HOME}/psap/kubeconfig-psap-fire-athena}"
@@ -148,6 +149,9 @@ kubectl apply -f "${MANIFESTS}/monitoring/openmetrics-pmda-configmap.yaml"
 kubectl apply -f "${MANIFESTS}/monitoring/openmetrics-pmlogconf-configmap.yaml"
 kubectl apply -f "${MANIFESTS}/monitoring/valkey-pmda-configmap.yaml"
 kubectl apply -f "${MANIFESTS}/monitoring/postgresql-pmda-configmap.yaml"
+kubectl create configmap pcp-scripts \
+    --from-file=pcp-wait-and-restart-pmlogger.sh="${SHARED_SCRIPTS}/pcp-wait-and-restart-pmlogger.sh" \
+    -n "${NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
 kubectl apply -f "${MANIFESTS}/monitoring/pcp-deployment.yaml"
 kubectl rollout status deployment/pcp -n "${NAMESPACE}" --timeout=300s
 echo "  PCP ready"

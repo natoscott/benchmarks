@@ -59,6 +59,10 @@ spec:
           PG_PASS=$(cat /etc/pcp-secrets/postgresql-password)
           printf '[authentication]\nhost=postgresql.llm-d-batch.svc.cluster.local\nport=5432\ndbname=batchgateway\nuser=batchgw\npassword=%s\nosuser=root\n' "${PG_PASS}" > /var/lib/pcp/pmdas/postgresql/pmdapostgresql.conf
 
+          # Run the pmlogger restart script in the background — it waits for
+          # all metric sources to have live data then restarts pmlogger.
+          /opt/pcp-scripts/pcp-wait-and-restart-pmlogger.sh &
+
           exec /usr/bin/container-entrypoint /usr/sbin/init
         env:
         - name: PCP_DOMAIN_AGENTS
@@ -130,6 +134,9 @@ spec:
         - name: kserve-certs
           mountPath: /etc/pki/kserve-certs
           readOnly: true
+        - name: pcp-scripts
+          mountPath: /opt/pcp-scripts
+          readOnly: true
         - name: pmlogger-storage
           mountPath: /var/log/pcp/pmlogger
         - name: pmproxy-storage
@@ -153,6 +160,10 @@ spec:
           items:
           - key: postgresql-password
             path: postgresql-password
+      - name: pcp-scripts
+        configMap:
+          name: pcp-scripts
+          defaultMode: 0755
       - name: kserve-certs
         configMap:
           name: openshift-service-ca.crt
