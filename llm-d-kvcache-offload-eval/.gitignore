@@ -1,3 +1,5 @@
+.claude
+
 # OpenShift cluster install artifacts (may contain secrets)
 install/
 install.sh
