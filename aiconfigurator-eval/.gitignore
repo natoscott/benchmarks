@@ -1,3 +1,5 @@
+.claude
+
 # Model weights — stored on cluster PVC, not in git
 *.safetensors
 *.bin
