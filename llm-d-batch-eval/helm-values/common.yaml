@@ -7,10 +7,11 @@ global:
     fs:
       pvcName: batch-gateway-files
 
+# Upstream v0.2.0 images — RHOAI 3.5 EA images lack AIMD and job-level metrics
 apiserver:
   image:
-    repository: registry.redhat.io/rhoai/odh-llm-d-batch-gateway-apiserver-rhel9
-    digest: "sha256:54290b9a0e3ff65af5d02a53fed7d65cb1eda2e3b6d3f038a3a41e2b9a1e8580"
+    repository: ghcr.io/llm-d/batch-gateway-apiserver
+    tag: "v0.2.0"
     pullPolicy: IfNotPresent
   podSecurityContext: {}
   config:
@@ -20,12 +21,15 @@ apiserver:
 
 processor:
   image:
-    repository: registry.redhat.io/rhoai/odh-llm-d-batch-gateway-processor-rhel9
-    digest: "sha256:2491b371b9928e180c735bd4d37860bf8d4be895820f9d64c68438d2d9fadad5"
+    repository: ghcr.io/llm-d/batch-gateway-processor
+    tag: "v0.2.0"
     pullPolicy: IfNotPresent
   podSecurityContext: {}
   workDirVolume:
     sizeLimit: 10Gi
 
 gc:
-  enabled: false
+  image:
+    repository: ghcr.io/llm-d/batch-gateway-gc
+    tag: "v0.2.0"
+    pullPolicy: IfNotPresent
