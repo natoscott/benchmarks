@@ -97,11 +97,15 @@ echo "[2] Configuring ${LLM_SERVICE_NAME} (replicas=${REPLICAS})..."
 VLLM_ARGS="--tensor-parallel-size ${TENSOR_PARALLEL_SIZE} --gpu-memory-utilization ${GPU_MEMORY_UTILIZATION} --max-num-seq 1024"
 ARGS_JSON=$(printf '%s' "${VLLM_ARGS}" | python3 -c "import sys,json; print(json.dumps(sys.stdin.read()))")
 
-kubectl patch llminferenceservice "${LLM_SERVICE_NAME}" -n "${NAMESPACE}" \
-    --type=json -p "[
-  {\"op\":\"replace\",\"path\":\"/spec/replicas\",\"value\":${REPLICAS}},
-  {\"op\":\"replace\",\"path\":\"/spec/template/containers/0/env/1/value\",\"value\":${ARGS_JSON}}
-]"
+for _retry in 1 2 3 4 5; do
+    kubectl patch llminferenceservice "${LLM_SERVICE_NAME}" -n "${NAMESPACE}" \
+        --type=json -p "[
+      {\"op\":\"replace\",\"path\":\"/spec/replicas\",\"value\":${REPLICAS}},
+      {\"op\":\"replace\",\"path\":\"/spec/template/containers/0/env/1/value\",\"value\":${ARGS_JSON}}
+    ]" && break
+    echo "  Patch failed (attempt ${_retry}/5), retrying in 10s..."
+    sleep 10
+done
 
 # kserve doesn't always reconcile router-scheduler replicas automatically
 kubectl scale deployment "${LLM_SERVICE_NAME}-kserve-router-scheduler" \
@@ -281,9 +285,10 @@ if [ "${SCENARIO}" -ge 2 ]; then
 
     # Start batch progress monitor in background
     echo "  Starting batch progress monitor..."
+    kubectl cp "${SCRIPT_DIR}/monitor-batch-progress.py" "${NAMESPACE}/${GUIDELLM_POD}:/tmp/monitor-batch-progress.py"
     kubectl exec -n "${NAMESPACE}" "${GUIDELLM_POD}" -- \
-        python3 /dev/stdin --url "${BG_URL}" --output /tmp/batch-timeline.json \
-        --interval 10 < "${SCRIPT_DIR}/monitor-batch-progress.py" &
+        python3 /tmp/monitor-batch-progress.py --url "${BG_URL}" --output /tmp/batch-timeline.json \
+        --interval 10 &
     MONITOR_PID=$!
 else
     echo "[6] Skipping batch submission (scenario ${SCENARIO})"
@@ -327,11 +332,12 @@ done
 
 CYCLE_SCRIPT+='echo "=== Interactive traffic complete ==="'
 
-kubectl exec -n "${NAMESPACE}" "${GUIDELLM_POD}" -- bash -c "${CYCLE_SCRIPT}"
+kubectl exec -n "${NAMESPACE}" "${GUIDELLM_POD}" -- bash -c "${CYCLE_SCRIPT}" || \
+    echo "  Warning: guidellm exited non-zero (partial results may still be usable)"
 
 # Stop batch monitor and collect timeline
 if [ -n "${MONITOR_PID:-}" ]; then
-    kill "${MONITOR_PID}" 2>/dev/null; wait "${MONITOR_PID}" 2>/dev/null || true
+    kill "${MONITOR_PID}" 2>/dev/null || true; wait "${MONITOR_PID}" 2>/dev/null || true
     "${TRANSFER_SCRIPT}" \
         "${KUBECONFIG}" "${NAMESPACE}" "${GUIDELLM_POD}" \
         "/tmp/batch-timeline.json" "${OUTPUT_DIR}/batch-timeline.json" "$((256 * 1024))" 2>/dev/null || \
@@ -343,14 +349,14 @@ fi
 echo ""
 echo "[8] Collecting guidellm results..."
 
-# Compress in-pod with gzip (zstd not available), tar+stream out, recompress locally
-echo "  Compressing and downloading guidellm results..."
+# Create tarball in-pod, kubectl cp the single file, extract locally
+echo "  Packaging guidellm results in pod..."
 kubectl exec -n "${NAMESPACE}" "${GUIDELLM_POD}" -- \
-    bash -c 'cd /models/benchmark-output && rm -f *-warmup* && tar czf - *.json 2>/dev/null' \
-    | tar xzf - -C "${OUTPUT_DIR}" 2>/dev/null || \
-    echo "  Warning: guidellm results download failed"
+    bash -c 'cd /models/benchmark-output && rm -f *-warmup* && tar czf /tmp/guidellm-results.tar.gz *.json'
+echo "  Downloading guidellm-results.tar.gz..."
+kubectl cp "${NAMESPACE}/${GUIDELLM_POD}:/tmp/guidellm-results.tar.gz" "${OUTPUT_DIR}/guidellm-results.tar.gz"
+tar xzf "${OUTPUT_DIR}/guidellm-results.tar.gz" -C "${OUTPUT_DIR}" && rm -f "${OUTPUT_DIR}/guidellm-results.tar.gz"
 
-# Recompress json -> zstd and strip request content
 for f in "${OUTPUT_DIR}"/*.json; do
     [ -f "$f" ] || continue
     zstd -q -f --rm "$f" 2>/dev/null || true
@@ -401,15 +407,14 @@ for PCP_POD in ${PCP_PODS}; do
     ARCHIVE_DIR="${OUTPUT_DIR}/pcp-archives/${POD_NODE}"
     mkdir -p "${ARCHIVE_DIR}"
 
-    echo "  Compressing PCP archives in pod..."
+    echo "  Packaging PCP archives in pod..."
     kubectl exec -n "${NAMESPACE}" "${PCP_POD}" -- \
         bash -c 'cd /var/log/pcp/pmlogger/$(hostname) && \
-                 for f in [0-9]*; do [ -f "$f" ] && zstd -q --rm "$f"; done'
+                 for f in [0-9]*; do [ -f "$f" ] && zstd -q --rm "$f"; done && \
+                 tar cf /tmp/pcp-archives.tar *.zst'
     echo "  Downloading PCP archives..."
-    kubectl exec -n "${NAMESPACE}" "${PCP_POD}" -- \
-        bash -c 'cd /var/log/pcp/pmlogger/$(hostname) && tar cf - *.zst' \
-        | tar xf - -C "${ARCHIVE_DIR}" 2>/dev/null || \
-        echo "  Warning: PCP archive download failed for ${PCP_POD}"
+    kubectl cp "${NAMESPACE}/${PCP_POD}:/tmp/pcp-archives.tar" "${ARCHIVE_DIR}/pcp-archives.tar"
+    tar xf "${ARCHIVE_DIR}/pcp-archives.tar" -C "${ARCHIVE_DIR}" && rm -f "${ARCHIVE_DIR}/pcp-archives.tar"
     echo "  Downloaded $(ls "${ARCHIVE_DIR}"/*.zst 2>/dev/null | wc -l) archive files"
 done
 
