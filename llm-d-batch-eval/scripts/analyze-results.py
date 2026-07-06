@@ -389,6 +389,137 @@ def plot_idle_vs_burst(df: pd.DataFrame):
         print(f"  Saved {fname}")
 
 
+def plot_batch_timelines():
+    """Plot batch completion timelines from batch-timeline.json files."""
+    timelines = {}
+    for result_dir in sorted(RESULTS_DIR.iterdir()):
+        tl_file = result_dir / "batch-timeline.json"
+        if not tl_file.exists():
+            continue
+        try:
+            with open(tl_file) as f:
+                tl = json.load(f)
+            if not tl:
+                continue
+            model, scenario, replicas = parse_run_id(result_dir.name)
+            label = f"{scenario} r={replicas}"
+            elapsed = [entry["elapsed"] for entry in tl]
+            completed = []
+            for entry in tl:
+                total = sum(j.get("completed", 0) for j in entry.get("jobs", []))
+                completed.append(total)
+            timelines[f"{model}/{label}"] = (elapsed, completed, model)
+        except Exception:
+            continue
+
+    if not timelines:
+        print("  No batch timelines found (will be available after re-run)")
+        return
+
+    models = sorted(set(v[2] for v in timelines.values()))
+    for model in models:
+        fig, ax = plt.subplots(figsize=(14, 6))
+        for key, (elapsed, completed, m) in sorted(timelines.items()):
+            if m != model:
+                continue
+            label = key.split("/", 1)[1]
+            ax.plot(elapsed, completed, marker=".", markersize=3, label=label)
+
+        ax.set_xlabel("Time (s)")
+        ax.set_ylabel("Batch Requests Completed")
+        ax.set_title(f"{model} — Batch Completion Timeline")
+        ax.legend(fontsize=8)
+        plt.tight_layout()
+        fname = ANALYSIS_DIR / f"batch_timeline_{model}.png"
+        plt.savefig(fname, dpi=150)
+        plt.close()
+        print(f"  Saved {fname}")
+
+
+def plot_error_rates(df: pd.DataFrame):
+    """Bar chart: error rates across scenarios."""
+    burst = df[df["phase"] == "burst"].copy()
+    if burst.empty:
+        return
+
+    burst["error_rate"] = burst["errored"] / (burst["completed"] + burst["errored"]).replace(0, 1) * 100
+
+    for model in sorted(burst["model"].unique()):
+        mdf = burst[burst["model"] == model]
+        agg = mdf.groupby(["scenario", "replicas"]).agg(
+            error_rate=("error_rate", "mean"),
+            total_errors=("errored", "sum"),
+            total_completed=("completed", "sum"),
+        ).reset_index()
+
+        if agg["total_errors"].sum() == 0:
+            print(f"  {model}: 0 errors across all scenarios — skipping error rate chart")
+            continue
+
+        scenario_order = [s for s in SCENARIOS if s in agg["scenario"].values]
+        agg["scenario"] = pd.Categorical(agg["scenario"], categories=scenario_order, ordered=True)
+        agg = agg.sort_values(["scenario", "replicas"])
+
+        fig, ax = plt.subplots(figsize=(14, 6))
+        agg["label"] = agg.apply(lambda r: f"{r['scenario']}\nr={int(r['replicas'])}", axis=1)
+        bars = ax.bar(range(len(agg)), agg["error_rate"], color=sns.color_palette("muted", len(agg)))
+        ax.set_xticks(range(len(agg)))
+        ax.set_xticklabels(agg["label"], fontsize=9)
+        ax.set_ylabel("Error Rate (%)")
+        ax.set_title(f"{model} — Error Rate During Burst")
+        plt.tight_layout()
+        fname = ANALYSIS_DIR / f"error_rate_{model}.png"
+        plt.savefig(fname, dpi=150)
+        plt.close()
+        print(f"  Saved {fname}")
+
+
+def load_batch_final_status():
+    """Load and summarize batch job final status across runs."""
+    records = []
+    for result_dir in sorted(RESULTS_DIR.iterdir()):
+        status_file = result_dir / "batch-final-status.json"
+        if not status_file.exists():
+            continue
+        try:
+            with open(status_file) as f:
+                data = json.load(f)
+            model, scenario, replicas = parse_run_id(result_dir.name)
+            for batch in data.get("data", []):
+                rc = batch.get("request_counts", {})
+                records.append({
+                    "model": model,
+                    "scenario": scenario,
+                    "replicas": replicas,
+                    "batch_id": batch.get("id", ""),
+                    "status": batch.get("status", "unknown"),
+                    "completed": rc.get("completed", 0),
+                    "failed": rc.get("failed", 0),
+                    "total": rc.get("total", 0),
+                })
+        except Exception:
+            continue
+
+    if records:
+        bdf = pd.DataFrame(records)
+        print("\n  Batch Job Summary:")
+        for model in sorted(bdf["model"].unique()):
+            mdf = bdf[bdf["model"] == model]
+            for scenario in SCENARIOS:
+                sdf = mdf[mdf["scenario"] == scenario]
+                if sdf.empty:
+                    continue
+                total_completed = sdf["completed"].sum()
+                total_failed = sdf["failed"].sum()
+                total_expected = sdf["total"].sum()
+                statuses = sdf["status"].value_counts().to_dict()
+                print(f"    {model} {scenario}: "
+                      f"{total_completed}/{total_expected} completed, "
+                      f"{total_failed} failed, statuses={statuses}")
+    else:
+        print("\n  No batch final status files found (will be available after re-run)")
+
+
 def main():
     print("Loading results...")
     metrics = load_all_results()
@@ -416,12 +547,17 @@ def main():
     # Summary tables
     print_summary_table(df)
 
+    # Batch job summary
+    load_batch_final_status()
+
     # Visualizations
     print("\nGenerating visualizations...")
     plot_ttft_comparison(df)
     plot_latency_by_replica(df)
     plot_throughput_comparison(df)
     plot_idle_vs_burst(df)
+    plot_error_rates(df)
+    plot_batch_timelines()
 
     print(f"\nAnalysis complete. Output in {ANALYSIS_DIR}")
 

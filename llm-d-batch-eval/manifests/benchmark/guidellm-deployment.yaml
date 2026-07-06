@@ -1,6 +1,6 @@
 # guidellm benchmark runner pod.
 # Runs `sleep infinity` — exec into it to run guidellm benchmark commands.
-# Image: guidellm v0.7.0 (released 2026-06-29).
+# Image: guidellm v0.7.1 (bugfix release).
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -25,7 +25,7 @@ spec:
       terminationGracePeriodSeconds: 10
       containers:
       - name: benchmark-runner
-        image: ghcr.io/vllm-project/guidellm:v0.7.0
+        image: ghcr.io/vllm-project/guidellm:v0.7.1
         imagePullPolicy: IfNotPresent
         command: [bash, -lc]
         args: [sleep infinity]

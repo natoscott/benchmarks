@@ -281,8 +281,16 @@ if [ "${SCENARIO}" -ge 2 ]; then
             < "${SCRIPT_DIR}/submit-batch-job.py"
     done
     echo "  Batch jobs submitted"
+
+    # Start batch progress monitor in background
+    echo "  Starting batch progress monitor..."
+    kubectl exec -n "${NAMESPACE}" "${GUIDELLM_POD}" -- \
+        python3 /dev/stdin --url "${BG_URL}" --output /tmp/batch-timeline.json \
+        --interval 10 < "${SCRIPT_DIR}/monitor-batch-progress.py" &
+    MONITOR_PID=$!
 else
     echo "[6] Skipping batch submission (scenario ${SCENARIO})"
+    MONITOR_PID=""
 fi
 
 # ── 7. Run interactive traffic ────────────────────────────────────────────────
@@ -324,6 +332,16 @@ CYCLE_SCRIPT+='echo "=== Interactive traffic complete ==="'
 
 kubectl exec -n "${NAMESPACE}" "${GUIDELLM_POD}" -- bash -c "${CYCLE_SCRIPT}"
 
+# Stop batch monitor and collect timeline
+if [ -n "${MONITOR_PID:-}" ]; then
+    kill "${MONITOR_PID}" 2>/dev/null; wait "${MONITOR_PID}" 2>/dev/null || true
+    "${TRANSFER_SCRIPT}" \
+        "${KUBECONFIG}" "${NAMESPACE}" "${GUIDELLM_POD}" \
+        "/tmp/batch-timeline.json" "${OUTPUT_DIR}/batch-timeline.json" "$((256 * 1024))" 2>/dev/null || \
+        echo "  Warning: failed to collect batch timeline"
+    kubectl exec -n "${NAMESPACE}" "${GUIDELLM_POD}" -- rm -f /tmp/batch-timeline.json 2>/dev/null || true
+fi
+
 # ── 8. Collect guidellm results ──────────────────────────────────────────────
 echo ""
 echo "[8] Collecting guidellm results..."
@@ -350,6 +368,15 @@ done
 
 kubectl exec -n "${NAMESPACE}" "${GUIDELLM_POD}" -- \
     rm -rf /models/benchmark-output 2>/dev/null || true
+
+# Capture batch job final status (scenarios 2-4)
+if [ "${SCENARIO}" -ge 2 ]; then
+    echo "  Capturing batch job final status..."
+    BG_URL="http://batch-gateway-apiserver.${NAMESPACE}.svc.cluster.local:8000"
+    kubectl exec -n "${NAMESPACE}" "${GUIDELLM_POD}" -- \
+        bash -c "curl -s -H 'Authorization: Bearer benchmark' '${BG_URL}/v1/batches?limit=10'" \
+        > "${OUTPUT_DIR}/batch-final-status.json" 2>/dev/null || true
+fi
 
 # ── 9. Collect vLLM startup logs ─────────────────────────────────────────────
 echo "  Collecting vLLM startup logs..."

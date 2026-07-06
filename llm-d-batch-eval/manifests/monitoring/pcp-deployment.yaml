@@ -51,7 +51,13 @@ spec:
               /etc/pki/ca-trust/source/anchors/openshift-service-ca.crt
           update-ca-trust extract
 
-          # pmdavalkey requires PCP >= 7.1.1; will fail silently on older builds
+          # Upgrade PCP to 7.1.5+ for pmdavalkey (remove once :latest image ships it)
+          dnf upgrade -y --enablerepo=updates-testing --refresh \
+              --advisory=FEDORA-2026-8c63c7b57a 2>&1 | tail -3
+
+          # Copy pmlogconf entries (staged to avoid read-only mount conflict with dnf)
+          cp /etc/pcp-config/pmlogconf/* /var/lib/pcp/config/pmlogconf/openmetrics/ 2>/dev/null
+
           mkdir -p /var/lib/pcp/pmdas/valkey
           cp /etc/pcp-config/valkey/valkey.conf /var/lib/pcp/pmdas/valkey/valkey.conf
 
@@ -96,7 +102,7 @@ spec:
             type: Unconfined
         volumeMounts:
         - name: openmetrics-pmlogconf-volume
-          mountPath: /var/lib/pcp/config/pmlogconf/openmetrics
+          mountPath: /etc/pcp-config/pmlogconf
           readOnly: true
         - name: openmetrics-pmda-volume
           mountPath: /var/lib/pcp/pmdas/openmetrics/config.d/vllm.url
