@@ -183,6 +183,10 @@ if [ "${SCENARIO}" -ge 2 ]; then
     kubectl exec -n "${NAMESPACE}" deployment/valkey -- \
         valkey-cli FLUSHALL 2>/dev/null || true
 
+    # Restart processor to pick up clean state after DB/queue flush
+    kubectl rollout restart deployment/batch-gateway-processor -n "${NAMESPACE}"
+    kubectl rollout status deployment/batch-gateway-processor -n "${NAMESPACE}" --timeout=120s
+
     kubectl apply -f "${REPO_ROOT}/manifests/monitoring/batch-gateway-processor-metrics-svc.yaml" 2>/dev/null || true
 
     echo "  Batch gateway ready"
