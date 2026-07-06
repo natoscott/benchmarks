@@ -13,3 +13,4 @@ processor:
       maxRetries: 3
       initialBackoff: "1s"
       maxBackoff: "60s"
+      tlsInsecureSkipVerify: true
