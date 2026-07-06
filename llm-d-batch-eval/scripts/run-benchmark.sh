@@ -163,10 +163,10 @@ if [ "${SCENARIO}" -ge 2 ]; then
         -f "${HELM_VALUES}/common.yaml" \
         -f "${SCENARIO_VALUES}" \
         --set "processor.config.globalInferenceGateway.url=${TARGET}" \
-        --wait --timeout 120s
+        --timeout 300s
 
-    kubectl rollout status deployment/batch-gateway-apiserver -n "${NAMESPACE}" --timeout=60s
-    kubectl rollout status deployment/batch-gateway-processor -n "${NAMESPACE}" --timeout=60s
+    kubectl rollout status deployment/batch-gateway-apiserver -n "${NAMESPACE}" --timeout=120s
+    kubectl rollout status deployment/batch-gateway-processor -n "${NAMESPACE}" --timeout=120s
 
     echo "  Cleaning batch gateway state..."
     PG_PASS=$(kubectl get secret batch-gateway-secrets -n "${NAMESPACE}" \
@@ -262,20 +262,17 @@ if [ "${SCENARIO}" -ge 2 ]; then
     for i in $(seq 0 $(( NUM_JOBS - 1 ))); do
         NAME="${JOB_NAMES[$i]}"
         WINDOW="${COMPLETION_WINDOWS[$i]}"
-        JSONL="${OUTPUT_DIR}/${NAME}.jsonl"
 
-        if [ ! -f "${JSONL}" ]; then
-            echo "  Generating prompts for ${NAME}..."
-            python3 "${HOME}/git/llm-d-batch-gateway/benchmarks/generate_prompts.py" \
+        echo "  Generating and submitting ${NAME} (window=${WINDOW}, ${BATCH_SIZE} requests)..."
+        kubectl exec -n "${NAMESPACE}" "${GUIDELLM_POD}" -- \
+            python3 /dev/stdin \
                 --num-requests "${BATCH_SIZE}" \
                 --num-system-prompts "${NUM_SYSTEM_PROMPTS}" \
                 --model "${MODEL}" \
                 --seed $((42 + i)) \
-                --output "${JSONL}"
-        fi
+                --output "/tmp/${NAME}.jsonl" \
+            < "${HOME}/git/llm-d-batch-gateway/benchmarks/generate_prompts.py"
 
-        echo "  Submitting ${NAME} (window=${WINDOW}, ${BATCH_SIZE} requests)..."
-        kubectl cp "${JSONL}" "${NAMESPACE}/${GUIDELLM_POD}:/tmp/${NAME}.jsonl"
         kubectl exec -n "${NAMESPACE}" "${GUIDELLM_POD}" -- \
             python3 /dev/stdin --url "${BG_URL}" --file "/tmp/${NAME}.jsonl" --window "${WINDOW}" \
             < "${SCRIPT_DIR}/submit-batch-job.py"
@@ -346,17 +343,14 @@ fi
 echo ""
 echo "[8] Collecting guidellm results..."
 
-RESULT_FILES=$(kubectl exec -n "${NAMESPACE}" "${GUIDELLM_POD}" -- \
-    ls /models/benchmark-output/ 2>/dev/null || echo "")
-for fname in ${RESULT_FILES}; do
-    case "${fname}" in
-        *-warmup*) continue ;;
-    esac
-    "${TRANSFER_SCRIPT}" \
-        "${KUBECONFIG}" "${NAMESPACE}" "${GUIDELLM_POD}" \
-        "/models/benchmark-output/${fname}" "${OUTPUT_DIR}/${fname}" "$((256 * 1024))"
-done
+# Compress in-pod with gzip (zstd not available), tar+stream out, recompress locally
+echo "  Compressing and downloading guidellm results..."
+kubectl exec -n "${NAMESPACE}" "${GUIDELLM_POD}" -- \
+    bash -c 'cd /models/benchmark-output && rm -f *-warmup* && tar czf - *.json 2>/dev/null' \
+    | tar xzf - -C "${OUTPUT_DIR}" 2>/dev/null || \
+    echo "  Warning: guidellm results download failed"
 
+# Recompress json -> zstd and strip request content
 for f in "${OUTPUT_DIR}"/*.json; do
     [ -f "$f" ] || continue
     zstd -q -f --rm "$f" 2>/dev/null || true
@@ -365,6 +359,7 @@ for f in "${OUTPUT_DIR}"/*.json.zst; do
     [ -f "$f" ] || continue
     python3 "${SHARED_SCRIPTS}/strip-guidellm-request-content.py" "$f" 2>/dev/null || true
 done
+echo "  Downloaded $(ls "${OUTPUT_DIR}"/*.json.zst 2>/dev/null | wc -l) result files"
 
 kubectl exec -n "${NAMESPACE}" "${GUIDELLM_POD}" -- \
     rm -rf /models/benchmark-output 2>/dev/null || true
@@ -393,8 +388,7 @@ fi
 echo "  Collecting PCP archives..."
 mkdir -p "${OUTPUT_DIR}/pcp-archives"
 
-# Stop pmlogger before transferring to avoid size mismatches from active writes.
-# The PCP pod is deleted and recreated at the start of each run (step 5).
+# Stop pmlogger, compress and tar archives in-pod, stream out.
 PCP_PODS=$(kubectl get pods -n "${NAMESPACE}" -l app.kubernetes.io/name=pcp \
     -o jsonpath='{.items[*].metadata.name}')
 for PCP_POD in ${PCP_PODS}; do
@@ -407,37 +401,16 @@ for PCP_POD in ${PCP_PODS}; do
     ARCHIVE_DIR="${OUTPUT_DIR}/pcp-archives/${POD_NODE}"
     mkdir -p "${ARCHIVE_DIR}"
 
-    ARCHIVE_FILES=$(kubectl exec -n "${NAMESPACE}" "${PCP_POD}" -- \
-        sh -c 'ls -1 /var/log/pcp/pmlogger/$(hostname)/[0-9]* 2>/dev/null' || echo "")
-
-    TRANSFERRED_BASES=""
-    for archive_path in ${ARCHIVE_FILES}; do
-        archive_file=$(basename "${archive_path}")
-        if echo "${archive_file}" | grep -qE '\.[0-9]+$'; then
-            "${TRANSFER_SCRIPT}" \
-                "${KUBECONFIG}" "${NAMESPACE}" "${PCP_POD}" \
-                "${archive_path}" "${ARCHIVE_DIR}/${archive_file}" "$((256 * 1024))" || \
-                echo "  Warning: failed to transfer ${archive_file}"
-
-            archive_base="${archive_path%.[0-9]*}"
-            archive_base_name=$(basename "${archive_base}")
-            if ! echo "${TRANSFERRED_BASES}" | grep -qF "${archive_base_name}"; then
-                TRANSFERRED_BASES="${TRANSFERRED_BASES} ${archive_base_name}"
-                for ext in index meta; do
-                    "${TRANSFER_SCRIPT}" \
-                        "${KUBECONFIG}" "${NAMESPACE}" "${PCP_POD}" \
-                        "${archive_base}.${ext}" "${ARCHIVE_DIR}/${archive_base_name}.${ext}" \
-                        "$((256 * 1024))" 2>/dev/null || true
-                done
-            fi
-        fi
-    done
-done
-
-find "${OUTPUT_DIR}/pcp-archives" -type f \
-    \( -name "*.meta" -o -name "*.index" -o -regex ".*\.[0-9][0-9]*$" \) \
-    -print0 | while IFS= read -r -d '' f; do
-    zstd -q --rm "$f" || true
+    echo "  Compressing PCP archives in pod..."
+    kubectl exec -n "${NAMESPACE}" "${PCP_POD}" -- \
+        bash -c 'cd /var/log/pcp/pmlogger/$(hostname) && \
+                 for f in [0-9]*; do [ -f "$f" ] && zstd -q --rm "$f"; done'
+    echo "  Downloading PCP archives..."
+    kubectl exec -n "${NAMESPACE}" "${PCP_POD}" -- \
+        bash -c 'cd /var/log/pcp/pmlogger/$(hostname) && tar cf - *.zst' \
+        | tar xf - -C "${ARCHIVE_DIR}" 2>/dev/null || \
+        echo "  Warning: PCP archive download failed for ${PCP_POD}"
+    echo "  Downloaded $(ls "${ARCHIVE_DIR}"/*.zst 2>/dev/null | wc -l) archive files"
 done
 
 # ── 11. Record configuration ─────────────────────────────────────────────────

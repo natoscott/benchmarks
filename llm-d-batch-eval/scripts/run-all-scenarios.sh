@@ -3,9 +3,15 @@
 # Starts with Qwen3-8B for fast turnaround and tooling validation.
 #
 # Usage:
-#   bash scripts/run-all-scenarios.sh 2>&1 | tee /tmp/batch-gateway-benchmark.log
+#   bash scripts/run-all-scenarios.sh 2>&1 | stdbuf -oL tee /tmp/batch-gateway-benchmark.log
 #   # Monitor: tail -F /tmp/batch-gateway-benchmark.log
 set -euo pipefail
+
+# Re-exec with line-buffered stdout if piped (so tail -F works)
+if [ ! -t 1 ] && [ -z "${_UNBUFFERED:-}" ]; then
+    export _UNBUFFERED=1
+    exec stdbuf -oL "$0" "$@"
+fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
