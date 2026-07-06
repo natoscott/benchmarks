@@ -259,6 +259,12 @@ echo ""
 if [ "${SCENARIO}" -ge 2 ]; then
     echo "[6] Submitting batch jobs (${NUM_JOBS} x ${BATCH_SIZE} requests)..."
 
+    # Copy helper scripts to pod (python3 /dev/stdin doesn't work with argparse)
+    kubectl cp "${HOME}/git/llm-d-batch-gateway/benchmarks/generate_prompts.py" \
+        "${NAMESPACE}/${GUIDELLM_POD}:/tmp/generate_prompts.py"
+    kubectl cp "${SCRIPT_DIR}/submit-batch-job.py" \
+        "${NAMESPACE}/${GUIDELLM_POD}:/tmp/submit-batch-job.py"
+
     COMPLETION_WINDOWS=("30m" "2h" "24h")
     JOB_NAMES=("job-a" "job-b" "job-c")
     BG_URL="http://batch-gateway-apiserver.${NAMESPACE}.svc.cluster.local:8000"
@@ -269,17 +275,15 @@ if [ "${SCENARIO}" -ge 2 ]; then
 
         echo "  Generating and submitting ${NAME} (window=${WINDOW}, ${BATCH_SIZE} requests)..."
         kubectl exec -n "${NAMESPACE}" "${GUIDELLM_POD}" -- \
-            python3 /dev/stdin \
+            python3 /tmp/generate_prompts.py \
                 --num-requests "${BATCH_SIZE}" \
                 --num-system-prompts "${NUM_SYSTEM_PROMPTS}" \
                 --model "${MODEL}" \
                 --seed $((42 + i)) \
-                --output "/tmp/${NAME}.jsonl" \
-            < "${HOME}/git/llm-d-batch-gateway/benchmarks/generate_prompts.py"
+                --output "/tmp/${NAME}.jsonl"
 
         kubectl exec -n "${NAMESPACE}" "${GUIDELLM_POD}" -- \
-            python3 /dev/stdin --url "${BG_URL}" --file "/tmp/${NAME}.jsonl" --window "${WINDOW}" \
-            < "${SCRIPT_DIR}/submit-batch-job.py"
+            python3 /tmp/submit-batch-job.py --url "${BG_URL}" --file "/tmp/${NAME}.jsonl" --window "${WINDOW}"
     done
     echo "  Batch jobs submitted"
 
