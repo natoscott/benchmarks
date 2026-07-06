@@ -1,0 +1,19 @@
+# The Helm chart does not create a Service for the processor's metrics port.
+# This Service exposes it so the openmetrics PMDA can scrape it.
+apiVersion: v1
+kind: Service
+metadata:
+  name: batch-gateway-processor-metrics
+  namespace: llm-d-batch
+  labels:
+    app.kubernetes.io/component: processor
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: batch-gateway-processor
+    app.kubernetes.io/instance: batch-gateway
+  ports:
+  - name: metrics
+    port: 9090
+    targetPort: 9090
+    protocol: TCP

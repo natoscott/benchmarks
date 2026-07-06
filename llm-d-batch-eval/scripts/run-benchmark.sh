@@ -103,6 +103,10 @@ kubectl patch llminferenceservice "${LLM_SERVICE_NAME}" -n "${NAMESPACE}" \
   {\"op\":\"replace\",\"path\":\"/spec/template/containers/0/env/1/value\",\"value\":${ARGS_JSON}}
 ]"
 
+# kserve doesn't always reconcile router-scheduler replicas automatically
+kubectl scale deployment "${LLM_SERVICE_NAME}-kserve-router-scheduler" \
+    -n "${NAMESPACE}" --replicas=1 2>/dev/null || true
+
 echo "  Waiting for LLMInferenceService to be Ready..."
 TIMEOUT=1800; INTERVAL=15; ELAPSED=0
 while true; do
@@ -175,6 +179,8 @@ if [ "${SCENARIO}" -ge 2 ]; then
     kubectl exec -n "${NAMESPACE}" deployment/valkey -- \
         valkey-cli FLUSHALL 2>/dev/null || true
 
+    kubectl apply -f "${REPO_ROOT}/manifests/monitoring/batch-gateway-processor-metrics-svc.yaml" 2>/dev/null || true
+
     echo "  Batch gateway ready"
 else
     echo "[4] Skipping batch gateway (scenario ${SCENARIO})"
@@ -229,6 +235,20 @@ for i in {1..30}; do
     fi
     sleep 1
 done
+
+# Wait for all metric sources to have live data, then restart pmlogger
+# so pmlogconf picks up every source. Probes are scenario-dependent.
+PCP_PROBES="openmetrics.dcgm.DCGM_FI_DEV_GPU_UTIL"
+PCP_PROBES="${PCP_PROBES} openmetrics.vllm.vllm.num_requests_running"
+PCP_PROBES="${PCP_PROBES} openmetrics.epp.workqueue_depth"
+PCP_PROBES="${PCP_PROBES} postgresql.stat.database.numbackends"
+if [ "${SCENARIO}" -ge 2 ]; then
+    PCP_PROBES="${PCP_PROBES} openmetrics.batch_processor.processor_inflight_requests"
+fi
+echo "  Waiting for metric sources..."
+kubectl exec -n "${NAMESPACE}" "${PCP_READY}" -- \
+    /opt/pcp-scripts/pcp-wait-and-restart-pmlogger.sh ${PCP_PROBES} || \
+    echo "  Warning: some metric sources not available (check PCP logs)"
 
 # ── 6. Submit batch jobs (scenarios 2-4) ──────────────────────────────────────
 echo ""

@@ -115,12 +115,12 @@ spec:
           subPath: kserve.url
           readOnly: true
         - name: openmetrics-pmda-volume
-          mountPath: /var/lib/pcp/pmdas/openmetrics/config.d/batch-gateway-processor.url
-          subPath: batch-gateway-processor.url
+          mountPath: /var/lib/pcp/pmdas/openmetrics/config.d/batch_processor.url
+          subPath: batch_processor.url
           readOnly: true
         - name: openmetrics-pmda-volume
-          mountPath: /var/lib/pcp/pmdas/openmetrics/config.d/batch-gateway-apiserver.url
-          subPath: batch-gateway-apiserver.url
+          mountPath: /var/lib/pcp/pmdas/openmetrics/config.d/batch_apiserver.url
+          subPath: batch_apiserver.url
           readOnly: true
         - name: valkey-pmda-config
           mountPath: /etc/pcp-config/valkey

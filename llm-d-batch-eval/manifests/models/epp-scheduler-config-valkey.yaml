@@ -62,10 +62,9 @@ spec:
           - "9002"
           - --grpc-health-port
           - "9003"
-          - '{{ if .GlobalConfig.EnableTLS }}--enable-cert-reload=true{{- end }}'
-          - '{{ if .GlobalConfig.EnableTLS }}--secure-serving=true{{- end }}'
-          - '{{ if .GlobalConfig.EnableTLS }}--model-server-metrics-scheme=https{{- end }}'
-          - '{{ if .GlobalConfig.EnableTLS }}--cert-path=/var/run/kserve/tls{{- end }}'
+          - --model-server-metrics-scheme=https
+          - --cert-path=/var/run/kserve/tls
+          - --metrics-endpoint-auth=false
           env:
           - name: SSL_CERT_DIR
             value: /var/run/kserve/tls:/var/run/secrets/kubernetes.io/serviceaccount:/etc/pki/tls/certs

@@ -1,0 +1,25 @@
+Run ID: 2x8xH200_rhoai-3.5ea1_Meta-Llama-3.1-70B-Instruct-FP8_ungated_replica1
+Date: Wed 01 Jul 2026 13:34:56 UTC
+Scenario: 2 (ungated)
+Target: https://inference-gateway.apps.psap-fire-athena.ibm.rhperfscale.org/llm-d-batch/llama-70b
+Model: RedHatAI/Meta-Llama-3.1-70B-Instruct-FP8
+Model Name: Meta-Llama-3.1-70B-Instruct-FP8
+LLMInferenceService: llama-70b
+Replicas: 1
+Tensor Parallel Size: 2
+GPU Memory Utilization: 0.90
+Hardware: 2x8xH200
+Software: rhoai-3.5ea1
+Burst Rate: 15
+Idle Rate: 1
+Burst Seconds: 60
+Idle Seconds: 60
+Cycles: 3
+Warmup Cycles: 1
+Prompt Tokens: 512
+Output Tokens: 128
+Batch Size: 1000
+Num Jobs: 3
+guidellm Pod: guidellm-cc5b8b44f-bqcvs
+PCP Pods: pcp-7ddbb7f489-cjrl4
+Namespace: llm-d-batch

@@ -152,6 +152,7 @@ kubectl apply -f "${MANIFESTS}/monitoring/postgresql-pmda-configmap.yaml"
 kubectl create configmap pcp-scripts \
     --from-file=pcp-wait-and-restart-pmlogger.sh="${SHARED_SCRIPTS}/pcp-wait-and-restart-pmlogger.sh" \
     -n "${NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
+kubectl apply -f "${MANIFESTS}/monitoring/batch-gateway-processor-metrics-svc.yaml" 2>/dev/null || true
 kubectl apply -f "${MANIFESTS}/monitoring/pcp-deployment.yaml"
 kubectl rollout status deployment/pcp -n "${NAMESPACE}" --timeout=300s
 echo "  PCP ready"
