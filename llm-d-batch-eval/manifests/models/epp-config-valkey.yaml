@@ -1,9 +1,7 @@
-# EPP EndpointPickerConfig with Valkey prefix-cache routing and flow-control.
-# Flow-control priority bands:
-#   interactive (100) — high priority, fair, FCFS
-#   batch (-1) — sheddable, throughput-optimized, SLO-deadline ordering
-# Used for all scenarios. Scenario differentiation is via the batch-gateway
-# processor config (concurrency limits, AIMD, inferenceObjective header).
+# EPP EndpointPickerConfig for Valkey-backed prefix-cache routing.
+# Flow-control and utilization-detector plugins are not available in
+# RHOAI 3.5 EA EPP (gateway-api-inference-extension 2026-04-09 build).
+# These should be tested in the next RHOAI version.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -13,9 +11,8 @@ data:
   config.yaml: |
     apiVersion: inference.networking.x-k8s.io/v1alpha1
     kind: EndpointPickerConfig
-    featureGates:
-    - "flowControl"
     plugins:
+    - type: single-profile-handler
     - type: queue-scorer
     - type: kv-cache-utilization-scorer
     - type: prefix-cache-scorer
@@ -26,13 +23,6 @@ data:
             redisConfig:
               address: "valkey://valkey.llm-d-batch.svc.cluster.local:6379"
               backendType: "valkey"
-    - type: round-robin-fairness-policy
-    - type: global-strict-fairness-policy
-    - type: slo-deadline-ordering-policy
-    - type: utilization-detector
-      parameters:
-        queueDepthThreshold: 5
-        kvCacheUtilThreshold: 0.8
     schedulingProfiles:
     - name: default
       plugins:
@@ -42,15 +32,3 @@ data:
         weight: 2
       - pluginRef: gpu-prefix-cache-scorer
         weight: 1
-    flowControl:
-      maxBytes: 4294967296
-      defaultRequestTTL: 30s
-      priorityBands:
-      - priority: 100
-        maxBytes: 1073741824
-        fairnessPolicyRef: round-robin-fairness-policy
-        orderingPolicyRef: fcfs-ordering-policy
-      - priority: -1
-        maxBytes: 3221225472
-        fairnessPolicyRef: global-strict-fairness-policy
-        orderingPolicyRef: slo-deadline-ordering-policy

@@ -7,11 +7,14 @@ global:
     fs:
       pvcName: batch-gateway-files
 
-# Upstream v0.2.0 images — RHOAI 3.5 EA images lack AIMD and job-level metrics
+# RHOAI 3.5 EA batch-gateway images.
+# Note: these pre-date upstream v0.2.0 and lack AIMD metrics, job-level
+# metrics, and token throughput counters. The next RHOAI version should
+# include these — retest when available.
 apiserver:
   image:
-    repository: ghcr.io/llm-d/batch-gateway-apiserver
-    tag: "v0.2.0"
+    repository: registry.redhat.io/rhoai/odh-llm-d-batch-gateway-apiserver-rhel9
+    digest: "sha256:54290b9a0e3ff65af5d02a53fed7d65cb1eda2e3b6d3f038a3a41e2b9a1e8580"
     pullPolicy: IfNotPresent
   podSecurityContext: {}
   config:
@@ -21,8 +24,8 @@ apiserver:
 
 processor:
   image:
-    repository: ghcr.io/llm-d/batch-gateway-processor
-    tag: "v0.2.0"
+    repository: registry.redhat.io/rhoai/odh-llm-d-batch-gateway-processor-rhel9
+    digest: "sha256:2491b371b9928e180c735bd4d37860bf8d4be895820f9d64c68438d2d9fadad5"
     pullPolicy: IfNotPresent
   podSecurityContext: {}
   workDirVolume:
@@ -30,6 +33,6 @@ processor:
 
 gc:
   image:
-    repository: ghcr.io/llm-d/batch-gateway-gc
-    tag: "v0.2.0"
+    repository: registry.redhat.io/rhoai/odh-llm-d-batch-gateway-gc-rhel9
+    digest: "sha256:7b9c2b0f0e4af0b4787e61b1ec29b3ba3d24d83dcdff60e0be9b915a116c837e"
     pullPolicy: IfNotPresent
