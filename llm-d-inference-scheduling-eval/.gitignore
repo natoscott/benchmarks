@@ -1,0 +1,21 @@
+# Intermediate analysis files
+intermediate_*.csv
+temp_*.csv
+*_temp.py
+*_test.py
+
+# Large data exports
+guidellm_data.csv
+*_timeseries.csv
+*_raw_*.csv
+
+# Cache and temporary
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# Notes and planning
+*_NOTES.md
+*_TODO.md
+FINDINGS*.md
+PLAN.md

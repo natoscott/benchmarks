@@ -1,0 +1,58 @@
+# guidellm benchmark runner pod.
+# Runs `sleep infinity` — exec into it to run guidellm benchmark commands.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: guidellm
+  namespace: llm-d-nathans-epp-eval
+  labels:
+    app: guidellm
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app: guidellm
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: guidellm
+    spec:
+      serviceAccountName: guidellm
+      terminationGracePeriodSeconds: 10
+      containers:
+      - name: benchmark-runner
+        image: ghcr.io/vllm-project/guidellm:v0.7.1
+        imagePullPolicy: IfNotPresent
+        command: [bash, -lc]
+        args: [sleep infinity]
+        stdin: true
+        tty: true
+        env:
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: HF_HOME
+          value: /models/.hf
+        - name: HF_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: llm-d-hf-token
+              key: HF_TOKEN
+        resources:
+          requests:
+            cpu: "2"
+            memory: 4Gi
+          limits:
+            cpu: "4"
+            memory: 8Gi
+        volumeMounts:
+        - name: model-storage
+          mountPath: /models
+      volumes:
+      - name: model-storage
+        persistentVolumeClaim:
+          claimName: model-storage-nfs

@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: model-storage-nfs
+  namespace: llm-d-nathans-epp-eval
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 2000Gi
+  storageClassName: nfs

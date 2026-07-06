@@ -1,0 +1,41 @@
+# LLMInferenceService for Qwen/Qwen3-30B-A3B-Instruct-2507 — smoke test model.
+#
+# TP=1, gpu-memory-utilization=0.90.
+# Small MoE model on 1x H200 GPU — fast turnaround for tooling validation.
+apiVersion: serving.kserve.io/v1alpha2
+kind: LLMInferenceService
+metadata:
+  name: qwen3-30b
+  namespace: llm-d-nathans-epp-eval
+spec:
+  baseRefs:
+  - name: v3-5-0-ea-1-kserve-config-llm-template
+  - name: epp-scheduler-prior-default
+  - name: v3-5-0-ea-1-kserve-config-llm-router-route
+  model:
+    name: "Qwen/Qwen3-30B-A3B-Instruct-2507"
+    uri: "pvc://model-storage-nfs/hub/models--Qwen--Qwen3-30B-A3B-Instruct-2507/snapshots/main"
+  parallelism:
+    tensor: 1
+  replicas: 0
+  template:
+    containers:
+    - name: main
+      env:
+      - name: HUGGING_FACE_HUB_TOKEN
+        valueFrom:
+          secretKeyRef:
+            name: llm-d-hf-token
+            key: HF_TOKEN
+      - name: VLLM_ADDITIONAL_ARGS
+        value: >-
+          --tensor-parallel-size 1
+          --gpu-memory-utilization 0.90
+          --max-num-seq 1024
+          --max-model-len 40960
+      resources:
+        requests:
+          nvidia.com/gpu: "1"
+          memory: 80Gi
+        limits:
+          nvidia.com/gpu: "1"

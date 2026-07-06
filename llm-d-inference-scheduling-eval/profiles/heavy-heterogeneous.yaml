@@ -1,0 +1,22 @@
+# Wide ISL distribution exercises kv-cache-utilization-scorer differentially.
+# Source: albertoperdomo2/benchflow/profiles/benchmark/concurrent-heavy-heterogeneous.yaml
+#
+# ISL range 50-30k creates uneven KV cache pressure across endpoints.
+profile:
+  kind: concurrent
+  streams: [300, 200, 100, 50, 1]
+data:
+  kind: synthetic_text
+  prompt_tokens: 8000
+  prompt_tokens_stdev: 8500
+  prompt_tokens_min: 50
+  prompt_tokens_max: 30000
+  output_tokens: 800
+  output_tokens_stdev: 1500
+  output_tokens_min: 20
+  output_tokens_max: 8000
+constraint:
+  kind: max_duration
+  seconds: 600
+requirements:
+  min_max_model_len: 40960

@@ -1,0 +1,172 @@
+# LLMInferenceServiceConfig: upstream llm-d optimized baseline EPP configuration.
+# Referenced in LLMInferenceService baseRefs as "epp-scheduler-optimized-baseline".
+# Uses the optimized-baseline EndpointPickerConfig (adds kv-cache-utilization-scorer + no-hit-lru-scorer).
+#
+# Container specs, TLS, and probes extracted from
+# llm-d-batch-eval/manifests/models/epp-scheduler-config-valkey.yaml.
+# EPP and tokenizer image digests should be pinned to 3.5 EA after upgrade.
+apiVersion: serving.kserve.io/v1alpha2
+kind: LLMInferenceServiceConfig
+metadata:
+  name: epp-scheduler-optimized-baseline
+  namespace: llm-d-nathans-epp-eval
+spec:
+  router:
+    scheduler:
+      annotations:
+        app.kubernetes.io/version: 0.7.0
+        certificates.kserve.io/expiration-v2: "true"
+      config:
+        ref:
+          name: epp-config-optimized-baseline
+          key: config.yaml
+      pool:
+        spec:
+          endpointPickerRef:
+            failureMode: FailOpen
+            group: ""
+            kind: Service
+            name: '{{ ChildName .ObjectMeta.Name `-epp-service` }}'
+            port:
+              number: 9002
+          selector:
+            matchLabels:
+              app.kubernetes.io/name: '{{ .ObjectMeta.Name }}'
+              app.kubernetes.io/part-of: llminferenceservice
+              kserve.io/component: workload
+          targetPorts:
+          - number: 8000
+      template:
+        volumes:
+        - name: tls-certs
+          secret:
+            secretName: '{{ ChildName .ObjectMeta.Name `-kserve-self-signed-certs` }}'
+        - emptyDir: {}
+          name: tokenizer-uds
+        - emptyDir: {}
+          name: tokenizer-tmp
+        - emptyDir: {}
+          name: tokenizer-cache
+        containers:
+        - name: main
+          image: registry.redhat.io/rhoai/odh-llm-d-inference-scheduler-rhel9@sha256:17f11071fa14cfcc097e69e54f3d1676d54e61132cdbc3e27d96507744dcd2d7
+          imagePullPolicy: IfNotPresent
+          command:
+          - /app/epp
+          - --pool-name
+          - '{{ ChildName .ObjectMeta.Name `-inference-pool` }}'
+          - --pool-namespace
+          - '{{ .ObjectMeta.Namespace }}'
+          - --zap-encoder
+          - json
+          - --grpc-port
+          - "9002"
+          - --grpc-health-port
+          - "9003"
+          - --model-server-metrics-scheme=https
+          - --cert-path=/var/run/kserve/tls
+          - --metrics-endpoint-auth=false
+          env:
+          - name: SSL_CERT_DIR
+            value: /var/run/kserve/tls:/var/run/secrets/kubernetes.io/serviceaccount:/etc/pki/tls/certs
+          ports:
+          - containerPort: 9002
+            name: grpc
+            protocol: TCP
+          - containerPort: 9003
+            name: grpc-health
+            protocol: TCP
+          - containerPort: 9090
+            name: metrics
+            protocol: TCP
+          - containerPort: 5557
+            name: zmq
+            protocol: TCP
+          resources:
+            requests:
+              cpu: 256m
+              memory: 500Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+          livenessProbe:
+            grpc:
+              port: 9003
+              service: liveness
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            grpc:
+              port: 9003
+              service: readiness
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 3
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: FallbackToLogsOnError
+          volumeMounts:
+          - name: tls-certs
+            mountPath: /var/run/kserve/tls
+            readOnly: true
+          - name: tokenizer-uds
+            mountPath: /tmp/tokenizer
+        - name: tokenizer
+          image: registry.redhat.io/rhoai/odh-llm-d-kv-cache-rhel9@sha256:28cbca40c2a72826bc9171ba1b832c0f89cc2d6b59118ff4dc405b90bab66dfa
+          imagePullPolicy: IfNotPresent
+          env:
+          - name: TOKENIZERS_DIR
+            value: /mnt/models
+          ports:
+          - containerPort: 8082
+            name: health
+            protocol: TCP
+          resources:
+            requests:
+              cpu: 256m
+              memory: 500Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: 8082
+            failureThreshold: 60
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8082
+            failureThreshold: 3
+            periodSeconds: 15
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8082
+            failureThreshold: 3
+            periodSeconds: 10
+            timeoutSeconds: 5
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: FallbackToLogsOnError
+          volumeMounts:
+          - name: tokenizer-tmp
+            mountPath: /tmp
+          - name: tokenizer-cache
+            mountPath: /.cache
+          - name: tokenizer-uds
+            mountPath: /tmp/tokenizer
+          workingDir: /mnt/models

@@ -1,0 +1,13 @@
+# URLs scraped by the PCP openmetrics PMDA.
+# run-benchmark.sh patches vllm.url and epp.url per model before each PCP restart.
+# Key names must be valid PCP metric namespace components (no hyphens).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openmetrics-pmda-configmap
+  namespace: llm-d-nathans-epp-eval
+data:
+  vllm.url: https://qwen3-30b-kserve-workload-svc.llm-d-nathans-epp-eval.svc.cluster.local:8000/metrics
+  dcgm.url: http://nvidia-dcgm-exporter.nvidia-gpu-operator.svc.cluster.local:9400/metrics
+  epp.url: http://qwen3-30b-epp-service.llm-d-nathans-epp-eval.svc.cluster.local:9090/metrics
+  kserve.url: https://kserve-controller-manager-metrics-service.redhat-ods-applications.svc.cluster.local:8443/metrics

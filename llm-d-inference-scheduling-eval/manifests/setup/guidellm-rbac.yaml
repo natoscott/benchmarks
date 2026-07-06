@@ -1,0 +1,25 @@
+# Kuadrant AuthPolicy on the inference gateway requires
+# get/llminferenceservices.serving.kserve.io for SA token authentication.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: guidellm-inference-access
+  namespace: llm-d-nathans-epp-eval
+rules:
+- apiGroups: ["serving.kserve.io"]
+  resources: ["llminferenceservices"]
+  verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: guidellm-inference-access
+  namespace: llm-d-nathans-epp-eval
+subjects:
+- kind: ServiceAccount
+  name: guidellm
+  namespace: llm-d-nathans-epp-eval
+roleRef:
+  kind: Role
+  name: guidellm-inference-access
+  apiGroup: rbac.authorization.k8s.io

@@ -1,0 +1,26 @@
+# Poisson rate sweep with large shared prefixes — isolates prefix-cache-scorer
+# vs no-hit-lru-scorer effectiveness across arrival rates.
+# Source: albertoperdomo2/benchflow/profiles/benchmark/x-70r-6kSys.yaml
+#
+# 150 unique 6k-token system prompts, 30s per rate, 50s warmup at rate=15.
+profile:
+  kind: poisson
+  rates: [3, 10, 15, 20, 22, 25, 30, 35, 40, 43, 46, 49, 52, 55, 57, 60]
+data:
+  kind: synthetic_text
+  prompt_tokens: 1200
+  output_tokens: 1000
+  prefix_buckets:
+    - bucket_weight: 100
+      prefix_tokens: 6000
+      prefix_count: 150
+constraint:
+  kind: max_duration
+  seconds: 30
+requirements:
+  min_max_model_len: 40960
+pre_warmup:
+  rate: 15
+  constraint:
+    kind: max_duration
+    seconds: 50

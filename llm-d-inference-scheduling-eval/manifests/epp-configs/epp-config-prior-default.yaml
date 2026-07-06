@@ -1,0 +1,24 @@
+# EPP EndpointPickerConfig: prior RHOAI default (3.3/3.4).
+# queue-scorer + prefix-cache-scorer only.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: epp-config-prior-default
+  namespace: llm-d-nathans-epp-eval
+data:
+  config.yaml: |
+    apiVersion: inference.networking.x-k8s.io/v1alpha1
+    kind: EndpointPickerConfig
+    plugins:
+    - type: single-profile-handler
+    - type: queue-scorer
+    - type: prefix-cache-scorer
+    - type: max-score-picker
+    schedulingProfiles:
+    - name: default
+      plugins:
+      - pluginRef: queue-scorer
+        weight: 2
+      - pluginRef: prefix-cache-scorer
+        weight: 3
+      - pluginRef: max-score-picker
