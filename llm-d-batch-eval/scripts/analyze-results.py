@@ -142,6 +142,12 @@ def load_all_results():
         model, scenario, replicas = parse_run_id(result_dir.name)
 
         for json_file in sorted(result_dir.glob("*.json.zst")):
+            # Skip non-guidellm files
+            stem = json_file.name.replace(".json.zst", "")
+            if not (stem.startswith("burst-") or stem.startswith("idle-")):
+                continue
+            if "warmup" in stem:
+                continue
             rm = extract_guidellm_metrics(json_file)
             if rm and rm.completed > 0:
                 rm.model = model
