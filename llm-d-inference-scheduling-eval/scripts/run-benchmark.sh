@@ -127,7 +127,8 @@ for i in $(seq 1 360); do
     READY_COUNT=$(kubectl get pods -n "${NAMESPACE}" \
         -l "app.kubernetes.io/name=${LLM_SERVICE_NAME},kserve.io/component=workload" \
         -o jsonpath='{range .items[*]}{.status.conditions[?(@.type=="Ready")].status}{"\n"}{end}' 2>/dev/null \
-        | { grep -c True || echo 0; })
+        | grep -c True 2>/dev/null || true)
+    READY_COUNT="${READY_COUNT:-0}"
     if [[ "${READY_COUNT}" -ge "${REPLICAS}" ]]; then
         echo "  ${READY_COUNT}/${REPLICAS} workload pods Ready"
         break
