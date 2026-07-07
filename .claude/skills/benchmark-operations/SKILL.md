@@ -63,6 +63,32 @@ bash scripts/run-all-scenarios.sh 2>&1 | stdbuf -oL tee /tmp/batch-gateway-bench
 Use `stdbuf -oL` for line-buffered output so `tail -F` shows progress in
 real time. Use `tail -F` (capital F) to handle log file rotation/recreation.
 
+## New Evaluation Area Checklist
+
+Before starting work on a new benchmark scenario or evaluation area, verify
+that the following are available locally. Prompt the user if any are missing.
+
+1. **Source code for the component under test.** Clone or verify local copies
+   of the relevant llm-d, vLLM, kserve, or EPP repositories at the version
+   being evaluated. The source is essential for understanding configuration
+   options, metric names, scorer behavior, and default values — do not rely
+   on documentation alone.
+
+2. **Project documentation.** Ensure upstream guides, design docs, and READMEs
+   for the feature area are accessible. For llm-d, check `guides/` directories
+   (e.g. `guides/optimized-baseline/` for EPP configs). For RHOAI, check the
+   product documentation and any linked Jira strategy attachments.
+
+3. **Issue tracker access.** Verify that Jira (via `acli` or similar CLI),
+   GitHub issues, and PR history for the relevant repos can be queried. The
+   benchmark scope and acceptance criteria often reference specific tickets.
+   Ask the user to confirm access if CLI tools are not yet authenticated.
+
+4. **Colleague workloads and profiles.** Check whether team members have
+   existing benchmark profiles, workload generators, or results that can be
+   reused or compared against. These are often in personal repos or shared
+   directories — ask the user rather than searching blindly.
+
 ## Artifact Collection Patterns
 
 ### guidellm Results
