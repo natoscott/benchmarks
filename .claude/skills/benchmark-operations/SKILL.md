@@ -58,6 +58,23 @@ when the API server connection drops or buffers flush incompletely. This
 produces corrupt JSON that `strip-guidellm-request-content.py` rejects with
 `Unterminated string` errors.
 
+### Chunked Transfer for Very Large Files
+
+When `kubectl cp` itself truncates (files >100MB, intermittent API
+connectivity), use the shared chunked transfer script:
+
+```bash
+SHARED_SCRIPTS="${REPO_ROOT}/../scripts"
+"${SHARED_SCRIPTS}/transfer-large-file-chunked.sh" \
+    "${KUBECONFIG}" "${NAMESPACE}" "${POD}" \
+    "/remote/path/file" "${LOCAL_DIR}/file" "$((256 * 1024))"
+```
+
+This reads the file in 256KB chunks via `dd` over `kubectl exec`, reassembles
+locally, and verifies size. Use this as a fallback when `kubectl cp` fails on
+large files — for typical benchmark artifacts (tarballed JSON, compressed PCP
+archives) `kubectl cp` is sufficient.
+
 ### PCP Archives
 
 Stop pmlogger first, compress all archive files in-pod, tar, `kubectl cp`.
