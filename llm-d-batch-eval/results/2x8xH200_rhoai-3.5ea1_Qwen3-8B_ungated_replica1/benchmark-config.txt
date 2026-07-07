@@ -1,5 +1,5 @@
 Run ID: 2x8xH200_rhoai-3.5ea1_Qwen3-8B_ungated_replica1
-Date: Thu 02 Jul 2026 23:48:01 UTC
+Date: Tue 07 Jul 2026 01:06:35 UTC
 Scenario: 2 (ungated)
 Target: https://inference-gateway.apps.psap-fire-athena.ibm.rhperfscale.org/llm-d-batch/qwen3-8b
 Model: Qwen/Qwen3-8B
@@ -18,8 +18,8 @@ Cycles: 3
 Warmup Cycles: 1
 Prompt Tokens: 512
 Output Tokens: 128
-Batch Size: 1000
-Num Jobs: 3
-guidellm Pod: guidellm-cc5b8b44f-bqcvs
-PCP Pods: pcp-7ddbb7f489-ttbs2
+Batch Size: 100
+Num Jobs: 30
+guidellm Pod: guidellm-c8d548fcf-jwcfh
+PCP Pods: pcp-67bbf4c476-v5lk8
 Namespace: llm-d-batch

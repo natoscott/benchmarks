@@ -360,7 +360,9 @@ echo "  Packaging guidellm results in pod..."
 kubectl exec -n "${NAMESPACE}" "${GUIDELLM_POD}" -- \
     bash -c 'cd /models/benchmark-output && rm -f *-warmup* && tar czf /tmp/guidellm-results.tar.gz *.json'
 echo "  Downloading guidellm-results.tar.gz..."
-kubectl cp "${NAMESPACE}/${GUIDELLM_POD}:/tmp/guidellm-results.tar.gz" "${OUTPUT_DIR}/guidellm-results.tar.gz"
+"${TRANSFER_SCRIPT}" \
+    "${KUBECONFIG}" "${NAMESPACE}" "${GUIDELLM_POD}" \
+    "/tmp/guidellm-results.tar.gz" "${OUTPUT_DIR}/guidellm-results.tar.gz" "$((256 * 1024))"
 tar xzf "${OUTPUT_DIR}/guidellm-results.tar.gz" -C "${OUTPUT_DIR}" && rm -f "${OUTPUT_DIR}/guidellm-results.tar.gz"
 
 for f in "${OUTPUT_DIR}"/*.json; do
@@ -419,7 +421,9 @@ for PCP_POD in ${PCP_PODS}; do
                  for f in [0-9]*; do [ -f "$f" ] && zstd -q --rm "$f"; done && \
                  tar cf /tmp/pcp-archives.tar *.zst'
     echo "  Downloading PCP archives..."
-    kubectl cp "${NAMESPACE}/${PCP_POD}:/tmp/pcp-archives.tar" "${ARCHIVE_DIR}/pcp-archives.tar"
+    "${TRANSFER_SCRIPT}" \
+        "${KUBECONFIG}" "${NAMESPACE}" "${PCP_POD}" \
+        "/tmp/pcp-archives.tar" "${ARCHIVE_DIR}/pcp-archives.tar" "$((256 * 1024))"
     tar xf "${ARCHIVE_DIR}/pcp-archives.tar" -C "${ARCHIVE_DIR}" && rm -f "${ARCHIVE_DIR}/pcp-archives.tar"
     echo "  Downloaded $(ls "${ARCHIVE_DIR}"/*.zst 2>/dev/null | wc -l) archive files"
 done
