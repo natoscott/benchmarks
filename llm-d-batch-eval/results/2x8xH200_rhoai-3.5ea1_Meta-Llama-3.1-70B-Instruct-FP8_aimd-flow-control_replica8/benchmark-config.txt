@@ -1,5 +1,5 @@
 Run ID: 2x8xH200_rhoai-3.5ea1_Meta-Llama-3.1-70B-Instruct-FP8_aimd-flow-control_replica8
-Date: Wed 01 Jul 2026 20:05:35 UTC
+Date: Tue 07 Jul 2026 07:45:10 UTC
 Scenario: 4 (aimd-flow-control)
 Target: https://inference-gateway.apps.psap-fire-athena.ibm.rhperfscale.org/llm-d-batch/llama-70b
 Model: RedHatAI/Meta-Llama-3.1-70B-Instruct-FP8
@@ -18,8 +18,8 @@ Cycles: 3
 Warmup Cycles: 1
 Prompt Tokens: 512
 Output Tokens: 128
-Batch Size: 1000
-Num Jobs: 3
-guidellm Pod: guidellm-cc5b8b44f-bqcvs
-PCP Pods: pcp-7ddbb7f489-c6rww
+Batch Size: 100
+Num Jobs: 30
+guidellm Pod: guidellm-c8d548fcf-jwcfh
+PCP Pods: pcp-67bbf4c476-55w4v
 Namespace: llm-d-batch
