@@ -6,7 +6,7 @@
 
 ## TL;DR
 
-Batch gateway dispatch strategies (ungated, AIMD, AIMD+flow-control) were evaluated against an interactive-only baseline on Qwen/Qwen3-8B across 1, 4, and 8 replicas on 2×8 NVIDIA H200 GPUs. **At single-replica, concurrent batch processing increases interactive TTFT p99 by 5-8% (86.9 ms → 91-94 ms), with no measurable impact on ITL or throughput.** At 4 and 8 replicas, batch overhead is absorbed — TTFT p99 is within ±5% of the baseline. All three dispatch strategies (ungated, AIMD, AIMD+flow-control) produce equivalent latency results in RHOAI 3.5 EA, consistent with the absence of flow-control plugins in this EPP version. Zero inference errors across 27,000+ interactive requests. 30×100 batch jobs (3000 total) complete within the first 5 minutes of the 6-minute measurement window.
+Batch gateway dispatch strategies (ungated, AIMD, AIMD+flow-control) were evaluated against an interactive-only baseline on Qwen3-8B and Meta-Llama-3.1-70B-Instruct-FP8 across 1, 4, and 8 replicas on 2×8 NVIDIA H200 GPUs. **Batch processing impact scales with model size: Qwen3-8B (8B parameters) shows 5-8% TTFT p99 increase at r=1, while FP8-70B (70B parameters) shows 33-107% increase at r=1 with throughput dropping from 2.4 to 0.2 RPS.** The root cause is visible in PCP metrics: the ungated batch processor dispatches up to 100 concurrent requests onto a single FP8-70B replica, driving KV cache from 0% to 35% and vLLM running requests to 100 — far exceeding the model's effective concurrency limit of ~4x at max_seq_len. At 8 replicas, FP8-70B batch overhead remains 105-260% TTFT p99, indicating the workload exceeds even 16 GPUs' capacity at these concurrency levels. RHOAI 3.5 EA lacks EPP flow-control plugins, so all dispatch strategies produce equivalent results. gpt-oss-120b results pending.
 
 ## Methodology
 
@@ -109,6 +109,62 @@ PCP time-series from the ungated r=4 run shows batch dispatch starting at t+20s 
 
 **Batch processor inflight**: The processor maintains 20-41 concurrent inference requests during active dispatch (ungated scenario, global limit=200). Inflight drops to 0 once batch jobs complete.
 
+### Meta-Llama-3.1-70B-Instruct-FP8
+
+FP8-70B uses TP=2 (2 GPUs per replica), max_seq_len=131,072, KV cache 568,528 tokens (max 4.34x concurrent at max_seq_len).
+
+| Scenario | R | TTFT p50 | p95 | p99 | ITL p50 | p95 | p99 | RPS | Completed |
+|---|---|---|---|---|---|---|---|---|---|
+| interactive-only | 1 | 135.1 | 1884.3 | 1897.9 | 47.4 | 51.4 | 61.6 | 2.4 | 300 |
+| ungated | 1 | 3914.0 | 3925.5 | 3925.7 | 388.5 | 388.5 | 388.5 | 0.2 | 60 |
+| aimd | 1 | 2517.5 | 2524.3 | 2524.7 | 379.9 | 399.3 | 399.3 | 0.2 | 58 |
+| aimd-flow-control | 1 | 3860.4 | 3867.1 | 3867.3 | 386.4 | 386.4 | 386.4 | 0.2 | 60 |
+| interactive-only | 4 | 97.0 | 1777.8 | 1789.0 | 14.2 | 639.1 | 639.1 | 0.7 | 94 |
+| ungated | 4 | 106.0 | 2599.4 | 2609.7 | 14.9 | 525.6 | 525.6 | 0.7 | 91 |
+| aimd | 4 | 104.0 | 1789.7 | 1800.3 | 13.8 | 424.2 | 435.7 | 0.9 | 114 |
+| aimd-flow-control | 4 | 117.0 | 2924.7 | 2933.3 | 14.5 | 459.6 | 459.6 | 0.7 | 88 |
+| interactive-only | 8 | 90.9 | 442.1 | 551.2 | 12.7 | 50.9 | 55.5 | 6.5 | 786 |
+| ungated | 8 | 98.1 | 334.4 | 1129.4 | 13.6 | 38.1 | 274.0 | 3.7 | 450 |
+| aimd | 8 | 96.9 | 919.4 | 1981.6 | 13.4 | 195.5 | 217.8 | 4.4 | 529 |
+| aimd-flow-control | 8 | 96.5 | 1004.5 | 1790.8 | 13.1 | 148.8 | 172.1 | 4.7 | 563 |
+
+**TTFT p99 overhead vs baseline:**
+
+| Scenario | r=1 | r=4 | r=8 |
+|---|---|---|---|
+| ungated | +106.8% | +45.9% | +104.9% |
+| aimd | +33.0% | +0.6% | +259.5% |
+| aimd-flow-control | +103.8% | +64.0% | +224.9% |
+
+FP8-70B shows batch overhead at all replica counts. At r=1, throughput drops from 2.4 to 0.2 RPS — an 12x reduction. The interactive-only baseline itself shows high latency at r=1 and r=4 (TTFT p99 1.8-1.9s), indicating 15 concurrent interactive streams already saturate the model at these scales.
+
+At r=8 (16 GPUs), the baseline improves (551 ms TTFT p99, 6.5 RPS), but batch scenarios still show 105-260% TTFT p99 increase. The batch processor dispatches up to 100 concurrent requests across all replicas, competing directly with interactive traffic for GPU compute and KV cache capacity.
+
+### FP8-70B System Metrics (PCP)
+
+PCP time-series from the ungated r=1 run reveals the contention mechanism:
+
+- **vLLM running requests**: Ramps from 0 to 100 within 90 seconds as the batch processor fills its concurrency limit. The single TP=2 replica attempts to serve 100 concurrent requests.
+- **KV cache utilization**: Climbs from 0% to 35% — 10x higher than Qwen3-8B under the same workload. The 568,528-token KV cache is not exhausted, but the model's effective throughput at 100 concurrent requests is bottlenecked by compute, not memory.
+- **Batch processor inflight**: Saturates at 100 requests (per-endpoint limit for ungated scenario), confirming the processor dispatches at maximum concurrency regardless of backend capacity.
+
+At r=8, the 100 batch requests are distributed across 8 replicas (~12-13 per replica), reducing per-replica pressure. However, total GPU compute is still shared with 15 interactive streams, resulting in elevated tail latencies.
+
+### Cross-Model Comparison
+
+| Metric | Qwen3-8B r=1 | FP8-70B r=1 | Ratio |
+|---|---|---|---|
+| Model parameters | 8B | 70B | 8.75x |
+| TP | 1 | 2 | 2x |
+| KV cache tokens | 783,568 | 568,528 | 0.73x |
+| Max concurrency at max_seq_len | 19.13x | 4.34x | 0.23x |
+| Baseline TTFT p99 | 86.9 ms | 1897.9 ms | 21.8x |
+| Baseline RPS | 19.0 | 2.4 | 0.13x |
+| Batch overhead (ungated TTFT p99) | +5.8% | +106.8% | 18.4x |
+| KV cache under batch load | 3.6% | 35% | 9.7x |
+
+Batch processing impact scales super-linearly with model size. FP8-70B has 8.75x more parameters but 18.4x more batch overhead. The model's lower effective concurrency limit (4.34x vs 19.13x) means the fixed batch dispatch rate (100 concurrent requests) represents a proportionally larger share of available capacity.
+
 ### KV Cache and Queue Depth
 
 KV cache utilization peaks at 3.6% during concurrent batch + interactive load (ungated r=4). Qwen3-8B's 783,568-token KV cache (max 19.13x concurrent requests at max_model_len=40,960) is not under pressure on H200. This explains why batch processing has minimal latency impact — there is no KV cache contention.
@@ -125,16 +181,24 @@ vLLM prefix cache hit rate is ~50% during batch processing. Batch requests share
 - `analysis/pcp_timeseries_Qwen3-8B_r4.png` — vLLM and batch processor time series by scenario
 - `analysis/kv_cache_and_queue_Qwen3-8B_r4.png` — KV cache utilization and queue depth comparison
 - `analysis/batch_timeline_Qwen3-8B.png` — Batch completion timeline across scenarios
+- `analysis/pcp_fp8_70b_r1_vs_r8.png` — FP8-70B running requests and KV cache: r=1 vs r=8
+- `analysis/cross_model_ttft_p99_r1.png` — Cross-model TTFT p99 comparison at r=1 (log scale)
 
 ## Observations
 
-1. **Batch overhead is small for Qwen3-8B on H200.** At r=1 (single GPU), TTFT p99 increases 5-8% with concurrent batch processing. ITL and TPOT are unaffected (< 1 ms difference). At r=4+, the overhead is within measurement noise.
+1. **Batch overhead scales super-linearly with model size.** Qwen3-8B (8B params) shows 5-8% TTFT p99 increase at r=1. FP8-70B (70B params) shows 33-107% increase at r=1 with throughput collapsing from 2.4 to 0.2 RPS. The fixed batch dispatch rate (100 concurrent requests) represents a proportionally larger share of capacity for larger models.
 
-2. **All three dispatch strategies produce equivalent results.** Ungated, AIMD, and AIMD+flow-control show no measurable difference in interactive latency. This is expected: RHOAI 3.5 EA lacks flow-control plugins in the EPP, and AIMD metrics are not exposed by this processor version, so scenarios 3 and 4 operate identically to scenario 2 from the inference backend's perspective.
+2. **The ungated batch processor saturates large models.** PCP metrics show the processor dispatching 100 concurrent inference requests onto a single FP8-70B replica that supports ~4x effective concurrency at max_seq_len. The model is overwhelmed — vLLM running requests hit 100, KV cache reaches 35%, and interactive requests queue behind batch requests.
 
-3. **Qwen3-8B is not GPU-bound on H200.** The model is small (8B parameters, TP=1) relative to H200 capacity (141 GB HBM3e). GPU utilization reaches 99-100% only during burst phases, and the KV cache is not under pressure. Larger models (FP8-70B, gpt-oss-120b) will provide a more realistic test of batch/interactive contention.
+3. **All three dispatch strategies produce equivalent results in RHOAI 3.5 EA.** Ungated, AIMD, and AIMD+flow-control show no measurable difference in interactive latency. RHOAI 3.5 EA lacks flow-control plugins in the EPP, and AIMD metrics are not exposed by this processor version, so scenarios 3 and 4 operate identically to scenario 2 from the inference backend's perspective.
 
-4. **30×100 batch job config enables concurrent measurement.** Batch dispatch starts within 20s of submission and overlaps with interactive traffic throughout the measurement window. The previous 3×1000 config had 5-7 minute ingestion delay, limiting overlap to the last minute.
+4. **Scaling replicas does not fully mitigate batch overhead for FP8-70B.** At r=8 (16 GPUs), batch scenarios still show 105-260% TTFT p99 overhead. The batch processor distributes requests across replicas, but the aggregate batch load (3000 requests) still competes with interactive traffic. This contrasts with Qwen3-8B where r=4 absorbs the batch load completely.
+
+5. **FP8-70B baseline is already saturated at r=1 with 15 interactive streams.** The interactive-only baseline shows 1.9s TTFT p99 and 2.4 RPS at r=1 — the model cannot sustain 15 concurrent streams on a single TP=2 replica. This means the benchmark workload exceeds the model's capacity before batch is added.
+
+6. **KV cache is not the bottleneck.** Even for FP8-70B under heavy batch load, KV cache peaks at 35%. The bottleneck is compute throughput, not memory capacity. H200's 141 GB HBM3e provides ample KV cache headroom.
+
+7. **30×100 batch job config enables concurrent measurement.** Batch dispatch starts within 20s of submission and overlaps with interactive traffic throughout the measurement window.
 
 ## Known Limitations (RHOAI 3.5 EA)
 
