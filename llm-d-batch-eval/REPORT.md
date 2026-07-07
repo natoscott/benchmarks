@@ -21,6 +21,8 @@ Batch gateway dispatch strategies (ungated, AIMD, AIMD+flow-control) were evalua
 | Batch Gateway | RHOAI 3.5 EA images (apiserver + processor) |
 | Valkey | 8.0.9 (Red Hat RHEL9 container) |
 | PostgreSQL | 16 (Red Hat RHEL9 container) |
+| vLLM | v0.19.1+rhaiv.6, prefix caching enabled, chunked prefill |
+| vLLM KV cache | 783,568 tokens (max 19.13x concurrent at max_model_len) |
 | guidellm | v0.7.1 |
 | PCP | 7.1.5 (openmetrics, pmdavalkey, pmdapostgresql) |
 
@@ -107,12 +109,22 @@ PCP time-series from the ungated r=4 run shows batch dispatch starting at t+20s 
 
 **Batch processor inflight**: The processor maintains 20-41 concurrent inference requests during active dispatch (ungated scenario, global limit=200). Inflight drops to 0 once batch jobs complete.
 
+### KV Cache and Queue Depth
+
+KV cache utilization peaks at 3.6% during concurrent batch + interactive load (ungated r=4). Qwen3-8B's 783,568-token KV cache (max 19.13x concurrent requests at max_model_len=40,960) is not under pressure on H200. This explains why batch processing has minimal latency impact — there is no KV cache contention.
+
+vLLM prefix cache hit rate is ~50% during batch processing. Batch requests share 32 system prompts across 3000 requests, enabling prefix cache reuse. The EPP's Valkey-backed prefix cache indexer routes requests to replicas that already have the relevant prefix cached.
+
 ### Visualizations
 
 - `analysis/ttft_p99_burst_Qwen3-8B.png` — TTFT p99 comparison across scenarios
 - `analysis/latency_vs_replicas_Qwen3-8B.png` — TTFT and TPOT p99 scaling with replicas
 - `analysis/throughput_burst_Qwen3-8B.png` — Interactive throughput comparison
 - `analysis/idle_vs_burst_Qwen3-8B.png` — Idle vs burst latency comparison
+- `analysis/pcp_concurrent_load_Qwen3-8B_ungated_r4.png` — vLLM running requests vs batch inflight (dual y-axis)
+- `analysis/pcp_timeseries_Qwen3-8B_r4.png` — vLLM and batch processor time series by scenario
+- `analysis/kv_cache_and_queue_Qwen3-8B_r4.png` — KV cache utilization and queue depth comparison
+- `analysis/batch_timeline_Qwen3-8B.png` — Batch completion timeline across scenarios
 
 ## Observations
 
