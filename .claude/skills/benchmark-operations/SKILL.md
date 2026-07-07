@@ -24,6 +24,45 @@ These patterns are established across `llm-d-batch-eval` and
    replica, all configs produce identical results because there is no routing
    choice. Size replicas to fill one node before spanning multiple nodes.
 
+## Result Directory and Idempotent Runs
+
+Results follow a naming convention that encodes all run parameters:
+```
+results/${HARDWARE}_${SOFTWARE}_${MODEL_NAME}_${PROFILE}_${CONFIG}_replica${REPLICAS}
+```
+
+Each run writes `benchmark-config.txt` as its **last step** — this file acts
+as the completion marker. The skip logic at the top of `run-benchmark.sh`:
+```bash
+if [ -f "${OUTPUT_DIR}/benchmark-config.txt" ]; then
+    echo "SKIPPING (already complete): ${OUTPUT_DIR}"
+    exit 0
+fi
+```
+
+This allows `run-all-scenarios.sh` to be restarted safely — completed runs are
+skipped, only incomplete or new runs execute. When designing new eval projects,
+always follow this pattern: encode all variable parameters in the directory
+name, write the completion marker last.
+
+## Log Monitoring
+
+Always pipe benchmark output to a short, meaningful file in `/tmp` for
+monitoring with `tail -F`. Do NOT use the Claude task output path — it is
+long, session-specific, and not meaningful to the human operator.
+
+```bash
+# In run-all-scenarios.sh usage comments:
+bash scripts/run-all-scenarios.sh 2>&1 | stdbuf -oL tee /tmp/epp-eval-benchmark.log
+# Monitor: tail -F /tmp/epp-eval-benchmark.log
+
+# For batch-eval:
+bash scripts/run-all-scenarios.sh 2>&1 | stdbuf -oL tee /tmp/batch-gateway-benchmark.log
+```
+
+Use `stdbuf -oL` for line-buffered output so `tail -F` shows progress in
+real time. Use `tail -F` (capital F) to handle log file rotation/recreation.
+
 ## Artifact Collection Patterns
 
 ### guidellm Results
@@ -119,7 +158,8 @@ for i in $(seq 1 360); do
     READY_COUNT=$(kubectl get pods -n "${NAMESPACE}" \
         -l "app.kubernetes.io/name=${LLM_SERVICE_NAME},kserve.io/component=workload" \
         -o jsonpath='{range .items[*]}{.status.conditions[?(@.type=="Ready")].status}{"\n"}{end}' \
-        2>/dev/null | { grep -c True || echo 0; })
+        2>/dev/null | grep -c True 2>/dev/null || true)
+    READY_COUNT="${READY_COUNT:-0}"
     if [[ "${READY_COUNT}" -ge "${REPLICAS}" ]]; then break; fi
     sleep 5
 done
