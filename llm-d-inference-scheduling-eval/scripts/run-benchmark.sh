@@ -115,15 +115,29 @@ while true; do
     sleep "${INTERVAL}"; ELAPSED=$(( ELAPSED + INTERVAL ))
 done
 
-# ── 3. Verify gateway routing ──────────────────────────────────────────────
+# ── 3. Wait for all workload pods, then verify gateway routing ──────────────
 echo ""
-echo "[3] Verifying gateway routing (/health)..."
+echo "[3] Waiting for workload pods and gateway routing..."
 GUIDELLM_POD=$(kubectl get pods -n "${NAMESPACE}" -l app=guidellm \
     --field-selector=status.phase=Running -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
 [ -n "${GUIDELLM_POD}" ] || { echo "ERROR: No running guidellm pod"; exit 1; }
 
+echo "  Waiting for ${REPLICAS} workload pod(s) to be Ready..."
+for i in $(seq 1 360); do
+    READY_COUNT=$(kubectl get pods -n "${NAMESPACE}" \
+        -l "app.kubernetes.io/name=${LLM_SERVICE_NAME},kserve.io/component=workload" \
+        -o jsonpath='{range .items[*]}{.status.conditions[?(@.type=="Ready")].status}{"\n"}{end}' 2>/dev/null \
+        | { grep -c True || echo 0; })
+    if [[ "${READY_COUNT}" -ge "${REPLICAS}" ]]; then
+        echo "  ${READY_COUNT}/${REPLICAS} workload pods Ready"
+        break
+    fi
+    echo "  ${READY_COUNT}/${REPLICAS} pods Ready (${i}/360, waiting 5s)"
+    sleep 5
+done
+
 GATEWAY_OK=false
-for i in $(seq 1 180); do
+for i in $(seq 1 60); do
     HTTP=$(kubectl exec -n "${NAMESPACE}" "${GUIDELLM_POD}" -- \
         bash -c "SA_TOKEN=\$(cat /var/run/secrets/kubernetes.io/serviceaccount/token); \
         curl -sk -o /dev/null -w '%{http_code}' --max-time 5 \
@@ -133,10 +147,10 @@ for i in $(seq 1 180); do
         echo "  Gateway live (attempt ${i})"
         GATEWAY_OK=true; break
     fi
-    echo "  HTTP ${HTTP}, waiting 5s... (${i}/180)"
+    echo "  HTTP ${HTTP}, waiting 5s... (${i}/60)"
     sleep 5
 done
-[ "${GATEWAY_OK}" = "true" ] || { echo "ERROR: Gateway not live after 15 minutes"; exit 1; }
+[ "${GATEWAY_OK}" = "true" ] || { echo "ERROR: Gateway not live after 5 minutes"; exit 1; }
 
 # ── 4. Update PCP openmetrics URLs and restart ──────────────────────────────
 echo ""
