@@ -60,6 +60,8 @@ This repository has established standards documented in `.claude/skills/`:
 
 - **repo-cleanliness**: Standards for maintaining clean repository structure. Consult `.claude/skills/repo-cleanliness/SKILL.md` when creating new files or organizing results.
 
+- **benchmark-operations**: Operational patterns for running benchmarks on remote clusters. **Always check for running benchmark processes before starting new ones.** Consult `.claude/skills/benchmark-operations/SKILL.md` when writing or modifying benchmark scripts, collecting artifacts, or managing benchmark runs.
+
 Always review the relevant skill documentation before starting work in these areas.
 
 ## Writing Style Guidelines
