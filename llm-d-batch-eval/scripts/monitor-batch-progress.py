@@ -23,11 +23,11 @@ import time
 from urllib.request import urlopen, Request
 
 
-def poll_batches(base_url, token):
+def poll_batches(base_url, token, limit=50):
     """Fetch all batch jobs and return their status."""
     try:
         req = Request(
-            f"{base_url}/v1/batches?limit=10",
+            f"{base_url}/v1/batches?limit={limit}",
             headers={"Authorization": f"Bearer {token}"},
         )
         data = json.loads(urlopen(req, timeout=5).read())
@@ -63,6 +63,7 @@ def main():
     parser.add_argument("--interval", type=int, default=10, help="Poll interval (seconds)")
     parser.add_argument("--timeout", type=int, default=7200, help="Max runtime (seconds)")
     parser.add_argument("--token", default="benchmark", help="Auth token")
+    parser.add_argument("--limit", type=int, default=50, help="Max jobs to query")
     args = parser.parse_args()
 
     timeline = []
@@ -76,7 +77,7 @@ def main():
             print(f"monitor-batch-progress: timeout after {elapsed}s", flush=True)
             break
 
-        jobs = poll_batches(args.url, args.token)
+        jobs = poll_batches(args.url, args.token, args.limit)
         timeline.append({"elapsed": elapsed, "jobs": jobs})
 
         parts = [f"{j['id'][-8:]}: {j['status']} {j['completed']}/{j['total']}" for j in jobs]

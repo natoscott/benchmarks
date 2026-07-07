@@ -38,8 +38,8 @@ OUTPUT_TOKENS="${OUTPUT_TOKENS:-128}"
 RANDOM_SEED="${RANDOM_SEED:-889}"
 
 # ── Batch configuration ─────────────────────────────────────────────────────
-BATCH_SIZE="${BATCH_SIZE:-1000}"
-NUM_JOBS="${NUM_JOBS:-3}"
+BATCH_SIZE="${BATCH_SIZE:-100}"
+NUM_JOBS="${NUM_JOBS:-30}"
 NUM_SYSTEM_PROMPTS="${NUM_SYSTEM_PROMPTS:-32}"
 
 # ── Derived ──────────────────────────────────────────────────────────────────
@@ -269,13 +269,11 @@ if [ "${SCENARIO}" -ge 2 ]; then
     kubectl cp "${SCRIPT_DIR}/submit-batch-job.py" \
         "${NAMESPACE}/${GUIDELLM_POD}:/tmp/submit-batch-job.py"
 
-    COMPLETION_WINDOWS=("30m" "2h" "24h")
-    JOB_NAMES=("job-a" "job-b" "job-c")
     BG_URL="http://batch-gateway-apiserver.${NAMESPACE}.svc.cluster.local:8000"
 
     for i in $(seq 0 $(( NUM_JOBS - 1 ))); do
-        NAME="${JOB_NAMES[$i]}"
-        WINDOW="${COMPLETION_WINDOWS[$i]}"
+        NAME="job-$(printf '%02d' $i)"
+        WINDOW="24h"
 
         echo "  Generating and submitting ${NAME} (window=${WINDOW}, ${BATCH_SIZE} requests)..."
         kubectl exec -n "${NAMESPACE}" "${GUIDELLM_POD}" -- \
@@ -296,7 +294,7 @@ if [ "${SCENARIO}" -ge 2 ]; then
     kubectl cp "${SCRIPT_DIR}/monitor-batch-progress.py" "${NAMESPACE}/${GUIDELLM_POD}:/tmp/monitor-batch-progress.py"
     kubectl exec -n "${NAMESPACE}" "${GUIDELLM_POD}" -- \
         python3 /tmp/monitor-batch-progress.py --url "${BG_URL}" --output /tmp/batch-timeline.json \
-        --interval 10 &
+        --interval 10 --limit "${NUM_JOBS}" &
     MONITOR_PID=$!
 else
     echo "[6] Skipping batch submission (scenario ${SCENARIO})"
@@ -383,7 +381,7 @@ if [ "${SCENARIO}" -ge 2 ]; then
     echo "  Capturing batch job final status..."
     BG_URL="http://batch-gateway-apiserver.${NAMESPACE}.svc.cluster.local:8000"
     kubectl exec -n "${NAMESPACE}" "${GUIDELLM_POD}" -- \
-        bash -c "curl -s -H 'Authorization: Bearer benchmark' '${BG_URL}/v1/batches?limit=10'" \
+        bash -c "curl -s -H 'Authorization: Bearer benchmark' '${BG_URL}/v1/batches?limit=${NUM_JOBS}'" \
         > "${OUTPUT_DIR}/batch-final-status.json" 2>/dev/null || true
 fi
 
