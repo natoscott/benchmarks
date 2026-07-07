@@ -8,6 +8,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 SHARED_SCRIPTS="${REPO_ROOT}/../scripts"
+TRANSFER_SCRIPT="${SHARED_SCRIPTS}/transfer-large-file-chunked.sh"
 
 export KUBECONFIG="${KUBECONFIG:-${HOME}/psap/kubeconfig-psap-janus}"
 NAMESPACE="${NAMESPACE:-llm-d-nathans-epp-eval}"
@@ -328,7 +329,9 @@ echo "  Packaging guidellm results in pod..."
 kubectl exec -n "${NAMESPACE}" "${GUIDELLM_POD}" -- \
     bash -c 'cd /models/benchmark-output && rm -f warmup.json && tar czf /tmp/guidellm-results.tar.gz *.json'
 echo "  Downloading guidellm-results.tar.gz..."
-kubectl cp "${NAMESPACE}/${GUIDELLM_POD}:/tmp/guidellm-results.tar.gz" "${OUTPUT_DIR}/guidellm-results.tar.gz"
+"${TRANSFER_SCRIPT}" \
+    "${KUBECONFIG}" "${NAMESPACE}" "${GUIDELLM_POD}" \
+    "/tmp/guidellm-results.tar.gz" "${OUTPUT_DIR}/guidellm-results.tar.gz" "$((256 * 1024))"
 tar xzf "${OUTPUT_DIR}/guidellm-results.tar.gz" -C "${OUTPUT_DIR}" && rm -f "${OUTPUT_DIR}/guidellm-results.tar.gz"
 
 for f in "${OUTPUT_DIR}"/*.json; do
@@ -377,7 +380,9 @@ for PCP_POD in ${PCP_PODS}; do
                  for f in 2*; do [ -f "$f" ] && zstd -q --rm "$f"; done && \
                  tar cf /tmp/pcp-archives.tar *.zst'
     echo "  Downloading PCP archives..."
-    kubectl cp "${NAMESPACE}/${PCP_POD}:/tmp/pcp-archives.tar" "${ARCHIVE_DIR}/pcp-archives.tar"
+    "${TRANSFER_SCRIPT}" \
+        "${KUBECONFIG}" "${NAMESPACE}" "${PCP_POD}" \
+        "/tmp/pcp-archives.tar" "${ARCHIVE_DIR}/pcp-archives.tar" "$((256 * 1024))"
     tar xf "${ARCHIVE_DIR}/pcp-archives.tar" -C "${ARCHIVE_DIR}" && rm -f "${ARCHIVE_DIR}/pcp-archives.tar"
     echo "  Downloaded $(find "${ARCHIVE_DIR}" -maxdepth 1 -name '*.zst' 2>/dev/null | wc -l) archive files"
 done
