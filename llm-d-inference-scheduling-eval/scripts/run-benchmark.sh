@@ -308,13 +308,12 @@ kubectl exec -n "${NAMESPACE}" "${GUIDELLM_POD}" -- bash -c "${RUN_SCRIPT}"
 echo ""
 echo "[6] Collecting guidellm results..."
 
-# Compress and tar in-pod first, then stream the archive out.
-# Two-step avoids truncation from concurrent write/stream.
-echo "  Compressing and downloading guidellm results..."
+# Create tarball in-pod, kubectl cp the single file, extract locally
+echo "  Packaging guidellm results in pod..."
 kubectl exec -n "${NAMESPACE}" "${GUIDELLM_POD}" -- \
-    bash -c 'cd /models/benchmark-output && rm -f warmup.json && sync && tar czf /tmp/guidellm-results.tar.gz *.json'
-kubectl exec -n "${NAMESPACE}" "${GUIDELLM_POD}" -- \
-    cat /tmp/guidellm-results.tar.gz > "${OUTPUT_DIR}/guidellm-results.tar.gz"
+    bash -c 'cd /models/benchmark-output && rm -f warmup.json && tar czf /tmp/guidellm-results.tar.gz *.json'
+echo "  Downloading guidellm-results.tar.gz..."
+kubectl cp "${NAMESPACE}/${GUIDELLM_POD}:/tmp/guidellm-results.tar.gz" "${OUTPUT_DIR}/guidellm-results.tar.gz"
 tar xzf "${OUTPUT_DIR}/guidellm-results.tar.gz" -C "${OUTPUT_DIR}" && rm -f "${OUTPUT_DIR}/guidellm-results.tar.gz"
 
 for f in "${OUTPUT_DIR}"/*.json; do
@@ -357,15 +356,14 @@ for PCP_POD in ${PCP_PODS}; do
     ARCHIVE_DIR="${OUTPUT_DIR}/pcp-archives/${POD_NODE}"
     mkdir -p "${ARCHIVE_DIR}"
 
-    echo "  Compressing PCP archives in pod..."
+    echo "  Packaging PCP archives in pod..."
     kubectl exec -n "${NAMESPACE}" "${PCP_POD}" -- \
         bash -c 'cd /var/log/pcp/pmlogger/$(hostname) && \
-                 for f in [0-9]* *.index *.meta; do [ -f "$f" ] && zstd -q --rm "$f"; done'
+                 for f in 2*; do [ -f "$f" ] && zstd -q --rm "$f"; done && \
+                 tar cf /tmp/pcp-archives.tar *.zst'
     echo "  Downloading PCP archives..."
-    kubectl exec -n "${NAMESPACE}" "${PCP_POD}" -- \
-        bash -c 'cd /var/log/pcp/pmlogger/$(hostname) && tar cf - *.zst' \
-        | tar xf - -C "${ARCHIVE_DIR}" 2>/dev/null || \
-        echo "  Warning: PCP archive download failed for ${PCP_POD}"
+    kubectl cp "${NAMESPACE}/${PCP_POD}:/tmp/pcp-archives.tar" "${ARCHIVE_DIR}/pcp-archives.tar"
+    tar xf "${ARCHIVE_DIR}/pcp-archives.tar" -C "${ARCHIVE_DIR}" && rm -f "${ARCHIVE_DIR}/pcp-archives.tar"
     echo "  Downloaded $(find "${ARCHIVE_DIR}" -maxdepth 1 -name '*.zst' 2>/dev/null | wc -l) archive files"
 done
 

@@ -50,28 +50,28 @@ run_model() {
     done
 }
 
-# ── Qwen3-30B-A3B (TP=1, smoke test) ───────────────────────────────────────
+# ── Qwen3-30B-A3B (TP=1, 8 replicas = 8 GPUs, 1 node) ─────────────────────
 echo ""
 echo "================================================================"
-echo "  Smoke Test: Qwen/Qwen3-30B-A3B-Instruct-2507 (TP=1)"
+echo "  Qwen/Qwen3-30B-A3B-Instruct-2507 (TP=1, 8 replicas)"
 echo "================================================================"
-run_model "Qwen/Qwen3-30B-A3B-Instruct-2507" "Qwen3-30B-A3B" "qwen3-30b" 1 1 \
+run_model "Qwen/Qwen3-30B-A3B-Instruct-2507" "Qwen3-30B-A3B" "qwen3-30b" 1 8 \
     multi-turn
 
-# ── Llama-3.3-70B-FP8 (TP=2, primary model) ────────────────────────────────
+# ── Llama-3.3-70B-FP8 (TP=2, 4 replicas = 8 GPUs, 1 node) ────────────────
 echo ""
 echo "================================================================"
-echo "  Primary: RedHatAI/Llama-3.3-70B-Instruct-FP8-dynamic (TP=2)"
+echo "  Primary: RedHatAI/Llama-3.3-70B-Instruct-FP8-dynamic (TP=2, 4 replicas)"
 echo "================================================================"
-run_model "RedHatAI/Llama-3.3-70B-Instruct-FP8-dynamic" "Llama-3.3-70B-FP8" "llama-70b" 2 1 \
+run_model "RedHatAI/Llama-3.3-70B-Instruct-FP8-dynamic" "Llama-3.3-70B-FP8" "llama-70b" 2 4 \
     multi-turn heavy-heterogeneous prefix-cache-stress
 
-# ── gpt-oss-120b (TP=4, MoE coverage) ──────────────────────────────────────
+# ── gpt-oss-120b (TP=4, 2 replicas = 8 GPUs, 1 node) ─────────────────────
 echo ""
 echo "================================================================"
-echo "  MoE: openai/gpt-oss-120b (TP=4)"
+echo "  MoE: openai/gpt-oss-120b (TP=4, 2 replicas)"
 echo "================================================================"
-run_model "openai/gpt-oss-120b" "gpt-oss-120b" "gpt-oss-120b" 4 1 \
+run_model "openai/gpt-oss-120b" "gpt-oss-120b" "gpt-oss-120b" 4 2 \
     multi-turn
 
 echo ""
