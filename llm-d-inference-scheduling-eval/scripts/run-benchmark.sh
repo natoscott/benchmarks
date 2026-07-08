@@ -324,23 +324,42 @@ kubectl exec -n "${NAMESPACE}" "${GUIDELLM_POD}" -- bash -c "${RUN_SCRIPT}"
 echo ""
 echo "[6] Collecting guidellm results..."
 
-# Create tarball in-pod, kubectl cp the single file, extract locally
-echo "  Packaging guidellm results in pod..."
+# Strip request content in-pod before transfer to reduce 200MB+ to ~1MB.
+# The guidellm container has Python + json but no zstd, so strip raw JSON
+# then gzip via tar czf.
+echo "  Stripping request content and packaging in pod..."
 kubectl exec -n "${NAMESPACE}" "${GUIDELLM_POD}" -- \
-    bash -c 'cd /models/benchmark-output && rm -f warmup.json && tar czf /tmp/guidellm-results.tar.gz *.json'
+    python3 -c '
+import json, glob, os
+os.chdir("/models/benchmark-output")
+for f in sorted(glob.glob("*.json")):
+    if "warmup" in f:
+        os.remove(f)
+        continue
+    with open(f) as fh:
+        data = json.load(fh)
+    def strip(obj):
+        if isinstance(obj, dict):
+            return {k: strip(v) for k, v in obj.items() if k not in ("request_args", "output")}
+        if isinstance(obj, list):
+            return [strip(i) for i in obj]
+        return obj
+    with open(f, "w") as fh:
+        json.dump(strip(data), fh, separators=(",", ":"))
+    print(f"  stripped {f}", flush=True)
+'
+kubectl exec -n "${NAMESPACE}" "${GUIDELLM_POD}" -- \
+    bash -c 'cd /models/benchmark-output && tar czf /tmp/guidellm-results.tar.gz *.json'
 echo "  Downloading guidellm-results.tar.gz..."
 "${TRANSFER_SCRIPT}" \
     "${KUBECONFIG}" "${NAMESPACE}" "${GUIDELLM_POD}" \
     "/tmp/guidellm-results.tar.gz" "${OUTPUT_DIR}/guidellm-results.tar.gz" "$((256 * 1024))"
 tar xzf "${OUTPUT_DIR}/guidellm-results.tar.gz" -C "${OUTPUT_DIR}" && rm -f "${OUTPUT_DIR}/guidellm-results.tar.gz"
 
+# Compress locally with zstd (not available in guidellm container)
 for f in "${OUTPUT_DIR}"/*.json; do
     [ -f "$f" ] || continue
     zstd -q -f --rm "$f" 2>/dev/null || true
-done
-for f in "${OUTPUT_DIR}"/*.json.zst; do
-    [ -f "$f" ] || continue
-    python3 "${SHARED_SCRIPTS}/strip-guidellm-request-content.py" "$f" 2>/dev/null || true
 done
 echo "  Downloaded $(find "${OUTPUT_DIR}" -maxdepth 1 -name '*.json.zst' 2>/dev/null | wc -l) result files"
 
