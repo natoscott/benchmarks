@@ -418,7 +418,7 @@ for PCP_POD in ${PCP_PODS}; do
     echo "  Packaging PCP archives in pod..."
     kubectl exec -n "${NAMESPACE}" "${PCP_POD}" -- \
         bash -c 'cd /var/log/pcp/pmlogger/$(hostname) && \
-                 for f in [0-9]*; do [ -f "$f" ] && zstd -q --rm "$f"; done && \
+                 for f in [0-9]*; do [ -f "$f" ] && case "$f" in *.zst) ;; *) zstd -q --rm "$f";; esac; done && \
                  tar cf /tmp/pcp-archives.tar *.zst'
     echo "  Downloading PCP archives..."
     "${TRANSFER_SCRIPT}" \
