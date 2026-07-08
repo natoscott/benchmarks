@@ -1,5 +1,5 @@
 Run ID: 2x8xH200_rhoai-3.5ea1_gpt-oss-120b_interactive-only_replica2
-Date: Thu 02 Jul 2026 00:07:44 UTC
+Date: Wed 08 Jul 2026 01:03:48 UTC
 Scenario: 0 (interactive-only)
 Target: https://inference-gateway.apps.psap-fire-athena.ibm.rhperfscale.org/llm-d-batch/gpt-oss-120b
 Model: openai/gpt-oss-120b
@@ -18,8 +18,8 @@ Cycles: 3
 Warmup Cycles: 1
 Prompt Tokens: 512
 Output Tokens: 128
-Batch Size: 1000
-Num Jobs: 3
-guidellm Pod: guidellm-cc5b8b44f-bqcvs
-PCP Pods: pcp-7ddbb7f489-fsxz8
+Batch Size: 100
+Num Jobs: 30
+guidellm Pod: guidellm-c8d548fcf-jwcfh
+PCP Pods: pcp-67bbf4c476-2b4kh
 Namespace: llm-d-batch
