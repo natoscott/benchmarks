@@ -1,0 +1,18 @@
+Run ID: 2x8xH200_rhoai-3.5ea1_Qwen3-30B-A3B_multi-turn_prior-default_replica8
+Date: Tue 07 Jul 2026 02:52:03 UTC
+EPP Config: prior-default
+EPP Scheduler: epp-scheduler-prior-default
+Profile: multi-turn
+Profile File: /home/nathans/git/benchmarks/llm-d-inference-scheduling-eval/profiles/multi-turn.yaml
+Target: https://openshift-ai-inference-data-science-gateway-class.openshift-ingress.svc.cluster.local/llm-d-nathans-epp-eval/qwen3-30b
+Model: Qwen/Qwen3-30B-A3B-Instruct-2507
+Model Name: Qwen3-30B-A3B
+LLMInferenceService: qwen3-30b
+Replicas: 8
+Tensor Parallel Size: 1
+GPU Memory Utilization: 0.90
+Hardware: 2x8xH200
+Software: rhoai-3.5ea1
+guidellm Pod: guidellm-8bcd67645-rzt4j
+PCP Pods: pcp-74fc96b56d-lnxtg
+Namespace: llm-d-nathans-epp-eval

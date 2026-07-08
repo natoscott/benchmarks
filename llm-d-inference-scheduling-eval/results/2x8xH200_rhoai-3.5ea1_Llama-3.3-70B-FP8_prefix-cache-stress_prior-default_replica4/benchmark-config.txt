@@ -1,0 +1,18 @@
+Run ID: 2x8xH200_rhoai-3.5ea1_Llama-3.3-70B-FP8_prefix-cache-stress_prior-default_replica4
+Date: Tue 07 Jul 2026 06:09:40 UTC
+EPP Config: prior-default
+EPP Scheduler: epp-scheduler-prior-default
+Profile: prefix-cache-stress
+Profile File: /home/nathans/git/benchmarks/llm-d-inference-scheduling-eval/profiles/prefix-cache-stress.yaml
+Target: https://openshift-ai-inference-data-science-gateway-class.openshift-ingress.svc.cluster.local/llm-d-nathans-epp-eval/llama-70b
+Model: RedHatAI/Llama-3.3-70B-Instruct-FP8-dynamic
+Model Name: Llama-3.3-70B-FP8
+LLMInferenceService: llama-70b
+Replicas: 4
+Tensor Parallel Size: 2
+GPU Memory Utilization: 0.90
+Hardware: 2x8xH200
+Software: rhoai-3.5ea1
+guidellm Pod: guidellm-8bcd67645-rzt4j
+PCP Pods: pcp-74fc96b56d-2p96l
+Namespace: llm-d-nathans-epp-eval
