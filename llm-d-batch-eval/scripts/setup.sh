@@ -1,5 +1,5 @@
 #!/bin/bash
-# One-time infrastructure setup for llm-d Batch Gateway benchmarks on psap-fire-athena.
+# One-time infrastructure setup for llm-d Batch Gateway benchmarks on the target cluster.
 # Run once before benchmarks. Idempotent — safe to re-run.
 #
 # What this does:
@@ -17,7 +17,7 @@
 #  12. Model presence check
 #
 # Usage:
-#   KUBECONFIG=~/psap/kubeconfig-psap-fire-athena bash scripts/setup.sh
+#   KUBECONFIG=~/psap/kubeconfig bash scripts/setup.sh
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -25,7 +25,7 @@ MANIFESTS="${SCRIPT_DIR}/../manifests"
 SHARED_SCRIPTS="${SCRIPT_DIR}/../../scripts"
 NAMESPACE="llm-d-batch"
 
-export KUBECONFIG="${KUBECONFIG:-${HOME}/psap/kubeconfig-psap-fire-athena}"
+export KUBECONFIG="${KUBECONFIG:-${HOME}/psap/kubeconfig}"
 
 echo "=== llm-d Batch Gateway Benchmark Setup ==="
 echo "Cluster: $(kubectl cluster-info 2>/dev/null | grep 'control plane' | awk '{print $NF}')"

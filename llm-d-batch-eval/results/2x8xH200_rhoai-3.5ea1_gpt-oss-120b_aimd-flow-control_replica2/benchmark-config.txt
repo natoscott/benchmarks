@@ -1,7 +1,7 @@
 Run ID: 2x8xH200_rhoai-3.5ea1_gpt-oss-120b_aimd-flow-control_replica2
 Date: Wed 08 Jul 2026 01:59:45 UTC
 Scenario: 4 (aimd-flow-control)
-Target: https://inference-gateway.apps.psap-fire-athena.ibm.rhperfscale.org/llm-d-batch/gpt-oss-120b
+Target: https://inference-gateway.apps.CLUSTER//llm-d-batch/gpt-oss-120b
 Model: openai/gpt-oss-120b
 Model Name: gpt-oss-120b
 LLMInferenceService: gpt-oss-120b

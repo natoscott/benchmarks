@@ -10,7 +10,7 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 SHARED_SCRIPTS="${REPO_ROOT}/../scripts"
 TRANSFER_SCRIPT="${SHARED_SCRIPTS}/transfer-large-file-chunked.sh"
 
-export KUBECONFIG="${KUBECONFIG:-${HOME}/psap/kubeconfig-psap-fire-athena}"
+export KUBECONFIG="${KUBECONFIG:-${HOME}/psap/kubeconfig}"
 NAMESPACE="${NAMESPACE:-llm-d-batch}"
 
 # ── Model configuration ─────────────────────────────────────────────────────

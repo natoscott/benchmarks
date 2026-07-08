@@ -1,7 +1,7 @@
 Run ID: 2x8xH200_rhoai-3.5ea1_Qwen3-8B_aimd-flow-control_replica4
 Date: Tue 07 Jul 2026 02:39:05 UTC
 Scenario: 4 (aimd-flow-control)
-Target: https://inference-gateway.apps.psap-fire-athena.ibm.rhperfscale.org/llm-d-batch/qwen3-8b
+Target: https://inference-gateway.apps.CLUSTER//llm-d-batch/qwen3-8b
 Model: Qwen/Qwen3-8B
 Model Name: Qwen3-8B
 LLMInferenceService: qwen3-8b

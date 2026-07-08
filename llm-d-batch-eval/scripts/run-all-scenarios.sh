@@ -15,7 +15,7 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-export KUBECONFIG="${KUBECONFIG:-${HOME}/psap/kubeconfig-psap-fire-athena}"
+export KUBECONFIG="${KUBECONFIG:-${HOME}/psap/kubeconfig}"
 export NAMESPACE="${NAMESPACE:-llm-d-batch}"
 export HARDWARE="${HARDWARE:-2x8xH200}"
 export SOFTWARE="${SOFTWARE:-rhoai-3.5ea1}"

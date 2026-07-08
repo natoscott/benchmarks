@@ -10,7 +10,7 @@ Three models were evaluated on 2×8 NVIDIA H200 GPUs with RHOAI 3.5 EA batch gat
 
 | Component | Configuration |
 |---|---|
-| Cluster | psap-fire-athena, OCP 4.20 |
+| Cluster | OCP 4.20 |
 | GPUs | 2× gx3d nodes, 8× NVIDIA H200 each (16 total) |
 | RHOAI | 3.5 EA (LLMInferenceService, EPP, inference gateway) |
 | Models | Qwen3-8B (TP=1), FP8-70B (TP=2), gpt-oss-120b (TP=4, MoE MXFP4) |
