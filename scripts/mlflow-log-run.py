@@ -135,71 +135,68 @@ def setup_mlflow():
 # Guidellm metrics extraction
 # ---------------------------------------------------------------------------
 
-def extract_guidellm_metrics(output_dir: Path):
-    """Return (params dict, metrics dict) from guidellm-results.json.zst."""
-    result_file = output_dir / "guidellm-results.json.zst"
-    if not result_file.exists():
-        print(f"  Warning: {result_file} not found, skipping guidellm metrics")
-        return {}, {}
-
+def _load_guidellm_json(path: Path):
+    """Decompress and parse a .json.zst guidellm result file."""
     proc = subprocess.run(
-        ["zstd", "-d", "-c", str(result_file)],
+        ["zstd", "-d", "-c", str(path)],
         capture_output=True, timeout=60
     )
     if proc.returncode != 0:
-        print(f"  Warning: failed to decompress {result_file}")
-        return {}, {}
-
+        print(f"  Warning: failed to decompress {path}")
+        return None
     data = json.loads(proc.stdout)
     benchmarks = data.get("benchmarks", [])
     if not benchmarks:
-        print("  Warning: no benchmarks in guidellm JSON")
-        return {}, {}
+        return None
+    return benchmarks[0]
 
-    bench = benchmarks[0]
+
+def _extract_from_benchmark(bench: dict, prefix: str = ""):
+    """Extract params and metrics from a single guidellm benchmark object.
+
+    If prefix is set (e.g. "burst"), metric keys become "burst.ttft_ms.p99".
+    """
     cfg = bench.get("config", {})
     sched = bench.get("scheduler_metrics", {})
     metric_data = bench.get("metrics", {})
 
-    # --- params from guidellm config ---
+    pfx = f"{prefix}." if prefix else ""
+
     params = {}
-    strategy = cfg.get("strategy", {})
-    params["guidellm.rate_type"] = strategy.get("type_", "")
-    params["guidellm.worker_count"] = strategy.get("worker_count", "")
-    constraints = cfg.get("constraints", {})
-    max_dur = constraints.get("max_seconds", {})
-    params["guidellm.max_seconds"] = max_dur.get("max_duration", "")
-    backend = cfg.get("backend", {})
-    params["guidellm.target"] = backend.get("target", "")
-    params["guidellm.timeout"] = backend.get("timeout", "")
+    if not prefix:
+        strategy = cfg.get("strategy", {})
+        params["guidellm.rate_type"] = strategy.get("type_", "")
+        params["guidellm.worker_count"] = strategy.get("worker_count", "")
+        constraints = cfg.get("constraints", {})
+        max_dur = constraints.get("max_seconds", {})
+        params["guidellm.max_seconds"] = max_dur.get("max_duration", "")
+        backend = cfg.get("backend", {})
+        params["guidellm.target"] = backend.get("target", "")
+        params["guidellm.timeout"] = backend.get("timeout", "")
+        req_cfg = cfg.get("requests", {})
+        params["guidellm.data"] = req_cfg.get("data", "")
+        params["guidellm.random_seed"] = req_cfg.get("random_seed", "")
 
-    req_cfg = cfg.get("requests", {})
-    params["guidellm.data"] = req_cfg.get("data", "")
-    params["guidellm.random_seed"] = req_cfg.get("random_seed", "")
-
-    # --- request totals ---
     metrics = {}
     totals = metric_data.get("request_totals", {})
-    metrics["requests.successful"] = float(totals.get("successful", 0))
-    metrics["requests.errored"] = float(totals.get("errored", 0))
-    metrics["requests.incomplete"] = float(totals.get("incomplete", 0))
-    metrics["requests.total"] = float(totals.get("total", 0))
+    metrics[f"{pfx}requests.successful"] = float(totals.get("successful", 0))
+    metrics[f"{pfx}requests.errored"] = float(totals.get("errored", 0))
+    metrics[f"{pfx}requests.incomplete"] = float(totals.get("incomplete", 0))
+    metrics[f"{pfx}requests.total"] = float(totals.get("total", 0))
 
-    # --- scheduler metrics ---
     for k, v in sched.items():
         if isinstance(v, (int, float)) and k not in ("start_time", "end_time",
                                                        "request_start_time",
                                                        "measure_start_time",
                                                        "measure_end_time",
                                                        "request_end_time"):
-            metrics[f"sched.{k}"] = float(v)
+            metrics[f"{pfx}sched.{k}"] = float(v)
         elif k == "requests_made" and isinstance(v, dict):
             for sk, sv in v.items():
                 if isinstance(sv, (int, float)):
-                    metrics[f"sched.requests_made.{sk}"] = float(sv)
+                    metrics[f"{pfx}sched.requests_made.{sk}"] = float(sv)
 
-    # --- stat metrics (mean, percentiles, etc.) ---
-    for prefix, category, sub in GUIDELLM_STAT_METRICS:
+    for stat_prefix, category, sub in GUIDELLM_STAT_METRICS:
         cat_data = metric_data.get(category, {})
         sub_data = cat_data.get(sub, {})
         if not sub_data:
@@ -207,14 +204,86 @@ def extract_guidellm_metrics(output_dir: Path):
         for field in GUIDELLM_STAT_FIELDS:
             val = sub_data.get(field)
             if val is not None:
-                metrics[f"{prefix}.{field}"] = float(val)
-        # percentiles sub-dict
+                metrics[f"{pfx}{stat_prefix}.{field}"] = float(val)
         percs = sub_data.get("percentiles", {})
         for pk, pv in percs.items():
             if pv is not None:
-                metrics[f"{prefix}.{pk}"] = float(pv)
+                metrics[f"{pfx}{stat_prefix}.{pk}"] = float(pv)
 
     return params, metrics
+
+
+def extract_guidellm_metrics(output_dir: Path):
+    """Return (params dict, metrics dict) from guidellm results.
+
+    Supports two formats:
+    - Single file: guidellm-results.json.zst (kvcache-offload-eval)
+    - Per-phase files: burst-N.json.zst, idle-N.json.zst (batch eval)
+    """
+    # --- Single-file format ---
+    result_file = output_dir / "guidellm-results.json.zst"
+    if result_file.exists():
+        bench = _load_guidellm_json(result_file)
+        if bench is None:
+            return {}, {}
+        return _extract_from_benchmark(bench)
+
+    # --- Per-phase format (burst-2.json.zst, idle-3.json.zst, etc.) ---
+    phase_files = sorted(output_dir.glob("burst-*.json.zst")) + \
+                  sorted(output_dir.glob("idle-*.json.zst"))
+    if not phase_files:
+        print(f"  Warning: no guidellm results in {output_dir}")
+        return {}, {}
+
+    all_params = {}
+    all_metrics = {}
+    phase_names = []
+
+    # Per-phase-type accumulator for averaging across cycles
+    # {phase_type: {metric_key: [values]}}
+    phase_accum: dict[str, dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
+
+    for pf in phase_files:
+        stem = pf.name.replace(".json.zst", "")  # e.g. "burst-2"
+        phase_type = stem.rsplit("-", 1)[0]       # e.g. "burst"
+        cycle = stem.rsplit("-", 1)[1]            # e.g. "2"
+        phase_names.append(stem)
+
+        bench = _load_guidellm_json(pf)
+        if bench is None:
+            continue
+
+        # Extract params from first file only
+        cycle_prefix = f"{phase_type}_c{cycle}"
+        params, metrics = _extract_from_benchmark(bench, prefix=cycle_prefix)
+        if not all_params:
+            all_params.update(params)
+
+        # Per-cycle metrics (e.g. burst_c2.ttft_ms.p99)
+        all_metrics.update(metrics)
+
+        # Accumulate for phase-type averages
+        for k, v in metrics.items():
+            base_key = k.replace(f"{cycle_prefix}.", "")
+            phase_accum[phase_type][base_key].append(v)
+
+    # Phase-type averages (e.g. burst.ttft_ms.p99 = mean of burst_c2 and burst_c3)
+    for phase_type, metric_dict in phase_accum.items():
+        for base_key, values in metric_dict.items():
+            all_metrics[f"{phase_type}.{base_key}"] = sum(values) / len(values)
+
+    # Aggregate request totals across all phases
+    total_ok = sum(v for k, v in all_metrics.items()
+                   if k.endswith(".requests.successful") and "_c" in k)
+    total_err = sum(v for k, v in all_metrics.items()
+                    if k.endswith(".requests.errored") and "_c" in k)
+    all_metrics["requests.successful"] = total_ok
+    all_metrics["requests.errored"] = total_err
+    all_metrics["requests.total"] = total_ok + total_err
+
+    all_params["guidellm.phases"] = ",".join(phase_names)
+
+    return all_params, all_metrics
 
 
 # ---------------------------------------------------------------------------

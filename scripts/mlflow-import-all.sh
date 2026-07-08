@@ -2,15 +2,19 @@
 # Bulk-import all benchmark result directories to MLflow.
 # Skips directories that have already been imported (tracked via a sentinel file).
 #
-# Usage: bash scripts/mlflow-import-all.sh [PATTERN]
-#   PATTERN: glob pattern to filter result dirs (default: all)
-#   e.g. bash scripts/mlflow-import-all.sh '*upstream-llm-d-0.5.1*'
+# Usage: bash scripts/mlflow-import-all.sh [PATTERN] [RESULTS_DIR]
+#   PATTERN:     glob pattern to filter result dirs (default: all)
+#   RESULTS_DIR: path to results directory (default: ../results relative to script)
+#
+# Examples:
+#   bash scripts/mlflow-import-all.sh '*upstream-llm-d-0.5.1*'
+#   bash scripts/mlflow-import-all.sh '*' llm-d-batch-eval/results
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-RESULTS_DIR="${SCRIPT_DIR}/../results"
 PATTERN="${1:-*}"
+RESULTS_DIR="${2:-${SCRIPT_DIR}/../results}"
 SENTINEL=".mlflow-imported"
 
 pass=0
@@ -26,10 +30,13 @@ for result_dir in "${RESULTS_DIR}"/${PATTERN}; do
         continue
     fi
 
-    # Must have guidellm results to be worth importing
+    # Must have guidellm results (single file or per-phase) to be worth importing
     if [ ! -f "${result_dir}/guidellm-results.json.zst" ]; then
-        skip=$((skip + 1))
-        continue
+        phase_count=$(ls "${result_dir}"/burst-*.json.zst 2>/dev/null | wc -l)
+        if [ "${phase_count}" -eq 0 ]; then
+            skip=$((skip + 1))
+            continue
+        fi
     fi
 
     echo "Importing: $(basename "${result_dir}")"
