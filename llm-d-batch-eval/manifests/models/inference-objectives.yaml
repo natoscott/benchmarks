@@ -1,0 +1,31 @@
+# InferenceObjective CRDs for flow-control scenario 4.
+# POOL_NAME must be replaced with the active LLMInferenceService name
+# (e.g. qwen3-8b, llama-70b, gpt-oss-120b) before applying.
+#
+# Interactive traffic (no x-gateway-inference-objective header) gets
+# default priority 0. The "interactive-default" objective at priority 100
+# is available for explicit tagging but not required.
+#
+# Batch traffic arrives with x-gateway-inference-objective: batch-sheddable
+# and gets priority -1 (lowest, sheddable).
+apiVersion: inference.networking.x-k8s.io/v1alpha2
+kind: InferenceObjective
+metadata:
+  name: interactive-default
+  namespace: llm-d-batch
+spec:
+  priority: 100
+  poolRef:
+    group: inference.networking.k8s.io
+    name: POOL_NAME-inference-pool
+---
+apiVersion: inference.networking.x-k8s.io/v1alpha2
+kind: InferenceObjective
+metadata:
+  name: batch-sheddable
+  namespace: llm-d-batch
+spec:
+  priority: -1
+  poolRef:
+    group: inference.networking.k8s.io
+    name: POOL_NAME-inference-pool

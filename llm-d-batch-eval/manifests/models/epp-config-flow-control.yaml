@@ -1,0 +1,58 @@
+# EPP EndpointPickerConfig with flow-control feature gate enabled.
+# Used for scenario 4 (aimd-flow-control) to enable priority-based
+# request scheduling: interactive (default priority 0) is served before
+# batch (priority -1, sheddable).
+#
+# Based on upstream llm-d-batch-gateway/benchmarks/helm-values/scenario-4-flow-control-overlay.yaml
+# with utilization-detector omitted (not registered in this EPP build).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: epp-config-flow-control
+  namespace: llm-d-batch
+data:
+  config.yaml: |
+    apiVersion: inference.networking.x-k8s.io/v1alpha1
+    kind: EndpointPickerConfig
+    featureGates:
+    - "flowControl"
+    plugins:
+    - type: single-profile-handler
+    - type: queue-scorer
+    - type: kv-cache-utilization-scorer
+    - type: prefix-cache-scorer
+      name: gpu-prefix-cache-scorer
+      parameters:
+        indexerConfig:
+          kvBlockIndexConfig:
+            redisConfig:
+              address: "valkey://valkey.llm-d-batch.svc.cluster.local:6379"
+              backendType: "valkey"
+    - type: round-robin-fairness-policy
+    - type: global-strict-fairness-policy
+    - type: slo-deadline-ordering-policy
+    schedulingProfiles:
+    - name: default
+      plugins:
+      - pluginRef: queue-scorer
+        weight: 2
+      - pluginRef: kv-cache-utilization-scorer
+        weight: 2
+      - pluginRef: gpu-prefix-cache-scorer
+        weight: 1
+    flowControl:
+      maxBytes: 4294967296
+      defaultRequestTTL: 30s
+      priorityBands:
+      - priority: 100
+        maxBytes: 1073741824
+        fairnessPolicyRef: round-robin-fairness-policy
+        orderingPolicyRef: fcfs-ordering-policy
+      - priority: -1
+        maxBytes: 3221225472
+        fairnessPolicyRef: global-strict-fairness-policy
+        orderingPolicyRef: slo-deadline-ordering-policy
+      defaultPriorityBand:
+        maxBytes: 536870912
+        fairnessPolicyRef: global-strict-fairness-policy
+        orderingPolicyRef: fcfs-ordering-policy

@@ -73,6 +73,17 @@ echo "  Target:   ${TARGET}"
 echo ""
 echo "[1] Scaling LLMInferenceServices..."
 
+# Ensure target LLMInferenceService exists (may have been deleted by other users)
+if ! kubectl get llminferenceservice "${LLM_SERVICE_NAME}" -n "${NAMESPACE}" &>/dev/null; then
+    echo "  LLMInferenceService ${LLM_SERVICE_NAME} not found — recreating..."
+    kubectl apply -f "${REPO_ROOT}/manifests/models/epp-scheduler-config-valkey.yaml" 2>/dev/null || true
+    kubectl apply -f "${REPO_ROOT}/manifests/models/epp-config-valkey.yaml" 2>/dev/null || true
+    for manifest in "${REPO_ROOT}"/manifests/models/llm-inference-service-*.yaml; do
+        kubectl apply -f "${manifest}" -n "${NAMESPACE}" 2>/dev/null || true
+    done
+    sleep 5
+fi
+
 ALL_SERVICES=$(kubectl get llminferenceservices -n "${NAMESPACE}" \
     -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
 for svc in ${ALL_SERVICES}; do
@@ -162,6 +173,30 @@ if [ "${SCENARIO}" -ge 2 ]; then
         4) SCENARIO_VALUES="${HELM_VALUES}/scenario-4-aimd-flow-control.yaml" ;;
     esac
 
+    # Scenario 4: enable EPP flow-control and create InferenceObjective CRDs
+    if [ "${SCENARIO}" -eq 4 ]; then
+        echo "  Enabling EPP flow-control feature gate..."
+        # Swap EPP config to flow-control version (same ConfigMap name, different content)
+        FC_CONFIG="${REPO_ROOT}/manifests/models/epp-config-flow-control.yaml"
+        # Apply as epp-config-valkey so the LLMInferenceServiceConfig reference works
+        sed 's/name: epp-config-flow-control/name: epp-config-valkey/' "${FC_CONFIG}" | \
+            kubectl apply -n "${NAMESPACE}" -f -
+
+        echo "  Creating InferenceObjective CRDs..."
+        sed "s/POOL_NAME/${LLM_SERVICE_NAME}/g" "${REPO_ROOT}/manifests/models/inference-objectives.yaml" | \
+            kubectl apply -n "${NAMESPACE}" -f -
+
+        echo "  Restarting EPP to pick up flow-control config..."
+        kubectl rollout restart deployment "${LLM_SERVICE_NAME}-kserve-router-scheduler" -n "${NAMESPACE}"
+        kubectl rollout status deployment "${LLM_SERVICE_NAME}-kserve-router-scheduler" \
+            -n "${NAMESPACE}" --timeout=120s
+    else
+        # Scenarios 2-3: ensure standard EPP config is active
+        kubectl apply -f "${REPO_ROOT}/manifests/models/epp-config-valkey.yaml" -n "${NAMESPACE}" 2>/dev/null || true
+        kubectl delete inferenceobjective interactive-default batch-sheddable \
+            -n "${NAMESPACE}" 2>/dev/null || true
+    fi
+
     helm upgrade --install batch-gateway "${CHART_DIR}" \
         -n "${NAMESPACE}" \
         -f "${HELM_VALUES}/common.yaml" \
@@ -192,6 +227,10 @@ if [ "${SCENARIO}" -ge 2 ]; then
     echo "  Batch gateway ready"
 else
     echo "[4] Skipping batch gateway (scenario ${SCENARIO})"
+    # Restore standard EPP config if coming from a scenario 4 run
+    kubectl apply -f "${REPO_ROOT}/manifests/models/epp-config-valkey.yaml" -n "${NAMESPACE}" 2>/dev/null || true
+    kubectl delete inferenceobjective interactive-default batch-sheddable \
+        -n "${NAMESPACE}" 2>/dev/null || true
 fi
 
 # ── 5. Update PCP openmetrics URLs and restart ────────────────────────────────
