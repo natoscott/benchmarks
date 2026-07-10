@@ -2,7 +2,7 @@
 
 ## TL;DR
 
-Three models were evaluated on 2×8 NVIDIA H200 GPUs with RHOAI 3.5 EA batch gateway dispatch strategies (ungated, AIMD, AIMD+flow-control) against an interactive-only baseline. **Batch overhead correlates with active parameters per token, not total model size: Qwen3-8B (8B dense) shows 5-8% TTFT p99 increase at r=1, gpt-oss-120b (120B total, ~13B active MoE) shows 43%, and FP8-70B (70B dense) shows 33-107% with throughput collapsing 12x.** All three dispatch strategies produce equivalent batch load: the processor ignores per-endpoint concurrency limits and AIMD configuration (metrics confirm 100 inflight for all scenarios), and the EPP flow-control plugins are not registered in this build (verified by loading config into the binary). Scaling replicas mitigates overhead for Qwen3-8B (absorbed at r=4) and gpt-oss-120b (absorbed at r=2), but FP8-70B retains 105-260% TTFT p99 overhead at r=8.
+Three models were evaluated on 2×8 NVIDIA H200 GPUs with RHOAI 3.5 EA batch gateway dispatch strategies (ungated, AIMD, AIMD+flow-control) against an interactive-only baseline. **No batch/interactive isolation is effective in this build: the processor ignores per-endpoint concurrency limits and AIMD configuration (metrics confirm 100 inflight for all scenarios), and the EPP flow-control plugins are not registered in the binary.** Without isolation, batch overhead on interactive TTFT p99 at r=1 ranges from 5-8% (Qwen3-8B) to 43% (gpt-oss-120b) to 33-107% (FP8-70B, with throughput collapsing 12x). Scaling replicas mitigates overhead for Qwen3-8B (absorbed at r=4) and gpt-oss-120b (absorbed at r=2), but FP8-70B retains 105-260% TTFT p99 overhead even at r=8.
 
 ## Methodology
 
