@@ -66,6 +66,16 @@ CPU offload shows 32.7% higher throughput for Qwen3-8B compared to baseline
 (69.9 vs 52.7 tok/s). Qwen3-0.6B shows minimal difference (-1.9%).
 ```
 
+### Refer to Metrics, Not Tools
+
+When discussing what metrics show, refer to the metrics themselves — not the tool used to collect them. The reader cares about the measurement, not the toolchain.
+
+- **DON'T**: "PCP shows batch inflight dropping to 0", "PCP time-series from the ungated run reveals..."
+- **DO**: "Metrics show batch inflight dropping to 0", "Time-series metrics from the ungated run show..."
+- **DO**: "The `model_inflight_requests` metric confirms 100 concurrent requests"
+
+The collection tool (PCP, Prometheus, etc.) belongs in the Methodology/Infrastructure section. In the Results and Observations sections, let the data speak without naming the plumbing.
+
 ## Checklist Before Finalizing Report
 
 - [ ] No marketing superlatives (comprehensive, dramatic, etc.)

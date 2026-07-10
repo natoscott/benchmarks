@@ -2,7 +2,7 @@
 
 ## TL;DR
 
-Three models were evaluated on 2×8 NVIDIA H200 GPUs with RHOAI 3.5 EA batch gateway dispatch strategies (ungated, AIMD, AIMD+flow-control) against an interactive-only baseline. **Batch overhead correlates with active parameters per token, not total model size: Qwen3-8B (8B dense) shows 5-8% TTFT p99 increase at r=1, gpt-oss-120b (120B total, ~13B active MoE) shows 43%, and FP8-70B (70B dense) shows 33-107% with throughput collapsing 12x.** The ungated batch processor dispatches 100 concurrent requests regardless of backend capacity. Scaling replicas mitigates overhead for Qwen3-8B (absorbed at r=4) and gpt-oss-120b (absorbed at r=2), but FP8-70B retains 105-260% TTFT p99 overhead at r=8. RHOAI 3.5 EA lacks EPP flow-control plugins, so all dispatch strategies produce equivalent results.
+Three models were evaluated on 2×8 NVIDIA H200 GPUs with RHOAI 3.5 EA batch gateway dispatch strategies (ungated, AIMD, AIMD+flow-control) against an interactive-only baseline. **Batch overhead correlates with active parameters per token, not total model size: Qwen3-8B (8B dense) shows 5-8% TTFT p99 increase at r=1, gpt-oss-120b (120B total, ~13B active MoE) shows 43%, and FP8-70B (70B dense) shows 33-107% with throughput collapsing 12x.** All three dispatch strategies produce equivalent batch load: the processor ignores per-endpoint concurrency limits and AIMD configuration (metrics confirm 100 inflight for all scenarios), and the EPP flow-control plugins are not registered in this build (verified by loading config into the binary). Scaling replicas mitigates overhead for Qwen3-8B (absorbed at r=4) and gpt-oss-120b (absorbed at r=2), but FP8-70B retains 105-260% TTFT p99 overhead at r=8.
 
 ## Methodology
 
@@ -18,9 +18,8 @@ Three models were evaluated on 2×8 NVIDIA H200 GPUs with RHOAI 3.5 EA batch gat
 | Valkey | 8.0.9 (Red Hat RHEL9 container) |
 | PostgreSQL | 16 (Red Hat RHEL9 container) |
 | vLLM | v0.19.1+rhaiv.6, prefix caching enabled, chunked prefill |
-| gpu-memory-utilization | 0.90 (all models) |
-| guidellm | v0.7.1 |
-| PCP | 7.1.5 (openmetrics, pmdavalkey, pmdapostgresql) |
+| Metrics | PCP 7.1.5 (default + openmetrics, valkey, postgresql) |
+| GuideLLM | v0.7.1 |
 
 ### Scenarios
 
@@ -29,7 +28,7 @@ Three models were evaluated on 2×8 NVIDIA H200 GPUs with RHOAI 3.5 EA batch gat
 | 0 | interactive-only | No batch gateway. Interactive traffic baseline. |
 | 2 | ungated | Batch gateway, global=200, per-endpoint=100, AIMD disabled |
 | 3 | aimd | Batch gateway, global=100, per-endpoint=20, AIMD enabled |
-| 4 | aimd-flow-control | Same as AIMD. Flow-control plugins unavailable in RHOAI 3.5 EA. |
+| 4 | aimd-flow-control | Same as AIMD + `inferenceObjective: batch-sheddable`. Flow-control plugins not registered in this EPP build. |
 
 ### Workload
 
@@ -102,9 +101,9 @@ Zero inference errors across all 36 runs (Qwen3-8B, FP8-70B, gpt-oss-120b). Two 
 
 #### Batch Processing
 
-30 batch jobs × 100 requests each complete within 60-90 seconds of submission. The batch processor dispatches 30-40 concurrent inference requests (per PCP `processor_inflight_requests` metric). All 3000 batch requests complete with 0 failures.
+30 batch jobs × 100 requests each complete within 60-90 seconds of submission. The batch processor dispatches 30-40 concurrent inference requests (per `processor_inflight_requests` metric). All 3000 batch requests complete with 0 failures.
 
-PCP time-series from the ungated r=4 run shows batch dispatch starting at t+20s and completing by t+300s, with 14-18 vLLM requests running concurrently during burst phases.
+Time-series metrics from the ungated r=4 run show batch dispatch starting at t+20s and completing by t+300s, with 14-18 vLLM requests running concurrently during burst phases.
 
 #### System Metrics (PCP)
 
@@ -157,7 +156,7 @@ At r=8 (16 GPUs), the baseline improves (551 ms TTFT p99, 6.5 RPS), but batch sc
 
 ### FP8-70B System Metrics (PCP)
 
-PCP time-series from the ungated r=1 run reveals the contention mechanism:
+Time-series metrics from the ungated r=1 run reveal the contention mechanism:
 
 - **vLLM running requests**: Ramps from 0 to 100 within 90 seconds as the batch processor fills its concurrency limit. The single TP=2 replica attempts to serve 100 concurrent requests.
 - **KV cache utilization**: Climbs from 0% to 35% — 10x higher than Qwen3-8B under the same workload. The 568,528-token KV cache is not exhausted, but the model's effective throughput at 100 concurrent requests is bottlenecked by compute, not memory.
@@ -205,13 +204,13 @@ At r=2 and r=4, batch overhead is within noise or negative. The negative values 
 
 ### gpt-oss-120b System Metrics (PCP)
 
-PCP time-series from the ungated r=1 run:
+Time-series metrics from the ungated r=1 run:
 
 - **vLLM running requests**: Ramps from 0 to 100 within 90 seconds, then fluctuates between 84-130. Spikes above 100 occur when 15 interactive burst streams overlap with 100 batch requests on the single TP=4 replica.
 - **KV cache utilization**: Peaks at 2.2% — compared to 3.6% for Qwen3-8B and 35% for FP8-70B under the same batch load. The MoE architecture's attention layers produce the same per-token KV volume as a dense model, but the 5.98M-token KV cache (10.5x larger than FP8-70B's 568K tokens) provides proportionally more headroom.
 - **Batch processor inflight**: Saturates at 100 requests (per-endpoint limit), identical to the other models.
 
-At r=4, batch processing completes within ~6 minutes of submission. PCP shows batch inflight dropping from 100 to 0 by t+360s, after which only interactive traffic remains (3-6 running requests per sample). This fast batch drain explains the absence of batch overhead at r=4.
+At r=4, batch processing completes within ~6 minutes of submission. Metrics show batch inflight dropping from 100 to 0 by t+360s, after which only interactive traffic remains (3-6 running requests per sample). This fast batch drain explains the absence of batch overhead at r=4.
 
 During idle phases at r=1, batch load causes single-stream interactive TTFT p99 to rise from 35.6 ms (baseline) to 197-247 ms — a 5.5-6.9x increase. Even single interactive requests queue behind ongoing batch inference when the model is saturated.
 
@@ -242,29 +241,30 @@ vLLM prefix cache hit rate is ~50% during batch processing. Batch requests share
 
 1. **Batch overhead correlates with active parameters per token, not total model size.** Qwen3-8B (8B dense) shows 5-8% TTFT p99 increase at r=1. gpt-oss-120b (120B total, ~13B active MoE) shows 43% increase and 3.3-4.5x throughput reduction. FP8-70B (70B dense) shows 33-107% increase with throughput collapsing from 2.4 to 0.2 RPS (12x reduction). The MoE model's sparse activation places its batch sensitivity between the two dense models despite having the largest total parameter count.
 
-2. **The ungated batch processor saturates dense models.** PCP metrics show the processor dispatching 100 concurrent inference requests regardless of backend capacity. On a single FP8-70B replica (4.34x effective concurrency at max_seq_len), vLLM running requests hit 100, KV cache reaches 35%, and interactive requests queue behind batch. On gpt-oss-120b (45.62x effective concurrency), the same 100 concurrent requests produce only 2.2% KV cache usage.
+2. **The batch processor ignores per-endpoint concurrency limits and AIMD configuration.** Despite configuring `perEndpoint=20` for aimd/aimd-flow-control (vs `perEndpoint=100` for ungated), PCP `model_inflight_requests` shows all three scenarios saturating at 100 concurrent requests — the global limit. The processor dispatches at the global concurrency ceiling regardless of per-endpoint or AIMD settings. This was confirmed across all three models at r=1.
 
-3. **All three dispatch strategies produce equivalent results in RHOAI 3.5 EA.** Ungated, AIMD, and AIMD+flow-control show no measurable difference in interactive latency across all three models. RHOAI 3.5 EA lacks flow-control plugins in the EPP, and AIMD metrics are not exposed by this processor version, so scenarios 3 and 4 operate identically to scenario 2 from the inference backend's perspective.
+3. **All three dispatch strategies produce equivalent batch load.** Because the processor ignores per-endpoint limits (observation 2), and the EPP flow-control plugins are not available in this build (see Known Limitations), all scenarios dispatch identically from the model's perspective. TTFT p99 variation between scenarios at r=1 (e.g. FP8-70B ungated +107% vs aimd +33%) is consistent with run-to-run variance under a saturated model with only 1-2 measured burst cycles, not strategy differentiation.
 
-4. **Replica scaling effectiveness varies by model.** Qwen3-8B absorbs batch load at r=4. gpt-oss-120b absorbs it at r=2. FP8-70B still shows 105-260% TTFT p99 overhead at r=8 (16 GPUs) — the aggregate batch load (3000 requests) competes with interactive traffic at all tested scales.
+4. **The batch processor saturates dense models.** On a single FP8-70B replica (4.34x effective concurrency at max_seq_len), 100 concurrent batch requests drive vLLM running requests to 100 and KV cache to 35%. Interactive requests queue behind batch. On gpt-oss-120b (45.62x effective concurrency), the same 100 concurrent requests produce only 2.2% KV cache usage.
 
-5. **FP8-70B baseline is already saturated at r=1 with 15 interactive streams.** The interactive-only baseline shows 1.9s TTFT p99 and 2.4 RPS at r=1 — the model cannot sustain 15 concurrent streams on a single TP=2 replica. This means the benchmark workload exceeds the model's capacity before batch is added.
+5. **Replica scaling effectiveness varies by model.** Qwen3-8B absorbs batch load at r=4. gpt-oss-120b absorbs it at r=2. FP8-70B still shows 105-260% TTFT p99 overhead at r=8 (16 GPUs) — the aggregate batch load (3000 requests) competes with interactive traffic at all tested scales.
 
-6. **MoE batch drain is fast at scale.** At r=4 (16 GPUs), gpt-oss-120b batch processing completes within ~6 minutes. PCP shows batch inflight dropping from 100 to 0 before the second measured burst cycle, eliminating batch overhead from measurements. FP8-70B batch requests persist throughout the measurement window at all replica counts.
+6. **FP8-70B baseline is already saturated at r=1 with 15 interactive streams.** The interactive-only baseline shows 1.9s TTFT p99 and 2.4 RPS at r=1 — the model cannot sustain 15 concurrent streams on a single TP=2 replica. This means the benchmark workload exceeds the model's capacity before batch is added.
 
-7. **30×100 batch job config enables concurrent measurement.** Batch dispatch starts within 20s of submission and overlaps with interactive traffic throughout the measurement window (except where batch drains faster than the traffic cycle, as with gpt-oss-120b at r=4).
+7. **MoE batch drain is fast at scale.** At r=4 (16 GPUs), gpt-oss-120b batch processing completes within ~6 minutes. Metrics show batch inflight dropping from 100 to 0 before the second measured burst cycle, eliminating batch overhead from measurements. FP8-70B batch requests persist throughout the measurement window at all replica counts.
+
+8. **30×100 batch job config enables concurrent measurement.** Batch dispatch starts within 20s of submission and overlaps with interactive traffic throughout the measurement window (except where batch drains faster than the traffic cycle, as with gpt-oss-120b at r=4).
 
 ## Known Limitations (RHOAI 3.5 EA)
 
 | Feature | Status | Impact |
 |---|---|---|
-| EPP flow-control plugins | Not available | Scenarios 3 and 4 are functionally identical to scenario 2 |
-| AIMD processor metrics | Not exposed | Cannot observe adaptive concurrency dynamics |
+| EPP flow-control plugins | Not compiled into binary | `flow-control`, `priority-handler`, `sheddable-request-filter`, `saturation-detector`, `utilization-detector` all return "plugin type not registered". Verified by loading config into EPP binary (`@v0.0.0-20260409231514-905fb67a04d5`). Flow-control framework code is linked but plugin registration is absent. |
+| Processor per-endpoint limits | Ignored | `perEndpoint` concurrency config has no effect. PCP `model_inflight_requests` shows all scenarios saturating at the global limit (100), regardless of `perEndpoint=20` vs `perEndpoint=100`. |
+| Processor AIMD | No observable effect | AIMD enabled in scenarios 3 and 4 but no concurrency reduction observed. Inflight stays at global limit throughout. AIMD metrics not exposed, so cannot confirm whether the algorithm runs. |
 | Job-level processor metrics | Not exposed | No job duration, token throughput, or per-model inflight metrics |
 | Batch gateway GC | Health probe fails | Disabled; manual state cleanup between runs |
-| pmdavalkey | Requires PCP ≥ 7.1.1 | Workaround: dnf upgrade in PCP pod startup |
 
 ## Next Steps
 
-1. **RHOAI EA2 retest**: Enable flow-control plugins, AIMD metrics, and job-level metrics when the next RHOAI version ships updated upstream code.
-2. **Disaggregated P/D**: Evaluate batch gateway with prefill/decode separation when RDMA is configured between nodes.
+1. **RHOAI EA2 retest**: Verify EPP flow-control plugin registration, processor per-endpoint limit enforcement, and AIMD concurrency adaptation. Enable flow-control, AIMD, and job-level metrics when the next RHOAI version ships updated upstream code.
