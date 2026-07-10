@@ -2,7 +2,7 @@
 
 ## TL;DR
 
-Three models were evaluated on 2×8 NVIDIA H200 GPUs with RHOAI 3.5 EA batch gateway dispatch strategies (ungated, AIMD, AIMD+flow-control) against an interactive-only baseline. **No batch/interactive isolation is effective in this build: the processor ignores per-endpoint concurrency limits and AIMD configuration (metrics confirm 100 inflight for all scenarios), and the EPP flow-control plugins are not registered in the binary.** Without isolation, batch overhead on interactive TTFT p99 at r=1 ranges from 5-8% (Qwen3-8B) to 43% (gpt-oss-120b) to 33-107% (FP8-70B, with throughput collapsing 12x). Scaling replicas mitigates overhead for Qwen3-8B (absorbed at r=4) and gpt-oss-120b (absorbed at r=2), but FP8-70B retains 105-260% TTFT p99 overhead even at r=8.
+Three models were evaluated on 2×8 NVIDIA H200 GPUs with RHOAI 3.5 EA batch gateway dispatch strategies (ungated, AIMD, AIMD+flow-control) against an interactive-only baseline. **No batch/interactive isolation was effective in initial testing: the processor ignores per-endpoint concurrency limits and AIMD configuration (metrics confirm 100 inflight for all scenarios), and the EPP flow-control feature gate was not enabled in our configuration.** The flow-control plugins are compiled into the EPP binary but require `featureGates: [flowControl]` — a retest with the feature gate enabled is in progress. Without isolation, batch overhead on interactive TTFT p99 at r=1 ranges from 5-8% (Qwen3-8B) to 43% (gpt-oss-120b) to 33-107% (FP8-70B, with throughput collapsing 12x). Scaling replicas mitigates overhead for Qwen3-8B (absorbed at r=4) and gpt-oss-120b (absorbed at r=2), but FP8-70B retains 105-260% TTFT p99 overhead even at r=8.
 
 ## Methodology
 
@@ -28,7 +28,7 @@ Three models were evaluated on 2×8 NVIDIA H200 GPUs with RHOAI 3.5 EA batch gat
 | 0 | interactive-only | No batch gateway. Interactive traffic baseline. |
 | 2 | ungated | Batch gateway, global=200, per-endpoint=100, AIMD disabled |
 | 3 | aimd | Batch gateway, global=100, per-endpoint=20, AIMD enabled |
-| 4 | aimd-flow-control | Same as AIMD + `inferenceObjective: batch-sheddable`. Flow-control plugins not registered in this EPP build. |
+| 4 | aimd-flow-control | Same as AIMD + `inferenceObjective: batch-sheddable`. Initial runs did not enable the EPP `flowControl` feature gate; retest in progress with feature gate enabled, InferenceObjective CRDs, and priority bands configured. |
 
 ### Workload
 
@@ -160,7 +160,7 @@ Time-series metrics from the ungated r=1 run reveal the contention mechanism:
 
 - **vLLM running requests**: Ramps from 0 to 100 within 90 seconds as the batch processor fills its concurrency limit. The single TP=2 replica attempts to serve 100 concurrent requests.
 - **KV cache utilization**: Climbs from 0% to 35% — 10x higher than Qwen3-8B under the same workload. The 568,528-token KV cache is not exhausted, but the model's effective throughput at 100 concurrent requests is bottlenecked by compute, not memory.
-- **Batch processor inflight**: Saturates at 100 requests (per-endpoint limit for ungated scenario), confirming the processor dispatches at maximum concurrency regardless of backend capacity.
+- **Batch processor inflight**: Saturates at 100 requests (the global concurrency limit), confirming the processor dispatches at maximum concurrency regardless of backend capacity.
 
 At r=8, the 100 batch requests are distributed across 8 replicas (~12-13 per replica), reducing per-replica pressure. However, total GPU compute is still shared with 15 interactive streams, resulting in elevated tail latencies.
 
@@ -208,7 +208,7 @@ Time-series metrics from the ungated r=1 run:
 
 - **vLLM running requests**: Ramps from 0 to 100 within 90 seconds, then fluctuates between 84-130. Spikes above 100 occur when 15 interactive burst streams overlap with 100 batch requests on the single TP=4 replica.
 - **KV cache utilization**: Peaks at 2.2% — compared to 3.6% for Qwen3-8B and 35% for FP8-70B under the same batch load. The MoE architecture's attention layers produce the same per-token KV volume as a dense model, but the 5.98M-token KV cache (10.5x larger than FP8-70B's 568K tokens) provides proportionally more headroom.
-- **Batch processor inflight**: Saturates at 100 requests (per-endpoint limit), identical to the other models.
+- **Batch processor inflight**: Saturates at 100 requests (the global concurrency limit), identical to the other models.
 
 At r=4, batch processing completes within ~6 minutes of submission. Metrics show batch inflight dropping from 100 to 0 by t+360s, after which only interactive traffic remains (3-6 running requests per sample). This fast batch drain explains the absence of batch overhead at r=4.
 
@@ -241,9 +241,9 @@ vLLM prefix cache hit rate is ~50% during batch processing. Batch requests share
 
 1. **Batch overhead correlates with active parameters per token, not total model size.** Qwen3-8B (8B dense) shows 5-8% TTFT p99 increase at r=1. gpt-oss-120b (120B total, ~13B active MoE) shows 43% increase and 3.3-4.5x throughput reduction. FP8-70B (70B dense) shows 33-107% increase with throughput collapsing from 2.4 to 0.2 RPS (12x reduction). The MoE model's sparse activation places its batch sensitivity between the two dense models despite having the largest total parameter count.
 
-2. **The batch processor ignores per-endpoint concurrency limits and AIMD configuration.** Despite configuring `perEndpoint=20` for aimd/aimd-flow-control (vs `perEndpoint=100` for ungated), PCP `model_inflight_requests` shows all three scenarios saturating at 100 concurrent requests — the global limit. The processor dispatches at the global concurrency ceiling regardless of per-endpoint or AIMD settings. This was confirmed across all three models at r=1.
+2. **The batch processor ignores per-endpoint concurrency limits and AIMD configuration.** Despite configuring `perEndpoint=20` for aimd/aimd-flow-control (vs `perEndpoint=100` for ungated), `model_inflight_requests` shows all three scenarios saturating at 100 concurrent requests — the global limit. The processor dispatches at the global concurrency ceiling regardless of per-endpoint or AIMD settings. This was confirmed across all three models at r=1. The upstream source code implements dual semaphore acquisition (per-endpoint before global), so this may be a RHOAI build-specific issue or a config field mapping difference.
 
-3. **All three dispatch strategies produce equivalent batch load.** Because the processor ignores per-endpoint limits (observation 2), and the EPP flow-control plugins are not available in this build (see Known Limitations), all scenarios dispatch identically from the model's perspective. TTFT p99 variation between scenarios at r=1 (e.g. FP8-70B ungated +107% vs aimd +33%) is consistent with run-to-run variance under a saturated model with only 1-2 measured burst cycles, not strategy differentiation.
+3. **All three dispatch strategies produce equivalent batch load in initial testing.** The processor ignores per-endpoint limits (observation 2), and the EPP `flowControl` feature gate was not enabled in our initial configuration (see Known Limitations). All scenarios therefore dispatch identically from the model's perspective. TTFT p99 variation between scenarios at r=1 (e.g. FP8-70B ungated +107% vs aimd +33%) is consistent with run-to-run variance under a saturated model with only 1-2 measured burst cycles, not strategy differentiation. A retest with the feature gate enabled is in progress.
 
 4. **The batch processor saturates dense models.** On a single FP8-70B replica (4.34x effective concurrency at max_seq_len), 100 concurrent batch requests drive vLLM running requests to 100 and KV cache to 35%. Interactive requests queue behind batch. On gpt-oss-120b (45.62x effective concurrency), the same 100 concurrent requests produce only 2.2% KV cache usage.
 
@@ -259,7 +259,7 @@ vLLM prefix cache hit rate is ~50% during batch processing. Batch requests share
 
 | Feature | Status | Impact |
 |---|---|---|
-| EPP flow-control plugins | Not compiled into binary | `flow-control`, `priority-handler`, `sheddable-request-filter`, `saturation-detector`, `utilization-detector` all return "plugin type not registered". Verified by loading config into EPP binary (`@v0.0.0-20260409231514-905fb67a04d5`). Flow-control framework code is linked but plugin registration is absent. |
+| EPP flow-control feature gate | Not enabled in initial config | Flow-control framework and plugins (fairness policies, ordering policies) ARE compiled into the EPP binary and register correctly when `featureGates: [flowControl]` is set. Initial testing omitted this feature gate. Only `utilization-detector` (for saturation-based shedding) is absent from the binary. Verified by loading configs into EPP binary (`@v0.0.0-20260409231514-905fb67a04d5`). |
 | Processor per-endpoint limits | Ignored | `perEndpoint` concurrency config has no effect. PCP `model_inflight_requests` shows all scenarios saturating at the global limit (100), regardless of `perEndpoint=20` vs `perEndpoint=100`. |
 | Processor AIMD | No observable effect | AIMD enabled in scenarios 3 and 4 but no concurrency reduction observed. Inflight stays at global limit throughout. AIMD metrics not exposed, so cannot confirm whether the algorithm runs. |
 | Job-level processor metrics | Not exposed | No job duration, token throughput, or per-model inflight metrics |
@@ -267,4 +267,6 @@ vLLM prefix cache hit rate is ~50% during batch processing. Batch requests share
 
 ## Next Steps
 
-1. **RHOAI EA2 retest**: Verify EPP flow-control plugin registration, processor per-endpoint limit enforcement, and AIMD concurrency adaptation. Enable flow-control, AIMD, and job-level metrics when the next RHOAI version ships updated upstream code.
+1. **Flow-control retest (in progress)**: Scenario 4 rerun with `featureGates: [flowControl]` enabled, InferenceObjective CRDs (interactive priority=100, batch priority=-1), and priority band configuration. All 3 models, same replica configs.
+2. **Processor per-endpoint investigation**: Confirm whether `perEndpoint` enforcement is a RHOAI build issue or config mapping difference. Upstream source implements dual semaphore acquisition correctly.
+3. **RHOAI EA2**: Verify `utilization-detector` plugin availability (saturation-based shedding), AIMD metrics exposure, and job-level processor metrics.
