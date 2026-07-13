@@ -28,7 +28,7 @@ Three models were evaluated on 2×8 NVIDIA H200 GPUs with RHOAI 3.5 EA batch gat
 | 0 | interactive-only | No batch gateway. Interactive traffic baseline. |
 | 2 | ungated | Batch gateway, global=200, per-endpoint=100, AIMD disabled |
 | 3 | aimd | Batch gateway, global=100, per-endpoint=20, AIMD enabled |
-| 4 | aimd-flow-control | Same as AIMD + EPP `flowControl` feature gate, InferenceObjective CRDs (interactive priority=100, batch priority=-1), priority bands with fairness and ordering policies. |
+| 4 | aimd-flow-control | Same as AIMD + EPP `flowControl` feature gate with priority bands. Batch processor sets `x-gateway-inference-objective: batch-sheddable` (priority -1). Interactive traffic has no objective header (default priority 0). |
 
 ### Workload
 
@@ -55,7 +55,7 @@ Qwen3-8B uses TP=1 (1 GPU per replica), max_model_len=40,960, KV cache 783,568 t
 
 #### Interactive Latency During Burst
 
-All values in milliseconds. Lower is better.
+All overhead measurements are from burst phases (15 concurrent interactive streams), where batch contention is highest. Idle phase data (1 stream) is available in the idle-vs-burst charts. All values in milliseconds. Lower is better.
 
 | Scenario | R | TTFT p50 | p95 | p99 | ITL p50 | p95 | p99 | RPS | Completed |
 |---|---|---|---|---|---|---|---|---|---|
