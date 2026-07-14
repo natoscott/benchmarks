@@ -7,14 +7,11 @@ global:
     fs:
       pvcName: batch-gateway-files
 
-# RHOAI 3.5 EA batch-gateway images.
-# Note: these pre-date upstream v0.2.0 and lack AIMD metrics, job-level
-# metrics, and token throughput counters. The next RHOAI version should
-# include these — retest when available.
+# RHOAI 3.5 EA2 batch-gateway images.
 apiserver:
   image:
-    repository: registry.redhat.io/rhoai/odh-llm-d-batch-gateway-apiserver-rhel9
-    digest: "sha256:54290b9a0e3ff65af5d02a53fed7d65cb1eda2e3b6d3f038a3a41e2b9a1e8580"
+    repository: quay.io/rhoai/odh-llm-d-batch-gateway-apiserver-rhel9
+    tag: "rhoai-3.5-ea.2"
     pullPolicy: IfNotPresent
   podSecurityContext: {}
   config:
@@ -24,15 +21,18 @@ apiserver:
 
 processor:
   image:
-    repository: registry.redhat.io/rhoai/odh-llm-d-batch-gateway-processor-rhel9
-    digest: "sha256:2491b371b9928e180c735bd4d37860bf8d4be895820f9d64c68438d2d9fadad5"
+    repository: quay.io/rhoai/odh-llm-d-batch-gateway-processor-rhel9
+    tag: "rhoai-3.5-ea.2"
     pullPolicy: IfNotPresent
   podSecurityContext: {}
   workDirVolume:
     sizeLimit: 10Gi
 
-# GC disabled — RHOAI 3.5 EA GC image health probe fails (no /health
-# endpoint on metrics port), blocking helm --wait. Non-critical for
-# benchmarking since we clean state between runs manually.
+# GC — re-enable for EA2, check if health probe is fixed.
 gc:
-  enabled: false
+  enabled: true
+  image:
+    repository: quay.io/rhoai/odh-llm-d-batch-gateway-gc-rhel9
+    tag: "rhoai-3.5-ea.2"
+    pullPolicy: IfNotPresent
+  podSecurityContext: {}
