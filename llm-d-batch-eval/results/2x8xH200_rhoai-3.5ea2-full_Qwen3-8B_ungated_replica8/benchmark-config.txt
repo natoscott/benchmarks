@@ -1,0 +1,25 @@
+Run ID: 2x8xH200_rhoai-3.5ea2-full_Qwen3-8B_ungated_replica8
+Date: Wed 15 Jul 2026 04:00:23 UTC
+Scenario: 2 (ungated)
+Target: https://inference-gateway.apps.CLUSTER//llm-d-batch/qwen3-8b
+Model: Qwen/Qwen3-8B
+Model Name: Qwen3-8B
+LLMInferenceService: qwen3-8b
+Replicas: 8
+Tensor Parallel Size: 1
+GPU Memory Utilization: 0.90
+Hardware: 2x8xH200
+Software: rhoai-3.5ea2-full
+Burst Rate: 15
+Idle Rate: 1
+Burst Seconds: 60
+Idle Seconds: 60
+Cycles: 3
+Warmup Cycles: 1
+Prompt Tokens: 512
+Output Tokens: 128
+Batch Size: 100
+Num Jobs: 30
+guidellm Pod: guidellm-c8d548fcf-jwcfh
+PCP Pods: pcp-67bbf4c476-b55jq
+Namespace: llm-d-batch

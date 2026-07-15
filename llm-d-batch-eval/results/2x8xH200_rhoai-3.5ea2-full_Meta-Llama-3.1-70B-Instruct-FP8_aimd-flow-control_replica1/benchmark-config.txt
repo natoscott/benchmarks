@@ -1,0 +1,25 @@
+Run ID: 2x8xH200_rhoai-3.5ea2-full_Meta-Llama-3.1-70B-Instruct-FP8_aimd-flow-control_replica1
+Date: Wed 15 Jul 2026 08:55:47 UTC
+Scenario: 4 (aimd-flow-control)
+Target: https://inference-gateway.apps.CLUSTER//llm-d-batch/llama-70b
+Model: RedHatAI/Meta-Llama-3.1-70B-Instruct-FP8
+Model Name: Meta-Llama-3.1-70B-Instruct-FP8
+LLMInferenceService: llama-70b
+Replicas: 1
+Tensor Parallel Size: 2
+GPU Memory Utilization: 0.90
+Hardware: 2x8xH200
+Software: rhoai-3.5ea2-full
+Burst Rate: 15
+Idle Rate: 1
+Burst Seconds: 60
+Idle Seconds: 60
+Cycles: 3
+Warmup Cycles: 1
+Prompt Tokens: 512
+Output Tokens: 128
+Batch Size: 100
+Num Jobs: 30
+guidellm Pod: guidellm-c8d548fcf-jwcfh
+PCP Pods: pcp-67bbf4c476-4mlqf
+Namespace: llm-d-batch
