@@ -75,3 +75,12 @@ TTFT p99 overhead vs interactive-only baseline (burst phase, r=1):
 | Flow-control overhead for small models | +58-91% TTFT p99 | +125-166% TTFT p99 | By design — scheduling overhead exceeds batch contention benefit |
 | FP8-70B baseline variability | 1898 ms TTFT p99 (r=1) | 471 ms TTFT p99 (r=1) | Cluster conditions; within-version comparisons valid |
 | Per-model flow-control policy | Not available | Not available | Flow-control is global to EPP, not per-model |
+
+## Improvements for Future Evaluations
+
+1. **Test with full EA2 stack.** Current EA2 results use the EA1 EPP. A full EA2 test should include the EA2 EPP to check `utilization-detector` availability and any EPP scheduling changes.
+2. **Trigger AIMD adaptation.** AIMD concurrency limit stays static at `perEndpoint` value because the gateway never returns 429/5xx. Test with lower `perEndpoint` (e.g. 5) or higher batch load to force overload signals.
+3. **Investigate AIMD signal path.** Determine whether the EPP or inference gateway is supposed to return 429 when saturated, or whether AIMD requires a different feedback mechanism.
+4. **Add job-level analysis.** EA2 exposes `batch_job_e2e_latency_seconds`, `job_queue_wait_duration_seconds`, and `job_processing_duration_seconds`. Analyse completion time distributions, queue wait CDFs, and correlation with interactive latency.
+5. **Add token throughput analysis.** EA2 exposes per-model `batch_request_prompt_tokens_total` and `batch_request_generation_tokens_total`. Calculate batch tok/s across scenarios to quantify how much batch work is accomplished alongside interactive traffic.
+6. **Evaluate selective flow-control.** Flow-control helps large models under contention but harms small models. Investigate per-model or per-InferenceObjective flow-control policies.

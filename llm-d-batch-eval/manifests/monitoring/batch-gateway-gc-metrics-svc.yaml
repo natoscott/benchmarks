@@ -1,0 +1,19 @@
+# The Helm chart does not create a Service for the GC's metrics port.
+# This Service exposes it so the openmetrics PMDA can scrape it.
+apiVersion: v1
+kind: Service
+metadata:
+  name: batch-gateway-gc-metrics
+  namespace: llm-d-batch
+  labels:
+    app.kubernetes.io/component: gc
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: batch-gateway-gc
+    app.kubernetes.io/instance: batch-gateway
+  ports:
+  - name: metrics
+    port: 9091
+    targetPort: 9091
+    protocol: TCP
