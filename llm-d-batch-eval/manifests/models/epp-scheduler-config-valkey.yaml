@@ -1,4 +1,4 @@
-# LLMInferenceServiceConfig: extends the RHOAI 3.5 EA EPP scheduler with
+# LLMInferenceServiceConfig: extends the RHOAI 3.5 EA2 EPP scheduler with
 # Valkey-backed prefix-cache routing.
 # Referenced in LLMInferenceService baseRefs as "epp-scheduler-valkey".
 #
@@ -48,7 +48,7 @@ spec:
           name: tokenizer-cache
         containers:
         - name: main
-          image: registry.redhat.io/rhoai/odh-llm-d-inference-scheduler-rhel9@sha256:17f11071fa14cfcc097e69e54f3d1676d54e61132cdbc3e27d96507744dcd2d7
+          image: registry.redhat.io/rhoai/odh-llm-d-router-endpoint-picker-rhel9@sha256:a7e4817ae52f18287f45d548d0c16de598e13b1c823db4d144f5085363a72b43
           imagePullPolicy: IfNotPresent
           command:
           - /app/epp
@@ -116,7 +116,7 @@ spec:
           - name: tokenizer-uds
             mountPath: /tmp/tokenizer
         - name: tokenizer
-          image: registry.redhat.io/rhoai/odh-llm-d-kv-cache-rhel9@sha256:db4b79a17194574aeae3e702eb2740485c95f160166d2ea7b6cbab0a40cfe9e9
+          image: registry.redhat.io/rhoai/odh-llm-d-kv-cache-rhel9@sha256:32ac10d178218671c7afd0f091f5d100ead1b15275264bbe9f3a745e5dfe56a5
           imagePullPolicy: IfNotPresent
           env:
           - name: TOKENIZERS_DIR

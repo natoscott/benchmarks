@@ -1,10 +1,9 @@
-# EPP EndpointPickerConfig with flow-control feature gate enabled.
+# EPP EndpointPickerConfig with flow-control for EA2 (llm-d-router).
 # Used for scenario 4 (aimd-flow-control) to enable priority-based
 # request scheduling: interactive (default priority 0) is served before
 # batch (priority -1, sheddable).
 #
-# Based on upstream llm-d-batch-gateway/benchmarks/helm-values/scenario-4-flow-control-overlay.yaml
-# with utilization-detector omitted (not registered in this EPP build).
+# EA2 auto-registers utilization-detector as the saturation detector.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -12,22 +11,21 @@ metadata:
   namespace: llm-d-batch
 data:
   config.yaml: |
-    apiVersion: inference.networking.x-k8s.io/v1alpha1
+    apiVersion: llm-d.ai/v1alpha1
     kind: EndpointPickerConfig
     featureGates:
     - "flowControl"
     plugins:
-    - type: single-profile-handler
     - type: queue-scorer
     - type: kv-cache-utilization-scorer
     - type: prefix-cache-scorer
-      name: gpu-prefix-cache-scorer
+    - type: precise-prefix-cache-producer
+      name: valkey-prefix-producer
       parameters:
         indexerConfig:
           kvBlockIndexConfig:
             redisConfig:
               address: "valkey://valkey.llm-d-batch.svc.cluster.local:6379"
-              backendType: "valkey"
     - type: round-robin-fairness-policy
     - type: global-strict-fairness-policy
     - type: slo-deadline-ordering-policy
@@ -38,7 +36,7 @@ data:
         weight: 2
       - pluginRef: kv-cache-utilization-scorer
         weight: 2
-      - pluginRef: gpu-prefix-cache-scorer
+      - pluginRef: prefix-cache-scorer
         weight: 1
     flowControl:
       maxBytes: 4294967296

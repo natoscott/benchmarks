@@ -7,11 +7,11 @@ global:
     fs:
       pvcName: batch-gateway-files
 
-# RHOAI 3.5 EA2 batch-gateway images.
+# RHOAI 3.5 EA2 batch-gateway images (digest-pinned via ImageDigestMirrorSet).
 apiserver:
   image:
-    repository: quay.io/rhoai/odh-llm-d-batch-gateway-apiserver-rhel9
-    tag: "rhoai-3.5-ea.2"
+    repository: registry.redhat.io/rhoai/odh-llm-d-batch-gateway-apiserver-rhel9
+    digest: "sha256:83230cbe829f9d9fda33171b63975de40438a07014c472737deae57d7b62d64c"
     pullPolicy: IfNotPresent
   podSecurityContext: {}
   config:
@@ -21,18 +21,17 @@ apiserver:
 
 processor:
   image:
-    repository: quay.io/rhoai/odh-llm-d-batch-gateway-processor-rhel9
-    tag: "rhoai-3.5-ea.2"
+    repository: registry.redhat.io/rhoai/odh-llm-d-batch-gateway-processor-rhel9
+    digest: "sha256:936edb737f23975bf5913f3fac3e52a395bbf8a913e73d7285fc2fb27854892f"
     pullPolicy: IfNotPresent
   podSecurityContext: {}
   workDirVolume:
     sizeLimit: 10Gi
 
-# GC — re-enable for EA2, check if health probe is fixed.
 gc:
   enabled: true
   image:
-    repository: quay.io/rhoai/odh-llm-d-batch-gateway-gc-rhel9
-    tag: "rhoai-3.5-ea.2"
+    repository: registry.redhat.io/rhoai/odh-llm-d-batch-gateway-gc-rhel9
+    digest: "sha256:c9834ad491025f9bc51be439042b873505b5f45ffc42ef59d1739549805daf9e"
     pullPolicy: IfNotPresent
   podSecurityContext: {}

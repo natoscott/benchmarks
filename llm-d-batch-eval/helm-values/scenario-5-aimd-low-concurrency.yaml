@@ -1,0 +1,19 @@
+processor:
+  config:
+    dispatchMode: sync
+    concurrency:
+      global: 20
+      perEndpoint: 5
+      recovery: 5
+      aimd:
+        enabled: true
+        min: 1
+        backoffFactor: 0.5
+        additiveIncrease: 1
+    globalInferenceGateway:
+      url: "http://placeholder-patched-by-run-benchmark:80"
+      requestTimeout: "5m"
+      maxRetries: 3
+      initialBackoff: "2s"
+      maxBackoff: "30s"
+      tlsInsecureSkipVerify: true

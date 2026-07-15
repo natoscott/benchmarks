@@ -1,7 +1,6 @@
-# EPP EndpointPickerConfig for Valkey-backed prefix-cache routing.
-# Flow-control and utilization-detector plugins are not available in
-# RHOAI 3.5 EA EPP (gateway-api-inference-extension 2026-04-09 build).
-# These should be tested in the next RHOAI version.
+# EPP EndpointPickerConfig for EA2 (llm-d-router).
+# Valkey-backed prefix cache via precise-prefix-cache-producer data plugin.
+# utilization-detector is auto-registered in EA2.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -9,20 +8,19 @@ metadata:
   namespace: llm-d-batch
 data:
   config.yaml: |
-    apiVersion: inference.networking.x-k8s.io/v1alpha1
+    apiVersion: llm-d.ai/v1alpha1
     kind: EndpointPickerConfig
     plugins:
-    - type: single-profile-handler
     - type: queue-scorer
     - type: kv-cache-utilization-scorer
     - type: prefix-cache-scorer
-      name: gpu-prefix-cache-scorer
+    - type: precise-prefix-cache-producer
+      name: valkey-prefix-producer
       parameters:
         indexerConfig:
           kvBlockIndexConfig:
             redisConfig:
               address: "valkey://valkey.llm-d-batch.svc.cluster.local:6379"
-              backendType: "valkey"
     schedulingProfiles:
     - name: default
       plugins:
@@ -30,5 +28,5 @@ data:
         weight: 2
       - pluginRef: kv-cache-utilization-scorer
         weight: 2
-      - pluginRef: gpu-prefix-cache-scorer
+      - pluginRef: prefix-cache-scorer
         weight: 1

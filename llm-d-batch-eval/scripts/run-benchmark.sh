@@ -43,7 +43,7 @@ NUM_JOBS="${NUM_JOBS:-30}"
 NUM_SYSTEM_PROMPTS="${NUM_SYSTEM_PROMPTS:-32}"
 
 # ── Derived ──────────────────────────────────────────────────────────────────
-SCENARIO_NAMES=("interactive-only" "no-batch-gateway" "ungated" "aimd" "aimd-flow-control")
+SCENARIO_NAMES=("interactive-only" "no-batch-gateway" "ungated" "aimd" "aimd-flow-control" "aimd-low-concurrency")
 SCENARIO_NAME="${SCENARIO_NAMES[${SCENARIO}]}"
 RUN_ID="${HARDWARE}_${SOFTWARE}_${MODEL_NAME}_${SCENARIO_NAME}_replica${REPLICAS}"
 OUTPUT_DIR="${REPO_ROOT}/results/${RUN_ID}"
@@ -171,6 +171,7 @@ if [ "${SCENARIO}" -ge 2 ]; then
         2) SCENARIO_VALUES="${HELM_VALUES}/scenario-2-ungated.yaml" ;;
         3) SCENARIO_VALUES="${HELM_VALUES}/scenario-3-aimd.yaml" ;;
         4) SCENARIO_VALUES="${HELM_VALUES}/scenario-4-aimd-flow-control.yaml" ;;
+        5) SCENARIO_VALUES="${HELM_VALUES}/scenario-5-aimd-low-concurrency.yaml" ;;
     esac
 
     # Scenario 4: enable EPP flow-control and create InferenceObjective CRDs
@@ -388,6 +389,42 @@ if [ -n "${MONITOR_PID:-}" ]; then
         "/tmp/batch-timeline.json" "${OUTPUT_DIR}/batch-timeline.json" "$((256 * 1024))" 2>/dev/null || \
         echo "  Warning: failed to collect batch timeline"
     kubectl exec -n "${NAMESPACE}" "${GUIDELLM_POD}" -- rm -f /tmp/batch-timeline.json 2>/dev/null || true
+fi
+
+# ── 7b. Verify all expected guidellm output files exist ─────────────────────
+echo ""
+echo "[7b] Verifying guidellm output files..."
+MISSING_FILES=0
+for c in $(seq $((WARMUP_CYCLES + 1)) "${CYCLES}"); do
+    for phase in burst idle; do
+        if ! kubectl exec -n "${NAMESPACE}" "${GUIDELLM_POD}" -- \
+            test -f "/models/benchmark-output/${phase}-${c}.json" 2>/dev/null; then
+            echo "  MISSING: ${phase}-${c}.json"
+            MISSING_FILES=$((MISSING_FILES + 1))
+        fi
+    done
+done
+
+if [ "${MISSING_FILES}" -gt 0 ]; then
+    echo "  ${MISSING_FILES} files missing — retrying interactive traffic..."
+    kubectl exec -n "${NAMESPACE}" "${GUIDELLM_POD}" -- bash -c "${CYCLE_SCRIPT}" || \
+        echo "  Warning: retry also exited non-zero"
+    # Re-check
+    STILL_MISSING=0
+    for c in $(seq $((WARMUP_CYCLES + 1)) "${CYCLES}"); do
+        for phase in burst idle; do
+            if ! kubectl exec -n "${NAMESPACE}" "${GUIDELLM_POD}" -- \
+                test -f "/models/benchmark-output/${phase}-${c}.json" 2>/dev/null; then
+                echo "  STILL MISSING after retry: ${phase}-${c}.json"
+                STILL_MISSING=$((STILL_MISSING + 1))
+            fi
+        done
+    done
+    if [ "${STILL_MISSING}" -gt 0 ]; then
+        echo "  ERROR: ${STILL_MISSING} files still missing after retry — run may have incomplete data"
+    fi
+else
+    echo "  All expected files present"
 fi
 
 # ── 8. Collect guidellm results ──────────────────────────────────────────────
