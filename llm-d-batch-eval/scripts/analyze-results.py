@@ -5,9 +5,13 @@ Extracts guidellm metrics from all completed runs, produces comparison
 tables and visualizations across scenarios and replica counts.
 
 Usage:
-    python3 scripts/analyze-results.py
+    python3 scripts/analyze-results.py [--software TAG]
+
+    --software TAG   Filter results by software version tag in directory name
+                     (e.g. rhoai-3.5ea1, rhoai-3.5ea2). Default: all versions.
 """
 
+import argparse
 import json
 import subprocess
 import sys
@@ -27,6 +31,8 @@ plt.rcParams["font.size"] = 11
 RESULTS_DIR = Path(__file__).parent.parent / "results"
 ANALYSIS_DIR = Path(__file__).parent.parent / "analysis"
 ANALYSIS_DIR.mkdir(exist_ok=True)
+
+SOFTWARE_FILTER: str | None = None
 
 SCENARIOS = ["interactive-only", "ungated", "aimd", "aimd-flow-control"]
 
@@ -137,6 +143,12 @@ def load_all_results():
             continue
         config = result_dir / "benchmark-config.txt"
         if not config.exists():
+            continue
+
+        # Filter by software version if specified
+        parts = result_dir.name.split("_")
+        software = parts[1] if len(parts) > 1 else ""
+        if SOFTWARE_FILTER and software != SOFTWARE_FILTER:
             continue
 
         model, scenario, replicas = parse_run_id(result_dir.name)
@@ -527,6 +539,20 @@ def load_batch_final_status():
 
 
 def main():
+    global SOFTWARE_FILTER, ANALYSIS_DIR
+
+    parser = argparse.ArgumentParser(description=__doc__,
+                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--software", default=None,
+                        help="Filter results by software version tag (e.g. rhoai-3.5ea1)")
+    args = parser.parse_args()
+
+    if args.software:
+        SOFTWARE_FILTER = args.software
+        ANALYSIS_DIR = ANALYSIS_DIR / args.software
+        ANALYSIS_DIR.mkdir(parents=True, exist_ok=True)
+        print(f"Filtering by software: {args.software}")
+
     print("Loading results...")
     metrics = load_all_results()
     print(f"  Loaded {len(metrics)} phase measurements from {RESULTS_DIR}")

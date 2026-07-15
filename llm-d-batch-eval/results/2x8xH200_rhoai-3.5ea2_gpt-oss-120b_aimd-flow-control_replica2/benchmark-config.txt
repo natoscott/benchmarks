@@ -1,0 +1,25 @@
+Run ID: 2x8xH200_rhoai-3.5ea2_gpt-oss-120b_aimd-flow-control_replica2
+Date: Tue 14 Jul 2026 16:28:12 UTC
+Scenario: 4 (aimd-flow-control)
+Target: https://inference-gateway.apps.CLUSTER//llm-d-batch/gpt-oss-120b
+Model: openai/gpt-oss-120b
+Model Name: gpt-oss-120b
+LLMInferenceService: gpt-oss-120b
+Replicas: 2
+Tensor Parallel Size: 4
+GPU Memory Utilization: 0.90
+Hardware: 2x8xH200
+Software: rhoai-3.5ea2
+Burst Rate: 15
+Idle Rate: 1
+Burst Seconds: 60
+Idle Seconds: 60
+Cycles: 3
+Warmup Cycles: 1
+Prompt Tokens: 512
+Output Tokens: 128
+Batch Size: 100
+Num Jobs: 30
+guidellm Pod: guidellm-c8d548fcf-jwcfh
+PCP Pods: pcp-67bbf4c476-tlq6r
+Namespace: llm-d-batch
