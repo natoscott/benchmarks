@@ -591,7 +591,193 @@ def main():
     plot_error_rates(df)
     plot_batch_timelines()
 
+    # Batch processor metrics (EA2+ only)
+    print("\nExtracting batch processor metrics from PCP archives...")
+    batch_metrics = extract_batch_processor_metrics()
+    if batch_metrics:
+        print_batch_processor_summary(batch_metrics)
+        print_summary_table_491(df, batch_metrics)
+
     print(f"\nAnalysis complete. Output in {ANALYSIS_DIR}")
+
+
+def _pcp_last_value(archive_base: str, metric: str) -> float | None:
+    """Get the last non-zero cumulative value from a PCP archive metric."""
+    try:
+        proc = subprocess.run(
+            ["pmval", "-a", archive_base, "-r", "-t", "10",  metric],
+            capture_output=True, text=True, timeout=30,
+        )
+        if proc.returncode != 0:
+            return None
+        last_val = None
+        for line in proc.stdout.splitlines():
+            line = line.strip()
+            if not line or not line[0].isdigit():
+                continue
+            parts = line.split()
+            if len(parts) >= 2:
+                try:
+                    v = float(parts[-1])
+                    if v > 0:
+                        last_val = v
+                except (ValueError, IndexError):
+                    pass
+        return last_val
+    except Exception:
+        return None
+
+
+def extract_batch_processor_metrics() -> dict:
+    """Extract batch processor metrics from PCP archives for each run."""
+    results = {}
+
+    for result_dir in sorted(RESULTS_DIR.iterdir()):
+        if not result_dir.is_dir():
+            continue
+        config = result_dir / "benchmark-config.txt"
+        if not config.exists():
+            continue
+
+        parts = result_dir.name.split("_")
+        software = parts[1] if len(parts) > 1 else ""
+        if SOFTWARE_FILTER and software != SOFTWARE_FILTER:
+            continue
+
+        model, scenario, replicas = parse_run_id(result_dir.name)
+        if scenario == "interactive-only":
+            continue
+
+        pcp_dir = result_dir / "pcp-archives"
+        if not pcp_dir.exists():
+            continue
+
+        zst_files = list(pcp_dir.rglob("*.0.zst"))
+        if not zst_files:
+            continue
+
+        archive_base = None
+        for zst in zst_files:
+            base = str(zst)[:-4]
+            subprocess.run(["zstd", "-dkf", str(zst)], capture_output=True, timeout=30)
+            for ext in ["index", "meta"]:
+                subprocess.run(["zstd", "-dkf", f"{base[:-2]}.{ext}.zst"],
+                               capture_output=True, timeout=30)
+            archive_base = base
+            break
+
+        if not archive_base:
+            continue
+
+        key = (model, scenario, replicas)
+        m = {}
+
+        m["prompt_tokens"] = _pcp_last_value(archive_base,
+            "openmetrics.batch_processor.batch_request_prompt_tokens_total")
+        m["gen_tokens"] = _pcp_last_value(archive_base,
+            "openmetrics.batch_processor.batch_request_generation_tokens_total")
+        m["job_e2e_sum"] = _pcp_last_value(archive_base,
+            "openmetrics.batch_processor.batch_job_e2e_latency_seconds_sum")
+        m["job_e2e_count"] = _pcp_last_value(archive_base,
+            "openmetrics.batch_processor.batch_job_e2e_latency_seconds_count")
+        m["job_queue_wait_sum"] = _pcp_last_value(archive_base,
+            "openmetrics.batch_processor.job_queue_wait_duration_seconds_sum")
+        m["job_queue_wait_count"] = _pcp_last_value(archive_base,
+            "openmetrics.batch_processor.job_queue_wait_duration_seconds_count")
+        m["req_exec_sum"] = _pcp_last_value(archive_base,
+            "openmetrics.batch_processor.model_request_execution_duration_seconds_sum")
+        m["req_exec_count"] = _pcp_last_value(archive_base,
+            "openmetrics.batch_processor.model_request_execution_duration_seconds_count")
+        m["jobs_processed"] = _pcp_last_value(archive_base,
+            "openmetrics.batch_processor.jobs_processed_total")
+
+        if any(v is not None for v in m.values()):
+            results[key] = m
+
+    return results
+
+
+def print_batch_processor_summary(batch_metrics: dict):
+    """Print batch processor metrics summary table."""
+    if not batch_metrics:
+        print("  No batch processor metrics found")
+        return
+
+    print(f"\n{'='*100}")
+    print(f"  Batch Processor Metrics (from PCP archives)")
+    print(f"{'='*100}\n")
+    print(f"{'Model':36s} {'Scenario':24s} {'R':>3s}  {'Jobs':>5s}  {'Job e2e(s)':>10s}  {'Queue wait(s)':>13s}  {'Req exec(s)':>11s}  {'Prompt tok':>10s}  {'Gen tok':>10s}")
+    print("-" * 130)
+
+    for (model, scenario, replicas), m in sorted(batch_metrics.items()):
+        jobs = int(m.get("jobs_processed") or m.get("job_e2e_count") or 0)
+        job_e2e = m.get("job_e2e_sum", 0) or 0
+        job_e2e_mean = job_e2e / jobs if jobs > 0 else 0
+        queue_wait = m.get("job_queue_wait_sum", 0) or 0
+        queue_wait_mean = queue_wait / (m.get("job_queue_wait_count") or 1)
+        req_count = int(m.get("req_exec_count") or 0)
+        req_exec_mean = (m.get("req_exec_sum") or 0) / req_count if req_count > 0 else 0
+        prompt_tok = int(m.get("prompt_tokens") or 0)
+        gen_tok = int(m.get("gen_tokens") or 0)
+
+        print(f"{model:36s} {scenario:24s} {replicas:3d}  {jobs:5d}  "
+              f"{job_e2e_mean:10.1f}  {queue_wait_mean:13.1f}  {req_exec_mean:11.1f}  "
+              f"{prompt_tok:10d}  {gen_tok:10d}")
+
+
+def print_summary_table_491(df: pd.DataFrame, batch_metrics: dict):
+    """Print summary table matching llm-d/llm-d-batch-gateway#491 spec."""
+    burst = df[df["phase"] == "burst"].copy()
+    if burst.empty:
+        return
+
+    print(f"\n{'='*100}")
+    print(f"  Summary Table (llm-d-batch-gateway#491 format)")
+    print(f"{'='*100}")
+
+    for model in sorted(burst["model"].unique()):
+        mdf = burst[burst["model"] == model]
+        agg = mdf.groupby(["scenario", "replicas"]).agg({
+            "ttft_p99": "mean", "itl_p99": "mean", "rps": "mean",
+        }).reset_index()
+
+        print(f"\n  {model}:\n")
+        print(f"  {'Scenario':24s} {'R':>3s}  {'TTFT p99':>8s}  {'ITL p99':>8s}  {'Batch TTFT p50':>14s}  {'Batch tok/s':>11s}  {'Jobs':>5s}  {'Job e2e(s)':>10s}")
+        print(f"  {'-'*90}")
+
+        for _, r in agg.sort_values(["replicas", "scenario"]).iterrows():
+            scen = r["scenario"]
+            rep = int(r["replicas"])
+            ttft = f"{r['ttft_p99']:.0f} ms"
+            itl = f"{r['itl_p99']:.1f} ms"
+
+            key = (model, scen, rep)
+            bm = batch_metrics.get(key)
+
+            if bm and bm.get("req_exec_count"):
+                req_mean = (bm["req_exec_sum"] or 0) / bm["req_exec_count"]
+                batch_ttft = f"{req_mean*1000:.0f} ms"
+            else:
+                batch_ttft = "—" if scen == "interactive-only" else "N/A"
+
+            if bm and bm.get("gen_tokens") and bm.get("job_e2e_sum") and bm.get("job_e2e_count"):
+                total_time = bm["job_e2e_sum"] / bm["job_e2e_count"] * bm["job_e2e_count"]
+                tok_s = (bm["gen_tokens"] + (bm.get("prompt_tokens") or 0)) / total_time if total_time > 0 else 0
+                batch_toks = f"{tok_s:.0f}"
+            else:
+                batch_toks = "—" if scen == "interactive-only" else "N/A"
+
+            if bm and bm.get("job_e2e_count"):
+                jobs = int(bm["job_e2e_count"])
+                job_e2e = f"{(bm['job_e2e_sum'] or 0) / jobs:.0f}"
+            else:
+                jobs_str = "—" if scen == "interactive-only" else "N/A"
+                job_e2e = jobs_str
+                jobs = 0
+
+            jobs_str = str(jobs) if jobs > 0 else ("—" if scen == "interactive-only" else "N/A")
+
+            print(f"  {scen:24s} {rep:3d}  {ttft:>8s}  {itl:>8s}  {batch_ttft:>14s}  {batch_toks:>11s}  {jobs_str:>5s}  {job_e2e:>10s}")
 
 
 if __name__ == "__main__":
