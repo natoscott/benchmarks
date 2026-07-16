@@ -40,47 +40,49 @@ All overhead measurements are from burst phases (15 concurrent interactive strea
 |---|---|---|---|---|
 | RHOAI 3.5 EA1 | EA1 batch gateway + EA1 EPP | 45 | No isolation effective initially; flow-control feature gate discovered and tested — protects large models, harms small models | [REPORT-rhoai-3.5ea1.md](REPORT-rhoai-3.5ea1.md) |
 | RHOAI 3.5 EA1 EPP + EA2 Batch | EA2 batch gateway + EA1 EPP | 36 | `perEndpoint` now enforced (20 vs 100); AIMD visible but not adapting; ungated outperforms aimd/FC for most models due to lower scheduling overhead | [REPORT-rhoai-3.5ea1+ea2-batch.md](REPORT-rhoai-3.5ea1+ea2-batch.md) |
+| RHOAI 3.5 EA2 Full Stack | EA2 EPP + EA2 batch gateway + EA2 KV cache | 37 | EA2 EPP has utilization-detector; AIMD flat (no 429s from vLLM); FC priority dispatch ordering helps FP8-70B at r=1/r=8; batch throughput vs latency tradeoff quantified | [REPORT-rhoai-3.5ea2.md](REPORT-rhoai-3.5ea2.md) |
 
 ## Cross-Version Comparison
 
 TTFT p99 overhead vs interactive-only baseline (burst phase, r=1):
 
-| Model | Scenario | EA1 | EA2 Batch | Change |
-|---|---|---|---|---|
-| Qwen3-8B | ungated | +5.8% | -11.3% | Within noise |
-| Qwen3-8B | aimd | +8.1% | +125.5% | perEndpoint=20 enforced; scheduling overhead at low batch pressure |
-| Qwen3-8B | flow-control | +57.9% | +166.2% | Same; FC overhead dominates |
-| FP8-70B | ungated | +106.8% | +45.8% | Baseline 4x faster in EA2 (cluster conditions) |
-| FP8-70B | aimd | +33.0% | +252.5% | perEndpoint=20 enforced; higher tail latency |
-| FP8-70B | flow-control | -49.3% | +175.2% | Baseline improvement eliminates FC benefit |
-| gpt-oss-120b | ungated | +42.8% | -67.1% | Different baseline (cluster conditions) |
-| gpt-oss-120b | flow-control | -39.2% | -82.6% | FC still helps at r=1 |
+| Model | Scenario | EA1 | EA2 Batch | EA2 Full | Change (EA2 Batch to EA2 Full) |
+|---|---|---|---|---|---|
+| Qwen3-8B | ungated | +5.8% | -11.3% | +32.0% | Higher baseline noise; within expected range |
+| Qwen3-8B | aimd | +8.1% | +125.5% | +134.9% | Consistent; perEndpoint=20 scheduling overhead |
+| Qwen3-8B | flow-control | +57.9% | +166.2% | +176.3% | Consistent; FC overhead dominates |
+| FP8-70B | ungated | +106.8% | +45.8% | +136.6% | Higher; baseline 400 ms vs 471 ms |
+| FP8-70B | aimd | +33.0% | +252.5% | +204.2% | Lower; FC dispatch ordering reduces tail |
+| FP8-70B | flow-control | -49.3% | +175.2% | +102.3% | FC improves with EA2 EPP priority scheduling |
+| gpt-oss-120b | ungated | +42.8% | -67.1% | -2.5% | Within noise of baseline |
+| gpt-oss-120b | flow-control | -39.2% | -82.6% | +1.8% | Within noise; different baseline conditions |
 
 ### Processor behavior
 
-| Metric | EA1 | EA2 Batch |
-|---|---|---|
-| `perEndpoint` enforcement | Ignored (all at global limit) | Enforced (aimd/FC at 20) |
-| AIMD adaptation | Not observable (no metrics) | Visible but static (limit stays at 20, no 429/5xx signals) |
-| Batch processor metrics | 2 (inflight, active_workers) | 12+ (job latency, queue wait, token throughput, AIMD limit, etc.) |
-| GC | Disabled (health probe fails) | Functional (30-min reconciliation) |
-| EPP | EA1 binary | EA1 binary (unchanged) |
+| Metric | EA1 | EA2 Batch | EA2 Full |
+|---|---|---|---|
+| `perEndpoint` enforcement | Ignored (all at global limit) | Enforced (aimd/FC at 20) | Enforced (aimd/FC at 20; scenario 5 at 5) |
+| AIMD adaptation | Not observable (no metrics) | Visible but static (limit stays at 20, no 429/5xx signals) | Static (stays at perEndpoint value, including scenario 5 at 5) |
+| Batch processor metrics | 2 (inflight, active_workers) | 12+ (job latency, queue wait, token throughput, AIMD limit, etc.) | Same as EA2 Batch |
+| GC | Disabled (health probe fails) | Functional (30-min reconciliation) | Functional |
+| EPP | EA1 binary | EA1 binary (unchanged) | EA2 binary (llm-d-router, utilization-detector auto-registered) |
 
 ## Known Issues Across Versions
 
-| Issue | EA1 | EA2 Batch | Status |
-|---|---|---|---|
-| EPP `utilization-detector` plugin | Not registered | Not registered (same EPP) | Requires updated EPP build |
-| AIMD signal path | No metrics | Metrics visible, no adaptation | Gateway never returns 429/5xx; AIMD has no overload signal |
-| Flow-control overhead for small models | +58-91% TTFT p99 | +125-166% TTFT p99 | By design — scheduling overhead exceeds batch contention benefit |
-| FP8-70B baseline variability | 1898 ms TTFT p99 (r=1) | 471 ms TTFT p99 (r=1) | Cluster conditions; within-version comparisons valid |
-| Per-model flow-control policy | Not available | Not available | Flow-control is global to EPP, not per-model |
+| Issue | EA1 | EA2 Batch | EA2 Full | Status |
+|---|---|---|---|---|
+| EPP `utilization-detector` plugin | Not registered | Not registered (same EPP) | Auto-registered (no rejection path) | Registered in EA2 EPP but cannot shed load — vLLM never returns 429/5xx |
+| AIMD signal path | No metrics | Metrics visible, no adaptation | Static at perEndpoint (20 or 5) | Gateway never returns 429/5xx; AIMD has no overload signal |
+| Flow-control overhead for small models | +58-91% TTFT p99 | +125-166% TTFT p99 | +135-176% TTFT p99 | By design — scheduling overhead exceeds batch contention benefit |
+| FP8-70B baseline variability | 1898 ms TTFT p99 (r=1) | 471 ms TTFT p99 (r=1) | 400 ms TTFT p99 (r=1) | Cluster conditions; within-version comparisons valid |
+| Per-model flow-control policy | Not available | Not available | Not available | Flow-control is global to EPP, not per-model |
+| priority-holdback-policy | Not available | Not available | Not in build (PR #1592 merged 2026-07-10) | Would enable graduated shedding without depending on vLLM 429/5xx |
 
 ## Improvements for Future Evaluations
 
-1. **Test with full EA2 stack.** Current EA2 results use the EA1 EPP. A full EA2 test should include the EA2 EPP to check `utilization-detector` availability and any EPP scheduling changes.
-2. **Trigger AIMD adaptation.** AIMD concurrency limit stays static at `perEndpoint` value because the gateway never returns 429/5xx. Test with lower `perEndpoint` (e.g. 5) or higher batch load to force overload signals.
-3. **Investigate AIMD signal path.** Determine whether the EPP or inference gateway is supposed to return 429 when saturated, or whether AIMD requires a different feedback mechanism.
-4. **Add job-level analysis.** EA2 exposes `batch_job_e2e_latency_seconds`, `job_queue_wait_duration_seconds`, and `job_processing_duration_seconds`. Analyse completion time distributions, queue wait CDFs, and correlation with interactive latency.
-5. **Add token throughput analysis.** EA2 exposes per-model `batch_request_prompt_tokens_total` and `batch_request_generation_tokens_total`. Calculate batch tok/s across scenarios to quantify how much batch work is accomplished alongside interactive traffic.
+1. ~~**Test with full EA2 stack.**~~ Done — see [REPORT-rhoai-3.5ea2.md](REPORT-rhoai-3.5ea2.md). EA2 EPP has utilization-detector auto-registered; FC priority dispatch ordering provides measurable FP8-70B benefit.
+2. ~~**Trigger AIMD adaptation.**~~ Tested with perEndpoint=5 (scenario 5). AIMD remains static — vLLM never returns 429/5xx regardless of concurrency limit.
+3. **Investigate AIMD signal path.** Confirmed that vLLM continuous batching queues excess requests internally (llm-d/llm-d-batch-gateway#491). Requires vLLM-side changes (e.g. `--max-waiting-queue-length` RFC) to generate 429 responses.
+4. **Test with priority-holdback-policy.** PR #1592 merged 2026-07-10 but not in EA2 build. Would enable graduated shedding without depending on vLLM 429/5xx.
+5. **Consider concurrency-detector with tuned maxConcurrency per model.** Per-model concurrency limits based on KV cache capacity and TP configuration could provide model-appropriate batch pressure control.
 6. **Evaluate selective flow-control.** Flow-control helps large models under contention but harms small models. Investigate per-model or per-InferenceObjective flow-control policies.
