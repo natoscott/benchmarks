@@ -1,0 +1,40 @@
+# PP validation: Qwen/Qwen3-14B TP=1/PP=8 (1 replica x 8 GPUs)
+apiVersion: serving.kserve.io/v1alpha2
+kind: LLMInferenceService
+metadata:
+  name: qwen3-14b-tp1pp8
+  namespace: aiconfigurator
+spec:
+  baseRefs:
+  - name: v3-5-0-ea-1-kserve-config-llm-template
+  - name: v3-5-0-ea-1-kserve-config-llm-scheduler
+  - name: v3-5-0-ea-1-kserve-config-llm-router-route
+  model:
+    name: "Qwen/Qwen3-14B"
+    uri: "pvc://model-storage-pvc/Qwen__Qwen3-14B"
+  parallelism:
+    tensor: 1
+    pipeline: 8
+  replicas: 1
+  template:
+    containers:
+    - name: main
+      env:
+      - name: HUGGING_FACE_HUB_TOKEN
+        valueFrom:
+          secretKeyRef:
+            name: llm-d-hf-token
+            key: HF_TOKEN
+      - name: VLLM_ADDITIONAL_ARGS
+        value: >-
+          --tensor-parallel-size 1
+          --pipeline-parallel-size 8
+          --gpu-memory-utilization 0.90
+          --max-model-len 8000
+          --max-num-seqs 256
+      resources:
+        requests:
+          nvidia.com/gpu: "8"
+          memory: 60Gi
+        limits:
+          nvidia.com/gpu: "8"

@@ -68,7 +68,7 @@ while IFS=' ' read -r CHUNK EXPECTED_CHUNK_SIZE; do
         kubectl --kubeconfig="${KUBECONFIG}" exec -n "${NAMESPACE}" "${POD}" -- \
             base64 "${CHUNK}" | base64 -d > "${LOCAL_CHUNK_DIR}/${CHUNK_NAME}" 2>/dev/null || true
 
-        LOCAL_CHUNK_SIZE=$(stat -c '%s' "${LOCAL_CHUNK_DIR}/${CHUNK_NAME}" 2>/dev/null || echo 0)
+        LOCAL_CHUNK_SIZE=$(wc -c < "${LOCAL_CHUNK_DIR}/${CHUNK_NAME}" 2>/dev/null || echo 0)
         if [ "${LOCAL_CHUNK_SIZE}" -eq "${EXPECTED_CHUNK_SIZE}" ]; then
             SUCCESS=1
             break
@@ -90,7 +90,7 @@ mkdir -p "$(dirname "${LOCAL_FILE}")"
 cat "${LOCAL_CHUNK_DIR}"/chunk.* > "${LOCAL_FILE}"
 
 # Verify final file size
-LOCAL_SIZE=$(stat -c '%s' "${LOCAL_FILE}")
+LOCAL_SIZE=$(wc -c < "${LOCAL_FILE}")
 if [ "${LOCAL_SIZE}" -ne "${FILE_SIZE}" ]; then
     echo "ERROR: Size mismatch! Remote: ${FILE_SIZE}, Local: ${LOCAL_SIZE}"
     exit 1

@@ -1,0 +1,1026 @@
+[
+  {
+    "config": "qwen3-06b-tp1pp8",
+    "actual_tok_s_gpu": 735.6,
+    "predicted_tok_s_gpu": 7393.1,
+    "error_pct": -90.1,
+    "actual_ttft_p50": 176.7,
+    "predicted_ttft": 147.9,
+    "peak_concurrency": 64,
+    "peak_output_tok_s": 5884.6,
+    "all_results": [
+      {
+        "concurrency": 1,
+        "successful": 23,
+        "output_tok_per_sec": 196.61718784638805,
+        "req_per_sec": 0.18333333333333332,
+        "ttft_p50_ms": 73.28987121582031,
+        "itl_p50_ms": 5.026884384460755
+      },
+      {
+        "concurrency": 16,
+        "successful": 337,
+        "output_tok_per_sec": 2754.214961964115,
+        "req_per_sec": 2.8,
+        "ttft_p50_ms": 133.55541229248047,
+        "itl_p50_ms": 5.415688525210391
+      },
+      {
+        "concurrency": 2,
+        "successful": 47,
+        "output_tok_per_sec": 377.54127281342915,
+        "req_per_sec": 0.3833333333333335,
+        "ttft_p50_ms": 89.19954299926758,
+        "itl_p50_ms": 5.113363504648447
+      },
+      {
+        "concurrency": 32,
+        "successful": 599,
+        "output_tok_per_sec": 4990.972663557946,
+        "req_per_sec": 4.9833333333333325,
+        "ttft_p50_ms": 139.16563987731934,
+        "itl_p50_ms": 6.068365948574917
+      },
+      {
+        "concurrency": 4,
+        "successful": 89,
+        "output_tok_per_sec": 732.1811981444654,
+        "req_per_sec": 0.7333333333333332,
+        "ttft_p50_ms": 106.4002513885498,
+        "itl_p50_ms": 5.185469015463217
+      },
+      {
+        "concurrency": 64,
+        "successful": 705,
+        "output_tok_per_sec": 5884.607754462886,
+        "req_per_sec": 5.866666666666666,
+        "ttft_p50_ms": 176.6653060913086,
+        "itl_p50_ms": 9.77971389128997
+      },
+      {
+        "concurrency": 8,
+        "successful": 170,
+        "output_tok_per_sec": 1391.0767150515935,
+        "req_per_sec": 1.4,
+        "ttft_p50_ms": 118.69645118713379,
+        "itl_p50_ms": 5.209255982209016
+      }
+    ]
+  },
+  {
+    "config": "qwen3-06b-tp2pp4",
+    "actual_tok_s_gpu": 1187.4,
+    "predicted_tok_s_gpu": 6913.7,
+    "error_pct": -82.8,
+    "actual_ttft_p50": 123.3,
+    "predicted_ttft": 127.3,
+    "peak_concurrency": 64,
+    "peak_output_tok_s": 9499.4,
+    "all_results": [
+      {
+        "concurrency": 1,
+        "successful": 40,
+        "output_tok_per_sec": 339.5958691966423,
+        "req_per_sec": 0.325,
+        "ttft_p50_ms": 50.05812644958496,
+        "itl_p50_ms": 2.875601565157687
+      },
+      {
+        "concurrency": 16,
+        "successful": 561,
+        "output_tok_per_sec": 4570.324854124148,
+        "req_per_sec": 4.666666666666666,
+        "ttft_p50_ms": 64.61238861083984,
+        "itl_p50_ms": 3.343223451494097
+      },
+      {
+        "concurrency": 2,
+        "successful": 77,
+        "output_tok_per_sec": 637.6984748868471,
+        "req_per_sec": 0.6333333333333332,
+        "ttft_p50_ms": 50.6899356842041,
+        "itl_p50_ms": 3.0303848636997595
+      },
+      {
+        "concurrency": 32,
+        "successful": 865,
+        "output_tok_per_sec": 7053.643201798543,
+        "req_per_sec": 7.199999999999999,
+        "ttft_p50_ms": 76.74360275268555,
+        "itl_p50_ms": 4.239639362415394
+      },
+      {
+        "concurrency": 4,
+        "successful": 149,
+        "output_tok_per_sec": 1241.1111390485844,
+        "req_per_sec": 1.233333333333333,
+        "ttft_p50_ms": 55.0532341003418,
+        "itl_p50_ms": 3.102395627591703
+      },
+      {
+        "concurrency": 64,
+        "successful": 1153,
+        "output_tok_per_sec": 9499.395313344186,
+        "req_per_sec": 9.599999999999998,
+        "ttft_p50_ms": 123.29339981079102,
+        "itl_p50_ms": 6.19786351292699
+      },
+      {
+        "concurrency": 8,
+        "successful": 289,
+        "output_tok_per_sec": 2367.8153042189524,
+        "req_per_sec": 2.4000000000000004,
+        "ttft_p50_ms": 63.71283531188965,
+        "itl_p50_ms": 3.1007085595880306
+      }
+    ]
+  },
+  {
+    "config": "qwen3-06b-tp4pp2",
+    "actual_tok_s_gpu": 1669.3,
+    "predicted_tok_s_gpu": 6320.2,
+    "error_pct": -73.6,
+    "actual_ttft_p50": 103.8,
+    "predicted_ttft": 103.4,
+    "peak_concurrency": 64,
+    "peak_output_tok_s": 13354.1,
+    "all_results": [
+      {
+        "concurrency": 1,
+        "successful": 49,
+        "output_tok_per_sec": 412.9372814857126,
+        "req_per_sec": 0.4,
+        "ttft_p50_ms": 45.87435722351074,
+        "itl_p50_ms": 2.343553919214625
+      },
+      {
+        "concurrency": 16,
+        "successful": 705,
+        "output_tok_per_sec": 5818.763372022952,
+        "req_per_sec": 5.866666666666666,
+        "ttft_p50_ms": 55.41086196899414,
+        "itl_p50_ms": 2.644115740114504
+      },
+      {
+        "concurrency": 2,
+        "successful": 97,
+        "output_tok_per_sec": 798.6373978187048,
+        "req_per_sec": 0.7999999999999999,
+        "ttft_p50_ms": 43.95556449890137,
+        "itl_p50_ms": 2.41880350046091
+      },
+      {
+        "concurrency": 32,
+        "successful": 1121,
+        "output_tok_per_sec": 9330.612153461754,
+        "req_per_sec": 9.333333333333332,
+        "ttft_p50_ms": 55.74393272399902,
+        "itl_p50_ms": 3.226376629925824
+      },
+      {
+        "concurrency": 4,
+        "successful": 189,
+        "output_tok_per_sec": 1561.0451106554647,
+        "req_per_sec": 1.5666666666666664,
+        "ttft_p50_ms": 41.80121421813965,
+        "itl_p50_ms": 2.4816367003294797
+      },
+      {
+        "concurrency": 64,
+        "successful": 1602,
+        "output_tok_per_sec": 13354.107852150843,
+        "req_per_sec": 13.341666666666665,
+        "ttft_p50_ms": 103.7750244140625,
+        "itl_p50_ms": 4.433073916354099
+      },
+      {
+        "concurrency": 8,
+        "successful": 384,
+        "output_tok_per_sec": 3334.217791818095,
+        "req_per_sec": 3.1999999999999997,
+        "ttft_p50_ms": 47.768592834472656,
+        "itl_p50_ms": 2.3424031140210033
+      }
+    ]
+  },
+  {
+    "config": "qwen3-06b-tp8pp1",
+    "actual_tok_s_gpu": 2110.2,
+    "predicted_tok_s_gpu": 5231.4,
+    "error_pct": -59.7,
+    "actual_ttft_p50": 129.9,
+    "predicted_ttft": 83.4,
+    "peak_concurrency": 64,
+    "peak_output_tok_s": 16881.4,
+    "all_results": [
+      {
+        "concurrency": 1,
+        "successful": 68,
+        "output_tok_per_sec": 565.09934483585,
+        "req_per_sec": 0.5583333333333331,
+        "ttft_p50_ms": 44.58904266357422,
+        "itl_p50_ms": 1.716429526144797
+      },
+      {
+        "concurrency": 16,
+        "successful": 853,
+        "output_tok_per_sec": 7116.572479307459,
+        "req_per_sec": 7.1083333333333325,
+        "ttft_p50_ms": 52.27184295654297,
+        "itl_p50_ms": 2.1289220682016246
+      },
+      {
+        "concurrency": 2,
+        "successful": 122,
+        "output_tok_per_sec": 1008.1616166181911,
+        "req_per_sec": 0.9999999999999999,
+        "ttft_p50_ms": 41.5036678314209,
+        "itl_p50_ms": 1.93602711827428
+      },
+      {
+        "concurrency": 32,
+        "successful": 1388,
+        "output_tok_per_sec": 11588.899771337301,
+        "req_per_sec": 11.566666666666666,
+        "ttft_p50_ms": 67.78097152709961,
+        "itl_p50_ms": 2.565089169445935
+      },
+      {
+        "concurrency": 4,
+        "successful": 234,
+        "output_tok_per_sec": 1929.1417013073074,
+        "req_per_sec": 1.933333333333333,
+        "ttft_p50_ms": 45.49670219421387,
+        "itl_p50_ms": 2.00415469027377
+      },
+      {
+        "concurrency": 64,
+        "successful": 2019,
+        "output_tok_per_sec": 16881.350975451234,
+        "req_per_sec": 16.825,
+        "ttft_p50_ms": 129.88996505737305,
+        "itl_p50_ms": 3.4690559566677273
+      },
+      {
+        "concurrency": 8,
+        "successful": 472,
+        "output_tok_per_sec": 4100.993792821571,
+        "req_per_sec": 3.9333333333333327,
+        "ttft_p50_ms": 47.707557678222656,
+        "itl_p50_ms": 1.909765514644894
+      }
+    ]
+  },
+  {
+    "config": "qwen3-14b-tp1pp8",
+    "actual_tok_s_gpu": 211.6,
+    "predicted_tok_s_gpu": 2423.0,
+    "error_pct": -91.3,
+    "actual_ttft_p50": 307.2,
+    "predicted_ttft": 457.9,
+    "peak_concurrency": 32,
+    "peak_output_tok_s": 1692.4,
+    "all_results": [
+      {
+        "concurrency": 1,
+        "successful": 13,
+        "output_tok_per_sec": 105.41742124276782,
+        "req_per_sec": 0.09999999999999999,
+        "ttft_p50_ms": 228.87396812438965,
+        "itl_p50_ms": 9.277506036920709
+      },
+      {
+        "concurrency": 16,
+        "successful": 145,
+        "output_tok_per_sec": 1104.8720904355844,
+        "req_per_sec": 1.1999999999999997,
+        "ttft_p50_ms": 185.8360767364502,
+        "itl_p50_ms": 11.947357141458475
+      },
+      {
+        "concurrency": 2,
+        "successful": 25,
+        "output_tok_per_sec": 193.50333715823982,
+        "req_per_sec": 0.2,
+        "ttft_p50_ms": 195.4796314239502,
+        "itl_p50_ms": 9.694668146463725
+      },
+      {
+        "concurrency": 32,
+        "successful": 225,
+        "output_tok_per_sec": 1692.4094878975043,
+        "req_per_sec": 1.8666666666666663,
+        "ttft_p50_ms": 307.2338104248047,
+        "itl_p50_ms": 14.700151897884822
+      },
+      {
+        "concurrency": 4,
+        "successful": 45,
+        "output_tok_per_sec": 358.74900680694964,
+        "req_per_sec": 0.3666666666666667,
+        "ttft_p50_ms": 226.0427474975586,
+        "itl_p50_ms": 10.090736297515777
+      },
+      {
+        "concurrency": 8,
+        "successful": 82,
+        "output_tok_per_sec": 658.141217249321,
+        "req_per_sec": 0.666666666666667,
+        "ttft_p50_ms": 427.9744625091553,
+        "itl_p50_ms": 10.673021291707968
+      }
+    ]
+  },
+  {
+    "config": "qwen3-14b-tp2pp4",
+    "actual_tok_s_gpu": 355.1,
+    "predicted_tok_s_gpu": 2259.3,
+    "error_pct": -84.3,
+    "actual_ttft_p50": 140.5,
+    "predicted_ttft": 296.6,
+    "peak_concurrency": 32,
+    "peak_output_tok_s": 2841.1,
+    "all_results": [
+      {
+        "concurrency": 1,
+        "successful": 19,
+        "output_tok_per_sec": 159.50866134245464,
+        "req_per_sec": 0.15,
+        "ttft_p50_ms": 128.38292121887207,
+        "itl_p50_ms": 6.135252264288214
+      },
+      {
+        "concurrency": 16,
+        "successful": 225,
+        "output_tok_per_sec": 1779.8628235917263,
+        "req_per_sec": 1.8666666666666667,
+        "ttft_p50_ms": 150.0246524810791,
+        "itl_p50_ms": 8.054732321738243
+      },
+      {
+        "concurrency": 2,
+        "successful": 37,
+        "output_tok_per_sec": 293.41119276576364,
+        "req_per_sec": 0.3000000000000001,
+        "ttft_p50_ms": 140.2719020843506,
+        "itl_p50_ms": 6.501285879461615
+      },
+      {
+        "concurrency": 32,
+        "successful": 353,
+        "output_tok_per_sec": 2841.117864108224,
+        "req_per_sec": 2.9333333333333336,
+        "ttft_p50_ms": 140.54036140441895,
+        "itl_p50_ms": 9.190784918295371
+      },
+      {
+        "concurrency": 4,
+        "successful": 69,
+        "output_tok_per_sec": 548.9921952719459,
+        "req_per_sec": 0.5666666666666665,
+        "ttft_p50_ms": 80.1839828491211,
+        "itl_p50_ms": 6.760999843761608
+      },
+      {
+        "concurrency": 8,
+        "successful": 122,
+        "output_tok_per_sec": 999.8673571996724,
+        "req_per_sec": 1.0,
+        "ttft_p50_ms": 105.37195205688477,
+        "itl_p50_ms": 6.954286191556546
+      }
+    ]
+  },
+  {
+    "config": "qwen3-14b-tp4pp2",
+    "actual_tok_s_gpu": 524.4,
+    "predicted_tok_s_gpu": 1948.9,
+    "error_pct": -73.1,
+    "actual_ttft_p50": 103.6,
+    "predicted_ttft": 235.4,
+    "peak_concurrency": 32,
+    "peak_output_tok_s": 4195.3,
+    "all_results": [
+      {
+        "concurrency": 1,
+        "successful": 26,
+        "output_tok_per_sec": 219.9882506740283,
+        "req_per_sec": 0.20833333333333334,
+        "ttft_p50_ms": 91.54415130615234,
+        "itl_p50_ms": 4.449070394934119
+      },
+      {
+        "concurrency": 16,
+        "successful": 321,
+        "output_tok_per_sec": 2572.845481166586,
+        "req_per_sec": 2.666666666666667,
+        "ttft_p50_ms": 92.01383590698242,
+        "itl_p50_ms": 5.5845335081174925
+      },
+      {
+        "concurrency": 2,
+        "successful": 49,
+        "output_tok_per_sec": 404.9201364909072,
+        "req_per_sec": 0.4,
+        "ttft_p50_ms": 89.25271034240723,
+        "itl_p50_ms": 4.752534049170631
+      },
+      {
+        "concurrency": 32,
+        "successful": 513,
+        "output_tok_per_sec": 4195.267545836732,
+        "req_per_sec": 4.266666666666666,
+        "ttft_p50_ms": 103.56450080871582,
+        "itl_p50_ms": 6.467444044691664
+      },
+      {
+        "concurrency": 4,
+        "successful": 93,
+        "output_tok_per_sec": 767.8454887531192,
+        "req_per_sec": 0.7666666666666666,
+        "ttft_p50_ms": 74.55253601074219,
+        "itl_p50_ms": 4.904128409720756
+      },
+      {
+        "concurrency": 8,
+        "successful": 170,
+        "output_tok_per_sec": 1418.9097392540284,
+        "req_per_sec": 1.4166666666666665,
+        "ttft_p50_ms": 89.91861343383789,
+        "itl_p50_ms": 5.191125430621661
+      }
+    ]
+  },
+  {
+    "config": "qwen3-14b-tp8pp1",
+    "actual_tok_s_gpu": 687.4,
+    "predicted_tok_s_gpu": 1624.7,
+    "error_pct": -57.7,
+    "actual_ttft_p50": 79.9,
+    "predicted_ttft": 255.7,
+    "peak_concurrency": 32,
+    "peak_output_tok_s": 5499.1,
+    "all_results": [
+      {
+        "concurrency": 1,
+        "successful": 35,
+        "output_tok_per_sec": 286.8823535597481,
+        "req_per_sec": 0.2833333333333334,
+        "ttft_p50_ms": 71.3646411895752,
+        "itl_p50_ms": 3.409745337607505
+      },
+      {
+        "concurrency": 16,
+        "successful": 417,
+        "output_tok_per_sec": 3404.5233308588286,
+        "req_per_sec": 3.466666666666667,
+        "ttft_p50_ms": 82.65209197998047,
+        "itl_p50_ms": 4.236230859766016
+      },
+      {
+        "concurrency": 2,
+        "successful": 65,
+        "output_tok_per_sec": 528.7605895756891,
+        "req_per_sec": 0.5333333333333332,
+        "ttft_p50_ms": 48.334360122680664,
+        "itl_p50_ms": 3.65899752329539
+      },
+      {
+        "concurrency": 32,
+        "successful": 673,
+        "output_tok_per_sec": 5499.102114082498,
+        "req_per_sec": 5.6,
+        "ttft_p50_ms": 79.85115051269531,
+        "itl_p50_ms": 5.058574485587883
+      },
+      {
+        "concurrency": 4,
+        "successful": 121,
+        "output_tok_per_sec": 996.4020108744047,
+        "req_per_sec": 0.9999999999999999,
+        "ttft_p50_ms": 64.19110298156738,
+        "itl_p50_ms": 3.8232855849318557
+      },
+      {
+        "concurrency": 8,
+        "successful": 225,
+        "output_tok_per_sec": 1933.2906178065327,
+        "req_per_sec": 1.8666666666666663,
+        "ttft_p50_ms": 87.7985954284668,
+        "itl_p50_ms": 3.9602430971773774
+      }
+    ]
+  },
+  {
+    "config": "qwen3-32b-fp8-tp1pp8",
+    "actual_tok_s_gpu": 130.0,
+    "predicted_tok_s_gpu": 1572.7,
+    "error_pct": -91.7,
+    "actual_ttft_p50": 336.4,
+    "predicted_ttft": 1201.1,
+    "peak_concurrency": 32,
+    "peak_output_tok_s": 1039.9,
+    "all_results": [
+      {
+        "concurrency": 1,
+        "successful": 10,
+        "output_tok_per_sec": 79.63550875882203,
+        "req_per_sec": 0.075,
+        "ttft_p50_ms": 343.98531913757324,
+        "itl_p50_ms": 12.253688262389586
+      },
+      {
+        "concurrency": 16,
+        "successful": 98,
+        "output_tok_per_sec": 757.4287968761707,
+        "req_per_sec": 0.8,
+        "ttft_p50_ms": 318.6790943145752,
+        "itl_p50_ms": 17.157798772817618
+      },
+      {
+        "concurrency": 2,
+        "successful": 20,
+        "output_tok_per_sec": 151.57704767045536,
+        "req_per_sec": 0.15,
+        "ttft_p50_ms": 385.99109649658203,
+        "itl_p50_ms": 12.831836610704332
+      },
+      {
+        "concurrency": 32,
+        "successful": 129,
+        "output_tok_per_sec": 1039.888171643217,
+        "req_per_sec": 1.0666666666666669,
+        "ttft_p50_ms": 336.43603324890137,
+        "itl_p50_ms": 22.339102026220555
+      },
+      {
+        "concurrency": 4,
+        "successful": 34,
+        "output_tok_per_sec": 269.93716433522593,
+        "req_per_sec": 0.2666666666666667,
+        "ttft_p50_ms": 152.49204635620117,
+        "itl_p50_ms": 13.464414321624481
+      },
+      {
+        "concurrency": 8,
+        "successful": 57,
+        "output_tok_per_sec": 463.8858371487333,
+        "req_per_sec": 0.46666666666666673,
+        "ttft_p50_ms": 826.2984752655029,
+        "itl_p50_ms": 14.393065904115176
+      }
+    ]
+  },
+  {
+    "config": "qwen3-32b-fp8-tp2pp4",
+    "actual_tok_s_gpu": 221.6,
+    "predicted_tok_s_gpu": 1317.0,
+    "error_pct": -83.2,
+    "actual_ttft_p50": 213.6,
+    "predicted_ttft": 871.2,
+    "peak_concurrency": 32,
+    "peak_output_tok_s": 1772.5,
+    "all_results": [
+      {
+        "concurrency": 1,
+        "successful": 14,
+        "output_tok_per_sec": 115.39311481173216,
+        "req_per_sec": 0.10833333333333332,
+        "ttft_p50_ms": 188.89713287353516,
+        "itl_p50_ms": 8.478523613335014
+      },
+      {
+        "concurrency": 16,
+        "successful": 160,
+        "output_tok_per_sec": 1331.5514356295066,
+        "req_per_sec": 1.3166666666666662,
+        "ttft_p50_ms": 218.2750701904297,
+        "itl_p50_ms": 11.477613114976549
+      },
+      {
+        "concurrency": 2,
+        "successful": 27,
+        "output_tok_per_sec": 212.65418879140793,
+        "req_per_sec": 0.21666666666666667,
+        "ttft_p50_ms": 97.28693962097168,
+        "itl_p50_ms": 8.873910159320086
+      },
+      {
+        "concurrency": 32,
+        "successful": 225,
+        "output_tok_per_sec": 1772.457276677543,
+        "req_per_sec": 1.8666666666666671,
+        "ttft_p50_ms": 213.57131004333496,
+        "itl_p50_ms": 14.244371467643791
+      },
+      {
+        "concurrency": 4,
+        "successful": 49,
+        "output_tok_per_sec": 393.9865107251886,
+        "req_per_sec": 0.4,
+        "ttft_p50_ms": 159.70182418823242,
+        "itl_p50_ms": 9.222158559927115
+      },
+      {
+        "concurrency": 8,
+        "successful": 89,
+        "output_tok_per_sec": 723.1350996022613,
+        "req_per_sec": 0.7333333333333335,
+        "ttft_p50_ms": 378.8580894470215,
+        "itl_p50_ms": 9.632332069618446
+      }
+    ]
+  },
+  {
+    "config": "qwen3-32b-fp8-tp4pp2",
+    "actual_tok_s_gpu": 330.5,
+    "predicted_tok_s_gpu": 1107.1,
+    "error_pct": -70.1,
+    "actual_ttft_p50": 170.9,
+    "predicted_ttft": 424.6,
+    "peak_concurrency": 32,
+    "peak_output_tok_s": 2644.1,
+    "all_results": [
+      {
+        "concurrency": 1,
+        "successful": 18,
+        "output_tok_per_sec": 150.83288733585172,
+        "req_per_sec": 0.14166666666666666,
+        "ttft_p50_ms": 134.72485542297363,
+        "itl_p50_ms": 6.50114149183363
+      },
+      {
+        "concurrency": 16,
+        "successful": 209,
+        "output_tok_per_sec": 1732.6364939916275,
+        "req_per_sec": 1.7333333333333334,
+        "ttft_p50_ms": 145.1411247253418,
+        "itl_p50_ms": 7.91268377332716
+      },
+      {
+        "concurrency": 2,
+        "successful": 35,
+        "output_tok_per_sec": 280.54862021983735,
+        "req_per_sec": 0.28333333333333344,
+        "ttft_p50_ms": 132.81607627868652,
+        "itl_p50_ms": 6.803715909207547
+      },
+      {
+        "concurrency": 32,
+        "successful": 321,
+        "output_tok_per_sec": 2644.149361221262,
+        "req_per_sec": 2.666666666666666,
+        "ttft_p50_ms": 170.94182968139648,
+        "itl_p50_ms": 9.904022092695111
+      },
+      {
+        "concurrency": 4,
+        "successful": 65,
+        "output_tok_per_sec": 528.8687057771751,
+        "req_per_sec": 0.5333333333333332,
+        "ttft_p50_ms": 72.64494895935059,
+        "itl_p50_ms": 7.0189348570219385
+      },
+      {
+        "concurrency": 8,
+        "successful": 121,
+        "output_tok_per_sec": 1001.0633473291814,
+        "req_per_sec": 1.0,
+        "ttft_p50_ms": 137.51697540283203,
+        "itl_p50_ms": 7.254179056222971
+      }
+    ]
+  },
+  {
+    "config": "qwen3-32b-fp8-tp8pp1",
+    "actual_tok_s_gpu": 422.1,
+    "predicted_tok_s_gpu": 821.8,
+    "error_pct": -48.6,
+    "actual_ttft_p50": 118.0,
+    "predicted_ttft": 311.4,
+    "peak_concurrency": 32,
+    "peak_output_tok_s": 3376.7,
+    "all_results": [
+      {
+        "concurrency": 1,
+        "successful": 23,
+        "output_tok_per_sec": 184.7867747510689,
+        "req_per_sec": 0.18333333333333335,
+        "ttft_p50_ms": 100.96883773803711,
+        "itl_p50_ms": 5.30842283705214
+      },
+      {
+        "concurrency": 16,
+        "successful": 264,
+        "output_tok_per_sec": 2201.6221701644345,
+        "req_per_sec": 2.1999999999999997,
+        "ttft_p50_ms": 108.17956924438477,
+        "itl_p50_ms": 6.5185166932679754
+      },
+      {
+        "concurrency": 2,
+        "successful": 42,
+        "output_tok_per_sec": 350.6651160233586,
+        "req_per_sec": 0.35000000000000003,
+        "ttft_p50_ms": 45.812368392944336,
+        "itl_p50_ms": 5.6148348627863705
+      },
+      {
+        "concurrency": 32,
+        "successful": 417,
+        "output_tok_per_sec": 3376.683136148186,
+        "req_per_sec": 3.466666666666666,
+        "ttft_p50_ms": 117.99478530883789,
+        "itl_p50_ms": 7.996877273162444
+      },
+      {
+        "concurrency": 4,
+        "successful": 81,
+        "output_tok_per_sec": 651.1165812995873,
+        "req_per_sec": 0.6666666666666666,
+        "ttft_p50_ms": 64.30888175964355,
+        "itl_p50_ms": 5.783823278692511
+      },
+      {
+        "concurrency": 8,
+        "successful": 146,
+        "output_tok_per_sec": 1205.0403023158628,
+        "req_per_sec": 1.2,
+        "ttft_p50_ms": 90.6209945678711,
+        "itl_p50_ms": 5.847654543123446
+      }
+    ]
+  },
+  {
+    "config": "qwen3-8b-tp1pp8",
+    "actual_tok_s_gpu": 402.1,
+    "predicted_tok_s_gpu": 3570.6,
+    "error_pct": -88.7,
+    "actual_ttft_p50": 295.0,
+    "predicted_ttft": 303.3,
+    "peak_concurrency": 64,
+    "peak_output_tok_s": 3216.4,
+    "all_results": [
+      {
+        "concurrency": 1,
+        "successful": 20,
+        "output_tok_per_sec": 168.63765363333746,
+        "req_per_sec": 0.15833333333333333,
+        "ttft_p50_ms": 136.17849349975586,
+        "itl_p50_ms": 5.798330774775019
+      },
+      {
+        "concurrency": 16,
+        "successful": 209,
+        "output_tok_per_sec": 1672.542843972396,
+        "req_per_sec": 1.7333333333333332,
+        "ttft_p50_ms": 160.0360870361328,
+        "itl_p50_ms": 8.287047003363227
+      },
+      {
+        "concurrency": 2,
+        "successful": 37,
+        "output_tok_per_sec": 306.7227897579927,
+        "req_per_sec": 0.3000000000000001,
+        "ttft_p50_ms": 147.0787525177002,
+        "itl_p50_ms": 6.196843969213354
+      },
+      {
+        "concurrency": 32,
+        "successful": 316,
+        "output_tok_per_sec": 2635.566972589895,
+        "req_per_sec": 2.6166666666666663,
+        "ttft_p50_ms": 239.57157135009766,
+        "itl_p50_ms": 10.855458281538985
+      },
+      {
+        "concurrency": 4,
+        "successful": 69,
+        "output_tok_per_sec": 564.6282389013754,
+        "req_per_sec": 0.5666666666666667,
+        "ttft_p50_ms": 167.96302795410156,
+        "itl_p50_ms": 6.550408937074281
+      },
+      {
+        "concurrency": 64,
+        "successful": 385,
+        "output_tok_per_sec": 3216.411322639553,
+        "req_per_sec": 3.208333333333333,
+        "ttft_p50_ms": 295.0015068054199,
+        "itl_p50_ms": 15.797625074873457
+      },
+      {
+        "concurrency": 8,
+        "successful": 121,
+        "output_tok_per_sec": 966.7171703271703,
+        "req_per_sec": 0.9999999999999999,
+        "ttft_p50_ms": 165.59982299804688,
+        "itl_p50_ms": 7.321246035464175
+      }
+    ]
+  },
+  {
+    "config": "qwen3-8b-tp2pp4",
+    "actual_tok_s_gpu": 712.8,
+    "predicted_tok_s_gpu": 3245.0,
+    "error_pct": -78.0,
+    "actual_ttft_p50": 150.5,
+    "predicted_ttft": 354.5,
+    "peak_concurrency": 64,
+    "peak_output_tok_s": 5702.3,
+    "all_results": [
+      {
+        "concurrency": 1,
+        "successful": 27,
+        "output_tok_per_sec": 227.85606986703039,
+        "req_per_sec": 0.21666666666666667,
+        "ttft_p50_ms": 88.9136791229248,
+        "itl_p50_ms": 4.295939797753686
+      },
+      {
+        "concurrency": 16,
+        "successful": 305,
+        "output_tok_per_sec": 2487.9966707449494,
+        "req_per_sec": 2.533333333333333,
+        "ttft_p50_ms": 109.77554321289062,
+        "itl_p50_ms": 5.720915617766203
+      },
+      {
+        "concurrency": 2,
+        "successful": 51,
+        "output_tok_per_sec": 417.4845047234845,
+        "req_per_sec": 0.41666666666666674,
+        "ttft_p50_ms": 87.94021606445312,
+        "itl_p50_ms": 4.608821343850565
+      },
+      {
+        "concurrency": 32,
+        "successful": 481,
+        "output_tok_per_sec": 3862.3142498699126,
+        "req_per_sec": 4.0,
+        "ttft_p50_ms": 134.64832305908203,
+        "itl_p50_ms": 7.091115783523391
+      },
+      {
+        "concurrency": 4,
+        "successful": 96,
+        "output_tok_per_sec": 801.4842243832277,
+        "req_per_sec": 0.7999999999999999,
+        "ttft_p50_ms": 78.21226119995117,
+        "itl_p50_ms": 4.849398338997567
+      },
+      {
+        "concurrency": 64,
+        "successful": 683,
+        "output_tok_per_sec": 5702.341660421173,
+        "req_per_sec": 5.691666666666666,
+        "ttft_p50_ms": 150.54965019226074,
+        "itl_p50_ms": 9.59706926966334
+      },
+      {
+        "concurrency": 8,
+        "successful": 169,
+        "output_tok_per_sec": 1409.6760667394024,
+        "req_per_sec": 1.4,
+        "ttft_p50_ms": 85.48593521118164,
+        "itl_p50_ms": 4.998910415160644
+      }
+    ]
+  },
+  {
+    "config": "qwen3-8b-tp4pp2",
+    "actual_tok_s_gpu": 1018.6,
+    "predicted_tok_s_gpu": 2789.4,
+    "error_pct": -63.5,
+    "actual_ttft_p50": 113.1,
+    "predicted_ttft": 170.4,
+    "peak_concurrency": 64,
+    "peak_output_tok_s": 8148.6,
+    "all_results": [
+      {
+        "concurrency": 1,
+        "successful": 35,
+        "output_tok_per_sec": 292.7473050798676,
+        "req_per_sec": 0.2833333333333334,
+        "ttft_p50_ms": 68.1617259979248,
+        "itl_p50_ms": 3.334857799388744
+      },
+      {
+        "concurrency": 16,
+        "successful": 417,
+        "output_tok_per_sec": 3453.674495016735,
+        "req_per_sec": 3.466666666666667,
+        "ttft_p50_ms": 69.26465034484863,
+        "itl_p50_ms": 4.2208403319090575
+      },
+      {
+        "concurrency": 2,
+        "successful": 65,
+        "output_tok_per_sec": 535.348991709159,
+        "req_per_sec": 0.5333333333333332,
+        "ttft_p50_ms": 43.33019256591797,
+        "itl_p50_ms": 3.6126598342880234
+      },
+      {
+        "concurrency": 32,
+        "successful": 673,
+        "output_tok_per_sec": 5565.255574444044,
+        "req_per_sec": 5.6,
+        "ttft_p50_ms": 93.2319164276123,
+        "itl_p50_ms": 5.04329564931753
+      },
+      {
+        "concurrency": 4,
+        "successful": 125,
+        "output_tok_per_sec": 1014.2889146433896,
+        "req_per_sec": 1.0333333333333332,
+        "ttft_p50_ms": 66.31970405578613,
+        "itl_p50_ms": 3.7793397187470674
+      },
+      {
+        "concurrency": 64,
+        "successful": 976,
+        "output_tok_per_sec": 8148.603264059442,
+        "req_per_sec": 8.133333333333333,
+        "ttft_p50_ms": 113.14511299133301,
+        "itl_p50_ms": 6.709968960201657
+      },
+      {
+        "concurrency": 8,
+        "successful": 233,
+        "output_tok_per_sec": 1980.472235971759,
+        "req_per_sec": 1.9333333333333331,
+        "ttft_p50_ms": 90.81482887268066,
+        "itl_p50_ms": 3.7572689361877747
+      }
+    ]
+  },
+  {
+    "config": "qwen3-8b-tp8pp1",
+    "actual_tok_s_gpu": 1276.1,
+    "predicted_tok_s_gpu": 2267.0,
+    "error_pct": -43.7,
+    "actual_ttft_p50": 112.1,
+    "predicted_ttft": 188.7,
+    "peak_concurrency": 64,
+    "peak_output_tok_s": 10208.5,
+    "all_results": [
+      {
+        "concurrency": 1,
+        "successful": 43,
+        "output_tok_per_sec": 355.8451880081962,
+        "req_per_sec": 0.35000000000000003,
+        "ttft_p50_ms": 56.46514892578125,
+        "itl_p50_ms": 2.7483829387554057
+      },
+      {
+        "concurrency": 16,
+        "successful": 513,
+        "output_tok_per_sec": 4235.038140608143,
+        "req_per_sec": 4.266666666666667,
+        "ttft_p50_ms": 66.52188301086426,
+        "itl_p50_ms": 3.471955642089233
+      },
+      {
+        "concurrency": 2,
+        "successful": 79,
+        "output_tok_per_sec": 645.5347982213111,
+        "req_per_sec": 0.6499999999999997,
+        "ttft_p50_ms": 42.90652275085449,
+        "itl_p50_ms": 3.0056998297736213
+      },
+      {
+        "concurrency": 32,
+        "successful": 833,
+        "output_tok_per_sec": 6896.013687296221,
+        "req_per_sec": 6.933333333333333,
+        "ttft_p50_ms": 83.79650115966797,
+        "itl_p50_ms": 4.148093787757484
+      },
+      {
+        "concurrency": 4,
+        "successful": 149,
+        "output_tok_per_sec": 1225.9004997779277,
+        "req_per_sec": 1.2333333333333332,
+        "ttft_p50_ms": 48.73299598693848,
+        "itl_p50_ms": 3.1272572678727313
+      },
+      {
+        "concurrency": 64,
+        "successful": 1222,
+        "output_tok_per_sec": 10208.525701647748,
+        "req_per_sec": 10.183333333333334,
+        "ttft_p50_ms": 112.1358871459961,
+        "itl_p50_ms": 5.42043159912537
+      },
+      {
+        "concurrency": 8,
+        "successful": 282,
+        "output_tok_per_sec": 2331.386882374755,
+        "req_per_sec": 2.333333333333333,
+        "ttft_p50_ms": 56.72121047973633,
+        "itl_p50_ms": 3.157332136824324
+      }
+    ]
+  }
+]
