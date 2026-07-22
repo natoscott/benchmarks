@@ -1,0 +1,40 @@
+# PP validation: Qwen/Qwen3-30B-A3B-Instruct-2507 TP=4/PP=2 (1 replica x 8 GPUs)
+apiVersion: serving.kserve.io/v1alpha2
+kind: LLMInferenceService
+metadata:
+  name: qwen3-30b-moe-tp4pp2
+  namespace: llm-d-nathans-epp-eval
+spec:
+  baseRefs:
+  - name: v3-5-0-ea-1-kserve-config-llm-template
+  - name: epp-scheduler-prior-default
+  - name: v3-5-0-ea-1-kserve-config-llm-router-route
+  model:
+    name: "Qwen/Qwen3-30B-A3B-Instruct-2507"
+    uri: "pvc://model-storage-nfs/hub/models--Qwen--Qwen3-30B-A3B-Instruct-2507/snapshots/main"
+  parallelism:
+    tensor: 4
+    pipeline: 2
+  replicas: 1
+  template:
+    containers:
+    - name: main
+      env:
+      - name: HUGGING_FACE_HUB_TOKEN
+        valueFrom:
+          secretKeyRef:
+            name: llm-d-hf-token
+            key: HF_TOKEN
+      - name: VLLM_ADDITIONAL_ARGS
+        value: >-
+          --tensor-parallel-size 4
+          --pipeline-parallel-size 2
+          --gpu-memory-utilization 0.90
+          --max-model-len 8000
+          --max-num-seqs 256
+      resources:
+        requests:
+          nvidia.com/gpu: "8"
+          memory: 60Gi
+        limits:
+          nvidia.com/gpu: "8"

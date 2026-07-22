@@ -1,0 +1,40 @@
+# PP validation: RedHatAI/Llama-3.3-70B-Instruct-FP8-dynamic TP=1/PP=8 (1 replica x 8 GPUs)
+apiVersion: serving.kserve.io/v1alpha2
+kind: LLMInferenceService
+metadata:
+  name: llama-70b-fp8-tp1pp8
+  namespace: llm-d-nathans-epp-eval
+spec:
+  baseRefs:
+  - name: v3-5-0-ea-1-kserve-config-llm-template
+  - name: epp-scheduler-prior-default
+  - name: v3-5-0-ea-1-kserve-config-llm-router-route
+  model:
+    name: "RedHatAI/Llama-3.3-70B-Instruct-FP8-dynamic"
+    uri: "pvc://model-storage-nfs/hub/models--RedHatAI--Llama-3.3-70B-Instruct-FP8-dynamic/snapshots/main"
+  parallelism:
+    tensor: 1
+    pipeline: 8
+  replicas: 1
+  template:
+    containers:
+    - name: main
+      env:
+      - name: HUGGING_FACE_HUB_TOKEN
+        valueFrom:
+          secretKeyRef:
+            name: llm-d-hf-token
+            key: HF_TOKEN
+      - name: VLLM_ADDITIONAL_ARGS
+        value: >-
+          --tensor-parallel-size 1
+          --pipeline-parallel-size 8
+          --gpu-memory-utilization 0.90
+          --max-model-len 8000
+          --max-num-seqs 256
+      resources:
+        requests:
+          nvidia.com/gpu: "8"
+          memory: 120Gi
+        limits:
+          nvidia.com/gpu: "8"

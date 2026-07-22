@@ -74,30 +74,28 @@ while true; do
     fi
 done
 
-# --- derive gateway URL ---
-APPS_DOMAIN=$(kubectl get ingresses.config.openshift.io cluster \
-    -o jsonpath='{.spec.domain}' 2>/dev/null || echo "apps.example.com")
-TARGET="https://inference-gateway.${APPS_DOMAIN}/${NS}/${LLMISVC_NAME}"
+# --- derive target URL ---
+# Target the workload service directly (vLLM endpoint) to avoid gateway
+# routing issues. The workload service name follows the kserve convention.
+TARGET="https://${LLMISVC_NAME}-kserve-workload-svc.${NS}.svc.cluster.local:8000"
 echo "    Gateway target: $TARGET"
 
-# --- wait for gateway health ---
-echo "==> Waiting for gateway routing..."
+# --- wait for model health ---
+echo "==> Waiting for model server..."
 elapsed=0
 until kubectl exec -n "$NS" "$GUIDELLM_POD" -- \
-    env OPENAI_API_KEY="$(kubectl exec -n "$NS" "$GUIDELLM_POD" -- cat /var/run/secrets/kubernetes.io/serviceaccount/token)" \
     bash -c "curl -sk -o /dev/null -w '%{http_code}' --max-time 5 \
-    -H \"Authorization: Bearer \$OPENAI_API_KEY\" \
-    \"${TARGET}/health\"" 2>/dev/null | grep -q 200; do
+    '${TARGET}/health'" 2>/dev/null | grep -q 200; do
     echo "    ${elapsed}s: not ready..."
     sleep 15
     elapsed=$((elapsed + 15))
     if [ "$elapsed" -ge "$HEALTH_TIMEOUT" ]; then
-        echo "ERROR: gateway not live after ${HEALTH_TIMEOUT}s"
+        echo "ERROR: model server not live after ${HEALTH_TIMEOUT}s"
         kubectl delete -f "$LLMISVC_MANIFEST" 2>/dev/null || true
         exit 1
     fi
 done
-echo "    Gateway ready. Waiting 30s to stabilise..."
+echo "    Model server ready. Waiting 30s to stabilise..."
 sleep 30
 
 # --- ensure benchmark output dir exists in pod ---
