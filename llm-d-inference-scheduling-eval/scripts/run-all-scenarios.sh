@@ -20,7 +20,7 @@ export NAMESPACE="${NAMESPACE:-llm-d-nathans-epp-eval}"
 export HARDWARE="${HARDWARE:-2x8xH200}"
 export SOFTWARE="${SOFTWARE:-rhoai-3.5ea1}"
 
-EPP_CONFIGS="${EPP_CONFIGS:-prior-default optimized-baseline}"
+EPP_CONFIGS="${EPP_CONFIGS:-prior-default optimized-baseline new-optimised-baseline}"
 
 echo "============================================================"
 echo "  EPP Scheduling Evaluation: Optimized Baseline vs Prior Default"

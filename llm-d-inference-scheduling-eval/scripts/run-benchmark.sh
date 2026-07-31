@@ -64,14 +64,15 @@ echo ""
 echo "[1] Swapping EPP config to ${EPP_SCHEDULER_NAME}..."
 
 # Preserve the RHOAI base template and router-route refs; only swap the EPP scheduler ref.
-RHOAI_TEMPLATE="${RHOAI_TEMPLATE:-v3-5-0-ea-1-kserve-config-llm-template}"
-RHOAI_ROUTE="${RHOAI_ROUTE:-v3-5-0-ea-1-kserve-config-llm-router-route}"
+RHOAI_TEMPLATE="${RHOAI_TEMPLATE:-v3-5-0-ea-2-kserve-config-llm-template}"
+RHOAI_SCHEDULER="${RHOAI_SCHEDULER:-v3-5-0-ea-2-kserve-config-llm-scheduler}"
+RHOAI_ROUTE="${RHOAI_ROUTE:-v3-5-0-ea-2-kserve-config-llm-router-route}"
 
 kubectl patch llminferenceservice "${LLM_SERVICE_NAME}" -n "${NAMESPACE}" \
     --type=json -p "[
-  {\"op\":\"replace\",\"path\":\"/spec/baseRefs\",\"value\":[{\"name\":\"${RHOAI_TEMPLATE}\"},{\"name\":\"${EPP_SCHEDULER_NAME}\"},{\"name\":\"${RHOAI_ROUTE}\"}]}
+  {\"op\":\"replace\",\"path\":\"/spec/baseRefs\",\"value\":[{\"name\":\"${RHOAI_TEMPLATE}\"},{\"name\":\"${RHOAI_SCHEDULER}\"},{\"name\":\"${EPP_SCHEDULER_NAME}\"},{\"name\":\"${RHOAI_ROUTE}\"}]}
 ]"
-echo "  baseRefs set to [${RHOAI_TEMPLATE}, ${EPP_SCHEDULER_NAME}, ${RHOAI_ROUTE}]"
+echo "  baseRefs set to [${RHOAI_TEMPLATE}, ${RHOAI_SCHEDULER}, ${EPP_SCHEDULER_NAME}, ${RHOAI_ROUTE}]"
 
 # ── 2. Scale model server ───────────────────────────────────────────────────
 echo ""

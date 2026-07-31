@@ -1,30 +1,34 @@
-# EPP Optimised Baseline vs Prior Default — RHOAI 3.5
+# EPP Scheduling Configuration Evaluation — RHOAI 3.5
 
 ## TL;DR
 
-**The upstream optimised baseline EPP configuration meets or exceeds the
-prior default across all tested models and workload profiles, with the
-largest gains under high concurrency and heterogeneous request sizes.**
-gpt-oss-120b (MoE, 2 replicas) shows +12% to +117% output throughput
-improvement across all concurrency levels with TTFT p50 reductions
-of 13–93%.  Llama-3.3-70B-FP8 (dense, 4 replicas) shows +45% throughput
-at concurrency 256 and up to +236% under heterogeneous workloads at
-concurrency 300.
-The multi-turn profile shows no throughput regression at any concurrency
-level for any model.
-The prefix-cache-stress profile shows 3–40% lower throughput for the
-optimised baseline at low arrival rates where KV cache pressure is
-minimal — a tradeoff, not a regression under production conditions.
-**The data supports adopting the optimised baseline as the RHOAI 3.5
-default.**
+**Three EPP configurations were compared: the prior RHOAI default (A),
+the previous upstream optimised baseline with 4 scorers (B), and the
+new upstream optimised baseline with filter+scorer architecture (C).**
+Config B meets or exceeds Config A across all multi-turn and
+heavy-heterogeneous test points, with +45% throughput for Llama-70B at
+concurrency 256 and +236% under heterogeneous workloads at concurrency
+300.  **Config C underperforms both A and B for multi-turn workloads**
+on Llama-70B (-14% to -73%) and Qwen3-30B (high error rates: up to
+1024 errored requests per concurrency level at streams 64+).
+gpt-oss-120b tracks within 12% of Config A under Config C.
+Config C matches B on the heavy-heterogeneous profile but routed
+zero requests under the prefix-cache-stress profile.
+Config C's `peakPrefillThroughput` parameter was not calibrated for
+the tested models/hardware (default 15928 tok/s is calibrated for
+Qwen3-32B on H100 TP=2).
+**The data supports shipping Config B.  Config C requires
+model/hardware-specific calibration before it can be recommended
+as a default.**
 
 ---
 
 ## 1. Objective
 
-Validate that the upstream llm-d optimised baseline EndpointPickerConfig
-meets or exceeds the prior RHOAI default (3.3/3.4) for throughput and
-latency across representative workloads and concurrency levels.
+Validate EPP scheduler configurations for RHOAI 3.5 default selection.
+Compare the prior RHOAI default, the previous upstream optimised
+baseline, and the new upstream optimised baseline across representative
+workloads and concurrency levels.
 
 ### EPP Scorer Reference
 
@@ -45,6 +49,17 @@ latency across representative workloads and concurrency levels.
   recently score higher. For cache-hit requests, returns neutral scores
   (no effect). This steers cache-miss traffic to the least-recently-used
   endpoint, minimising the cost of cache eviction.
+- **prefix-cache-affinity-filter** (Config C only): A filter (not a
+  scorer) that narrows candidates to "sticky" endpoints with prefix
+  cache score >= 0.80 before scoring. Includes a load gate that breaks
+  stickiness if estimated TTFT penalty exceeds `maxTTFTPenaltyMs`
+  (default 18s). TTFT is estimated from in-flight tokens divided by
+  `peakPrefillThroughput` (default 15928 tok/s, calibrated for
+  Qwen3-32B on H100 TP=2).
+- **token-load-scorer** (Config C only): Scores endpoints by total
+  in-flight token load, normalised against a configurable threshold.
+  Replaces queue-scorer and kv-cache-utilisation-scorer with a single
+  token-aware metric.
 - **max-score-picker** is the mechanism that selects the highest-scoring
   endpoint after all scorers have contributed their weighted scores.
   With no scorers enabled, max-score-picker receives endpoints all
@@ -57,13 +72,16 @@ latency across representative workloads and concurrency levels.
 
 ### EPP Configurations Under Test
 
-| Config | Scorers | Weights |
-|---|---|---|
-| **A: Prior Default** | queue-scorer, prefix-cache-scorer | 2, 3 |
-| **B: Optimised Baseline** | queue-scorer, kv-cache-utilisation-scorer, prefix-cache-scorer, no-hit-lru-scorer | 2, 2, 3, 2 |
+| Config | Architecture | Plugins | Weights |
+|---|---|---|---|
+| **A: Prior Default** | Score-only | queue-scorer, prefix-cache-scorer | 2, 3 |
+| **B: Optimised Baseline** | Score-only | queue-scorer, kv-cache-utilisation-scorer, prefix-cache-scorer, no-hit-lru-scorer | 2, 2, 3, 2 |
+| **C: New Optimised Baseline** | Filter+score | prefix-cache-affinity-filter, token-load-scorer | —, — |
 
-Config B adds `kv-cache-utilisation-scorer` and `no-hit-lru-scorer`.
-Both configs use `max-score-picker` and `single-profile-handler`.
+Config C uses the upstream community EPP image
+(`ghcr.io/llm-d/llm-d-router-endpoint-picker:main`) as the new plugins
+are not in the RHOAI 3.5 EA2 image.  Configs A and B use the RHOAI EA2
+EPP image.
 
 ### Models
 
@@ -73,7 +91,7 @@ Both configs use `max-score-picker` and `single-profile-handler`.
 | RedHatAI/Llama-3.3-70B-Instruct-FP8-dynamic | Dense FP8 | 2 | 4 | 8 |
 | openai/gpt-oss-120b | MoE MXFP4 | 4 | 2 | 8 |
 
-All models deployed on a single H200 node (8 GPUs) via RHOAI 3.5 EA1
+All models deployed on a single H200 node (8 GPUs) via RHOAI 3.5 EA2
 LLMInferenceService with `gpu-memory-utilisation=0.90`,
 `max-num-seq=1024`, `max-model-len=40960`.  vLLM 0.19.1+rhaiv.6
 with prefix caching and chunked prefill enabled.
@@ -90,123 +108,132 @@ with prefix caching and chunked prefill enabled.
 
 ### 3.1 Multi-Turn (Critical Scenario)
 
-This profile directly exercises the concurrency 128–256 range identified
-in PSAP-2482 as the region of peak throughput difference.
-
 #### Llama-3.3-70B-FP8 (4 replicas, TP=2)
 
-| Streams | Prior Default (tok/s) | Optimised Baseline (tok/s) | Δ Throughput | Δ TTFT p50 | Δ TTFT p99 |
+| Streams | A: Prior (tok/s) | B: Optimised (tok/s) | C: New (tok/s) | Δ B vs A | Δ C vs A |
 |---|---|---|---|---|---|
-| 32 | 965 | 945 | -2.1% | -5.9% | -13.4% |
-| 64 | 1,513 | 1,609 | +6.4% | +11.1% | -19.1% |
-| 128 | 2,277 | 2,282 | +0.2% | -6.2% | -2.6% |
-| 256 | 1,035 | 1,505 | **+45.4%** | +19.4% | -5.2% |
-| 512 | 598 | 625 | +4.5% | +9.9% | -10.0% |
+| 32 | 965 | 945 | 588 | -2.1% | -39.1% |
+| 64 | 1,513 | 1,609 | 755 | +6.4% | -50.1% |
+| 128 | 2,277 | 2,282 | 610 | +0.2% | -73.2% |
+| 256 | 1,035 | 1,505 | 530 | **+45.4%** | -48.7% |
+| 512 | 598 | 625 | 516 | +4.5% | -13.6% |
 
-The optimised baseline delivers +45.4% higher output throughput at
-concurrency 256 (1,505 vs 1,035 tok/s). The prior default's throughput
-drops from its peak of 2,277 at 128 to 1,035 at 256. The optimised
-baseline sustains 1,505 tok/s at the same concurrency level.
-TTFT p99 is lower for the optimised baseline at every concurrency level
-(-2.6% to -19.1%). Zero errors recorded for both configs.
+Config B delivers +45.4% higher throughput at concurrency 256.
+Config C delivers 14–73% lower throughput than Config A at all levels.
+Zero errors for Configs A and B; Config C recorded 1 error at
+streams=256.
 
-![Llama-3.3-70B-FP8 throughput comparison](analysis/throughput_comparison_Llama-3_3-70B-FP8.png)
+![Llama-3.3-70B-FP8 throughput](analysis/throughput_comparison_Llama-3_3-70B-FP8.png)
 
 #### gpt-oss-120b (2 replicas, TP=4)
 
-| Streams | Prior Default (tok/s) | Optimised Baseline (tok/s) | Δ Throughput | Δ TTFT p50 |
-|---|---|---|---|---|
-| 32 | 1,099 | 2,386 | **+117.0%** | -92.7% |
-| 64 | 2,408 | 3,606 | +49.8% | -12.2% |
-| 128 | 3,190 | 4,592 | +44.0% | -68.1% |
-| 256 | 4,368 | 5,354 | +22.6% | -25.2% |
-| 512 | 5,460 | 6,117 | +12.0% | -13.2% |
+| Streams | A: Prior (tok/s) | B: Optimised (tok/s) | C: New (tok/s) | Δ B vs A | Δ C vs A |
+|---|---|---|---|---|---|
+| 32 | 1,099 | 2,386 | 1,072 | **+117.0%** | -2.5% |
+| 64 | 2,408 | 3,606 | 2,230 | +49.8% | -7.4% |
+| 128 | 3,190 | 4,592 | 2,841 | +44.0% | -10.9% |
+| 256 | 4,368 | 5,354 | 3,924 | +22.6% | -10.2% |
+| 512 | 5,460 | 6,117 | 4,809 | +12.0% | -11.9% |
 
-The optimised baseline outperforms the prior default at every concurrency
-level. The largest delta is at streams=32: +117% throughput and TTFT p50
-reduced from 1,125ms to 82ms. A small number of errored requests
-(1–2 per run) were observed at streams=128 and 256 for both configs.
+Config B outperforms at every level (+12% to +117%).  Config C is 2–12%
+below Config A. Small numbers of errored requests (1–3) observed at
+streams 128+ for all three configs.
 
-![gpt-oss-120b throughput comparison](analysis/throughput_comparison_gpt-oss-120b.png)
+![gpt-oss-120b throughput](analysis/throughput_comparison_gpt-oss-120b.png)
 
 #### Qwen3-30B-A3B (8 replicas, TP=1)
 
-| Streams | Prior Default (tok/s) | Optimised Baseline (tok/s) | Δ Throughput |
-|---|---|---|---|
-| 32 | 1,490 | 2,057 | +38.1% |
-| 64 | 2,516 | 3,122 | +24.1% |
-| 128 | 3,827 | 3,853 | +0.7% |
-| 256 | 4,010 | 3,982 | -0.7% |
-| 512 | 3,803 | 3,803 | 0.0% |
+| Streams | A: Prior (tok/s) | B: Optimised (tok/s) | C: New (tok/s) | Δ B vs A | Δ C vs A |
+|---|---|---|---|---|---|
+| 32 | 1,490 | 2,057 | 2,082 | +38.1% | +39.7% |
+| 64 | 2,516 | 3,122 | 438 | +24.1% | -82.6% |
+| 128 | 3,827 | 3,853 | 672 | +0.7% | -82.4% |
+| 256 | 4,010 | 3,982 | 736 | -0.7% | -81.6% |
+| 512 | 3,803 | 3,803 | 492 | 0.0% | -87.1% |
 
-The optimised baseline improves throughput by 24–38% at streams 32–64.
-At streams 128+ both configs produce equivalent throughput. Zero errors
-recorded for both configs.
+Config C matches B at streams=32 (+40%) but shows high error rates
+at streams 64+: 128 errors (of 640 requests) at streams=64, scaling
+linearly to 1,024 errors (of 5,120 requests) at streams=512. The
+reported throughput for Config C at streams 64+ reflects only the
+successful requests; total effective throughput including errors is
+lower than the table values suggest.
 
 #### Multi-Turn Summary
 
 ![Summary heatmap](analysis/summary_heatmap.png)
 
-Throughput deltas range from -2.1% to +117% across all models and
-concurrency levels. The -2.1% for Llama-70B at streams=32 (965 vs 945
-tok/s, 320 requests) is within run-to-run variability for a short test
-at low concurrency. The largest improvements are observed at streams=32
-for gpt-oss-120b (+117%) and Qwen3-30B (+38.1%), and at streams=256 for
-Llama-70B (+45.4%).
+Config B shows no regression vs Config A at any concurrency level for
+any model. Config C shows throughput reductions of 14–73% for Llama-70B,
+high error rates for Qwen3-30B at concurrency 64+, and 2–12% reductions
+for gpt-oss-120b.
 
 ### 3.2 Heavy-Heterogeneous (Llama-3.3-70B-FP8)
 
-This profile uses a wide ISL distribution (50–30,000 tokens) which
-produces uneven per-request KV cache demand across endpoints.
+| Streams | A: Prior (tok/s) | B: Optimised (tok/s) | C: New (tok/s) | Δ B vs A | Δ C vs A |
+|---|---|---|---|---|---|
+| 1 | 73 | 73 | 73 | 0.0% | 0.0% |
+| 50 | 1,599 | 1,656 | 1,623 | +3.6% | +1.5% |
+| 100 | 1,951 | 1,978 | 1,977 | +1.4% | +1.3% |
+| 200 | 1,411 | 2,198 | 2,206 | **+55.8%** | **+56.3%** |
+| 300 | 644 | 2,162 | 2,154 | **+236.0%** | **+234.6%** |
 
-| Streams | Prior Default (tok/s) | Optimised Baseline (tok/s) | Δ Throughput | Δ TTFT p50 |
-|---|---|---|---|---|
-| 1 | 73 | 73 | 0.0% | +2.4% |
-| 50 | 1,599 | 1,656 | +3.6% | -15.9% |
-| 100 | 1,951 | 1,978 | +1.4% | -24.7% |
-| 200 | 1,411 | 2,198 | **+55.8%** | -53.3% |
-| 300 | 644 | 2,162 | **+236.0%** | -75.7% |
-
-At streams=300, the prior default delivers 644 tok/s with a TTFT p50 of
-117,927ms. The optimised baseline delivers 2,162 tok/s with a TTFT p50
-of 28,606ms — a 3.4× throughput difference. The prior default's
-throughput drops sharply above streams=100 while the optimised baseline
-sustains above 2,100 tok/s through streams=300.
+All three configs converge at low concurrency. At streams=200 and 300,
+Configs B and C both deliver ~2,150–2,200 tok/s while Config A drops to
+644 tok/s. Config C matches Config B on this profile.
 
 ![Heavy-heterogeneous comparison](analysis/heavy_hetero_Llama-3_3-70B-FP8.png)
 
 ### 3.3 Prefix-Cache-Stress (Llama-3.3-70B-FP8)
 
-This Poisson rate sweep with 150 unique 6k-token system prompts tests
-prefix cache behaviour in isolation.
+Config B shows 3–40% lower throughput than Config A across tested rates
+(mean delta: -21.6%).
 
-The optimised baseline shows 3–40% lower throughput than the prior
-default across the tested rates (mean delta: -21.6%). Both configs
-use prefix-cache-scorer at weight 3, so prefix routing decisions are
-identical. The 30s-per-rate constraint limits queue depth and KV cache
-pressure. At arrival rates above 15 req/s, both configs saturate the
-4-replica cluster and throughput drops to near zero.
+Config C routed zero requests at all 16 tested rates (zero requests
+total, zero errors). The upstream EPP with the new plugins did not
+attempt to route any requests for this workload profile.
 
 ![Prefix cache sweep](analysis/prefix_cache_sweep_Llama-3_3-70B-FP8.png)
 
 ## 4. Assessment
 
-The optimised baseline meets or exceeds the prior default in the
-multi-turn profile (15 of 15 comparison points show no regression) and
-the heavy-heterogeneous profile (5 of 5 points, with +56% to +236%
-improvement at high concurrency). The prefix-cache-stress profile
-(16 rate levels) shows 3–40% lower throughput for the optimised
-baseline under low KV cache pressure conditions.
+### Config B (previous optimised baseline)
+
+Meets or exceeds Config A in the multi-turn profile (15/15 points, no
+regression) and the heavy-heterogeneous profile (5/5 points, +56% to
++236% at high concurrency). Shows 3–40% lower throughput in
+prefix-cache-stress under low KV cache pressure. Suitable as the
+RHOAI 3.5 default.
+
+### Config C (new optimised baseline)
+
+Matches Config B on heavy-heterogeneous (+234% to +236% vs Config A at
+high concurrency). However, Config C shows 14–73% throughput reductions
+on multi-turn for Llama-70B, high error rates (20% of requests) for
+Qwen3-30B at concurrency 64+, and routed zero requests on
+prefix-cache-stress.
+
+The `prefix-cache-affinity-filter` has a `peakPrefillThroughput`
+parameter (default 15928 tok/s) calibrated for Qwen3-32B on H100 TP=2.
+This value was not calibrated for the models and hardware used in this
+evaluation (Llama-70B FP8 on H200 TP=2, Qwen3-30B on H200 TP=1,
+gpt-oss-120b on H200 TP=4). A miscalibrated `peakPrefillThroughput`
+would affect the filter's TTFT-based load gate, which determines when
+stickiness is broken. This is a plausible contributor to the observed
+multi-turn results but was not verified.
+
+Config C is not recommended as a default without per-model/hardware
+calibration of `peakPrefillThroughput`.
 
 ## 5. Methodology Notes
 
-vLLM 0.19.1+rhaiv.6 configuration was identical across all runs; only
-the EPP EndpointPickerConfig differed.
+vLLM 0.19.1+rhaiv.6 configuration was identical across all runs.
+Configs A and B used the RHOAI 3.5 EA2 EPP image; Config C used the
+upstream community EPP image (`ghcr.io/llm-d/llm-d-router-endpoint-picker:main`).
 
 - Each multi-turn concurrency level ran 10×concurrency requests
   (e.g. 2,560 requests at streams=256).
 - Heavy-heterogeneous ran 600s per concurrency level.
 - Prefix-cache-stress ran 30s per Poisson rate with a 50s warmup at rate=15.
-- Cluster: RHOAI 3.5 EA1 (rhods-operator 3.5.0-ea.1) on OCP 4.21,
+- Cluster: RHOAI 3.5 EA2 (rhods-operator 3.5.0-ea.2) on OCP 4.21,
   single H200 GPU node (8× NVIDIA H200).
 - Results collected via guidellm v0.7.1, PCP 7.1.5.

@@ -39,7 +39,13 @@ MODELS = {
 }
 
 PROFILES = ["multi-turn", "heavy-heterogeneous", "prefix-cache-stress"]
-CONFIGS = ["prior-default", "optimized-baseline"]
+CONFIGS = ["prior-default", "optimized-baseline", "new-optimised-baseline"]
+
+CONFIG_LABELS = {
+    "prior-default": "Prior Default (A)",
+    "optimized-baseline": "Optimised Baseline (B)",
+    "new-optimised-baseline": "New Optimised Baseline (C)",
+}
 
 
 def load_run(result_dir: Path) -> list[dict]:
@@ -125,33 +131,37 @@ def build_dataframe() -> pd.DataFrame:
 
 
 def compute_deltas(df: pd.DataFrame) -> pd.DataFrame:
-    """Compute percentage deltas between optimized-baseline and prior-default."""
+    """Compute percentage deltas for each non-prior config vs prior-default."""
     metrics = [
         "throughput_output_tps", "throughput_rps", "ttft_p50", "ttft_p95",
         "ttft_p99", "itl_p50", "itl_p95", "tpot_p50", "request_latency_p50",
         "request_latency_p99",
     ]
 
+    compare_configs = [c for c in CONFIGS if c != "prior-default"]
     rows = []
     for (model, profile, streams), group in df.groupby(["model", "profile", "streams"]):
         prior = group[group["epp_config"] == "prior-default"]
-        optimized = group[group["epp_config"] == "optimized-baseline"]
-        if prior.empty or optimized.empty:
+        if prior.empty:
             continue
-        row = {"model": model, "profile": profile, "streams": streams}
-        for m in metrics:
-            pval = prior[m].iloc[0]
-            oval = optimized[m].iloc[0]
-            if pval is not None and oval is not None and pval != 0:
-                delta_pct = ((oval - pval) / abs(pval)) * 100
-                row[f"{m}_prior"] = pval
-                row[f"{m}_optimized"] = oval
-                row[f"{m}_delta_pct"] = delta_pct
-            else:
-                row[f"{m}_prior"] = pval
-                row[f"{m}_optimized"] = oval
-                row[f"{m}_delta_pct"] = None
-        rows.append(row)
+        for config in compare_configs:
+            other = group[group["epp_config"] == config]
+            if other.empty:
+                continue
+            row = {"model": model, "profile": profile, "streams": streams, "epp_config": config}
+            for m in metrics:
+                pval = prior[m].iloc[0]
+                oval = other[m].iloc[0]
+                if pval is not None and oval is not None and pval != 0:
+                    delta_pct = ((oval - pval) / abs(pval)) * 100
+                    row[f"{m}_prior"] = pval
+                    row[f"{m}_other"] = oval
+                    row[f"{m}_delta_pct"] = delta_pct
+                else:
+                    row[f"{m}_prior"] = pval
+                    row[f"{m}_other"] = oval
+                    row[f"{m}_delta_pct"] = None
+            rows.append(row)
 
     return pd.DataFrame(rows)
 
@@ -176,7 +186,7 @@ def plot_ttft_comparison(df: pd.DataFrame, deltas: pd.DataFrame):
                 if cdf.empty:
                     continue
                 ax.plot(cdf["streams"], cdf[metric], marker="o",
-                        label=config.replace("-", " ").title())
+                        label=CONFIG_LABELS.get(config, config))
             ax.set_xlabel("Concurrent Streams")
             ax.set_ylabel(label)
             ax.set_title(f"{model}: {label}")
@@ -206,7 +216,7 @@ def plot_throughput_comparison(df: pd.DataFrame):
             if cdf.empty:
                 continue
             ax.plot(cdf["streams"], cdf["throughput_output_tps"], marker="o",
-                    label=config.replace("-", " ").title())
+                    label=CONFIG_LABELS.get(config, config))
         ax.set_xlabel("Concurrent Streams")
         ax.set_ylabel("Output Tokens/sec")
         ax.set_title(f"{model}: Output Throughput vs Concurrency")
@@ -241,7 +251,7 @@ def plot_itl_comparison(df: pd.DataFrame):
                 if cdf.empty:
                     continue
                 ax.plot(cdf["streams"], cdf[metric], marker="o",
-                        label=config.replace("-", " ").title())
+                        label=CONFIG_LABELS.get(config, config))
             ax.set_xlabel("Concurrent Streams")
             ax.set_ylabel(label)
             ax.set_title(f"{model}: {label}")
@@ -274,7 +284,7 @@ def plot_prefix_cache_rate_sweep(df: pd.DataFrame):
             if cdf.empty:
                 continue
             ax.plot(cdf["streams"], cdf["throughput_output_tps"], marker=".",
-                    label=config.replace("-", " ").title(), markersize=4)
+                    label=CONFIG_LABELS.get(config, config), markersize=4)
         ax.set_xlabel("Poisson Arrival Rate (req/s)")
         ax.set_ylabel("Output Tokens/sec")
         ax.set_title(f"{model}: Throughput vs Arrival Rate")
@@ -288,7 +298,7 @@ def plot_prefix_cache_rate_sweep(df: pd.DataFrame):
             if cdf.empty:
                 continue
             ax.plot(cdf["streams"], cdf["ttft_p50"], marker=".",
-                    label=config.replace("-", " ").title(), markersize=4)
+                    label=CONFIG_LABELS.get(config, config), markersize=4)
         ax.set_xlabel("Poisson Arrival Rate (req/s)")
         ax.set_ylabel("TTFT p50 (ms)")
         ax.set_title(f"{model}: TTFT p50 vs Arrival Rate")
@@ -324,7 +334,7 @@ def plot_heavy_hetero_comparison(df: pd.DataFrame):
                 if cdf.empty:
                     continue
                 ax.plot(cdf["streams"], cdf[metric], marker="o",
-                        label=config.replace("-", " ").title())
+                        label=CONFIG_LABELS.get(config, config))
             ax.set_xlabel("Concurrent Streams")
             ax.set_ylabel(ylabel)
             ax.set_title(f"{model}: {ylabel}")
@@ -339,26 +349,33 @@ def plot_heavy_hetero_comparison(df: pd.DataFrame):
 
 
 def plot_summary_heatmap(deltas: pd.DataFrame):
-    """Heatmap of throughput deltas (optimized vs prior) across all runs."""
+    """Heatmap of throughput deltas per config vs prior default, multi-turn only."""
     mt_deltas = deltas[deltas["profile"] == "multi-turn"].copy()
     if mt_deltas.empty:
         return
 
-    pivot = mt_deltas.pivot_table(
-        index="model", columns="streams",
-        values="throughput_output_tps_delta_pct"
-    )
-    if pivot.empty:
-        return
+    configs = mt_deltas["epp_config"].unique()
+    n_configs = len(configs)
+    fig, axes = plt.subplots(n_configs, 1, figsize=(14, 3 * n_configs + 1))
+    if n_configs == 1:
+        axes = [axes]
 
-    fig, ax = plt.subplots(figsize=(12, 4))
-    sns.heatmap(
-        pivot, annot=True, fmt=".1f", cmap="RdYlGn", center=0,
-        ax=ax, cbar_kws={"label": "Δ Output Tokens/sec (%)"}
-    )
-    ax.set_title("Multi-Turn: Throughput Change (Optimized Baseline vs Prior Default)")
-    ax.set_xlabel("Concurrent Streams")
-    ax.set_ylabel("")
+    for ax, config in zip(axes, configs):
+        cfg_deltas = mt_deltas[mt_deltas["epp_config"] == config]
+        pivot = cfg_deltas.pivot_table(
+            index="model", columns="streams",
+            values="throughput_output_tps_delta_pct"
+        )
+        if pivot.empty:
+            continue
+        label = CONFIG_LABELS.get(config, config)
+        sns.heatmap(
+            pivot, annot=True, fmt=".1f", cmap="RdYlGn", center=0,
+            ax=ax, cbar_kws={"label": "Δ Output Tokens/sec (%)"}
+        )
+        ax.set_title(f"Multi-Turn Throughput Change: {label} vs Prior Default (A)")
+        ax.set_xlabel("Concurrent Streams")
+        ax.set_ylabel("")
 
     plt.tight_layout()
     fig.savefig(ANALYSIS_DIR / "summary_heatmap.png", dpi=150, bbox_inches="tight")

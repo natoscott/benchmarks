@@ -1,0 +1,23 @@
+# EPP EndpointPickerConfig: new upstream optimised baseline (filter+scorer).
+# Replaces the scoring-only architecture with prefix-cache-affinity-filter
+# (filter stage) + token-load-scorer (single token-aware load metric).
+# Source: llm-d/guides/optimized-baseline/router/optimized-baseline.values.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: epp-config-new-optimised-baseline
+  namespace: llm-d-nathans-epp-eval
+data:
+  config.yaml: |
+    apiVersion: llm-d.ai/v1alpha1
+    kind: EndpointPickerConfig
+    plugins:
+    - type: approx-prefix-cache-producer
+    - type: inflight-load-producer
+    - type: prefix-cache-affinity-filter
+    - type: token-load-scorer
+    schedulingProfiles:
+    - name: default
+      plugins:
+      - pluginRef: prefix-cache-affinity-filter
+      - pluginRef: token-load-scorer
