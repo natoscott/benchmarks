@@ -86,19 +86,11 @@ pmrep -a "$tmpdir/<archive-name>" openmetrics.vllm.vllm.kv_cache_usage_perc
 rm -rf "$tmpdir"
 ```
 
-## Benchmark Scenarios
-
-### llm-d-kvcache-offload-eval
-
-llm-d v0.5.1 on 2×L40S. Evaluates CPU offload, filesystem offload, and
-MultiConnector (CPU+filesystem) configurations. See
-[llm-d-kvcache-offload-eval/REPORT.md](llm-d-kvcache-offload-eval/REPORT.md).
-
 ## Data Collection
 
 - **Benchmarks**: [GuideLLM](https://github.com/vllm-project/guidellm)
-- **Metrics**: [PCP](https://pcp.io) (Performance Co-Pilot) Linux kernel and hardware metrics, plus openmetrics PMDA
-  captures all vLLM Prometheus metrics, DCGM GPU metrics, and EPP
-  scheduler metrics at 10-second intervals during each benchmark run.
+- **Metrics**: [PCP](https://pcp.io) (Performance Co-Pilot) Linux kernel and hardware
+  metrics, openmetrics PMDA captures all vLLM, DCGM GPU, and llm-d (EPP, batch, etc)
+  metrics at 10-second intervals during each benchmark run.
 - **Results**: Each run directory contains `guidellm-results.json.zst`,
   `vllm-startup.log.zst`, `pcp-archives/`, and `benchmark-config.txt`.
