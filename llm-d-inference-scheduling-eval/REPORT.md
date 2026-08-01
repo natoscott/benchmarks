@@ -8,14 +8,18 @@ new upstream optimised baseline with filter+scorer architecture (C).**
 Config B meets or exceeds Config A across all multi-turn and
 heavy-heterogeneous test points, with +45% throughput for Llama-70B at
 concurrency 256 and +236% under heterogeneous workloads at concurrency
-300.  Config C's multi-turn and prefix-cache-stress results are
-**invalid due to a request-forwarding defect** in the upstream EPP
-image (`ghcr.io/llm-d/llm-d-router-endpoint-picker:main`), which
-forwards requests with an empty body causing vLLM to return 400 errors.
-Config C's heavy-heterogeneous results are valid and match Config B's
-throughput (+234% vs Config A at concurrency 300).
-**The data supports shipping Config B.  Config C cannot be fully
-evaluated until the upstream request-forwarding defect is resolved.**
+300.  Config C shows mixed results: heavy-heterogeneous matches
+Config B (+234% vs Config A), but multi-turn throughput is 14–73%
+lower for Llama-70B (requests succeed but complete slowly) and
+Qwen3-30B returns 400 errors at concurrency 64+ (upstream EPP
+forwards requests with empty body to vLLM).  Prefix-cache-stress
+requests time out with zero completions under Config C.
+Config C's `peakPrefillThroughput` was not calibrated for the tested
+models/hardware.
+**The data supports shipping Config B.  Config C has a
+model-dependent request-forwarding defect and requires
+`peakPrefillThroughput` calibration before it can be evaluated
+further.**
 
 ---
 
@@ -236,27 +240,37 @@ on multi-turn for Llama-70B, high error rates (20% of requests) for
 Qwen3-30B at concurrency 64+, and routed zero requests on
 prefix-cache-stress.
 
-**Root cause investigation**: A single-request test through the upstream
-EPP image confirmed vLLM returns `400 Bad Request` with `body: None` —
-the upstream EPP forwards requests with an empty body.  The same
-request through the RHOAI EPP image returns `200 OK` with a valid
-response.  This is a request-forwarding defect in the upstream
-`ghcr.io/llm-d/llm-d-router-endpoint-picker:main` image, not a
-scheduler configuration issue.
+**Root cause investigation**: The three failure modes under Config C
+have distinct causes:
 
-The heavy-heterogeneous profile produced valid results under Config C
-(matching Config B's throughput), which indicates the body-forwarding
-defect does not affect all request paths uniformly.
+1. **Qwen3-30B 400 errors**: A single-request diagnostic confirmed
+   vLLM returns `400 Bad Request` with `body: None` when routed through
+   the upstream EPP. The same request through the RHOAI EPP returns
+   `200 OK`. This is a model-dependent request-forwarding defect in
+   `ghcr.io/llm-d/llm-d-router-endpoint-picker:main` — it does not
+   affect Llama-70B or gpt-oss-120b.
 
-Config C's multi-turn and prefix-cache-stress results are invalid due
-to this defect.  The heavy-heterogeneous results are valid and show
-that Config C's filter+scorer architecture produces equivalent
-throughput to Config B when requests are forwarded correctly.
+2. **Llama-70B multi-turn low throughput**: Requests complete without
+   errors but throughput is 14–73% lower than Config A. The
+   `peakPrefillThroughput` parameter was not calibrated for Llama-70B
+   FP8 on H200 TP=2 (default 15928 is for Qwen3-32B on H100 TP=2).
+   An incorrect value affects the affinity filter's TTFT-based load
+   gate. This is a plausible contributor but was not verified.
 
-Config C cannot be evaluated for the multi-turn critical scenario until
-the upstream request-forwarding defect is resolved.  Additionally,
-`peakPrefillThroughput` (default 15928 tok/s, calibrated for Qwen3-32B
-on H100 TP=2) was not calibrated for the tested models/hardware.
+3. **Prefix-cache-stress all cancelled**: 161 requests were dispatched
+   at rate=3 but none completed within the 30s constraint (status:
+   cancelled). Zero errors, zero successes. Requests reached vLLM
+   but responses were not received within the time limit.
+
+The heavy-heterogeneous profile produced valid results under Config C,
+matching Config B's throughput. This profile does not use prefix
+buckets or multi-turn conversations, which may explain why it is
+unaffected by the issues above.
+
+Config C requires: (a) resolution of the model-dependent
+request-forwarding defect, (b) per-model/hardware calibration of
+`peakPrefillThroughput`, and (c) investigation of the
+prefix-cache-stress timeout behaviour.
 
 ## 5. Methodology Notes
 
