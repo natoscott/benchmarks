@@ -1,7 +1,7 @@
 Run ID: 2x8xH200_rhoai-3.5ea1_gpt-oss-120b_multi-turn_new-optimised-baseline_replica2
-Date: Fri 31 Jul 2026 05:25:52 UTC
+Date: Sat 01 Aug 2026 04:19:26 UTC
 EPP Config: new-optimised-baseline
-EPP Scheduler: epp-scheduler-new-optimised-baseline
+EPP Scheduler: epp-scheduler-new-optimised-baseline-gpt-oss-120b
 Profile: multi-turn
 Profile File: /home/nathans/git/benchmarks/llm-d-inference-scheduling-eval/profiles/multi-turn.yaml
 Target: https://openshift-ai-inference-data-science-gateway-class.openshift-ingress.svc.cluster.local/llm-d-nathans-epp-eval/gpt-oss-120b
@@ -14,5 +14,5 @@ GPU Memory Utilization: 0.90
 Hardware: 2x8xH200
 Software: rhoai-3.5ea1
 guidellm Pod: guidellm-8bcd67645-mql69
-PCP Pods: pcp-74fc96b56d-rsmkf
+PCP Pods: pcp-74fc96b56d-5qt6j
 Namespace: llm-d-nathans-epp-eval

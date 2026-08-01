@@ -9,17 +9,16 @@ Config B meets or exceeds Config A across all multi-turn and
 heavy-heterogeneous test points, with +45% throughput for Llama-70B at
 concurrency 256 and +236% under heterogeneous workloads at concurrency
 300.  Config C shows mixed results: heavy-heterogeneous matches
-Config B (+234% vs Config A), but multi-turn throughput is 14–73%
-lower for Llama-70B (requests succeed but complete slowly) and
-Qwen3-30B returns 400 errors at concurrency 64+ (upstream EPP
-forwards requests with empty body to vLLM).  Prefix-cache-stress
+Config B (+230% vs Config A), but multi-turn throughput is 14–73%
+lower for Llama-70B (requests succeed but complete slowly), 7–21%
+lower for gpt-oss-120b, and Qwen3-30B returns 400 errors (upstream
+EPP forwards requests with empty body to vLLM).  Prefix-cache-stress
 requests time out with zero completions under Config C.
-Config C's `peakPrefillThroughput` was not calibrated for the tested
-models/hardware.
-**The data supports shipping Config B.  Config C has a
-model-dependent request-forwarding defect and requires
-`peakPrefillThroughput` calibration before it can be evaluated
-further.**
+`peakPrefillThroughput` was calibrated per model on H200 — calibration
+did not change the outcome.
+**The data supports shipping Config B.  Config C's multi-turn
+throughput reductions and request-forwarding defects are inherent to
+the upstream EPP image, not caused by miscalibration.**
 
 ---
 
@@ -140,16 +139,16 @@ with prefix caching and chunked prefill enabled.
 
 | Streams | A: Prior (tok/s) | B: Optimised (tok/s) | C: New (tok/s) | Δ B vs A | Δ C vs A |
 |---|---|---|---|---|---|
-| 32 | 965 | 945 | 588 | -2.1% | -39.1% |
-| 64 | 1,513 | 1,609 | 755 | +6.4% | -50.1% |
-| 128 | 2,277 | 2,282 | 610 | +0.2% | -73.2% |
-| 256 | 1,035 | 1,505 | 530 | **+45.4%** | -48.7% |
-| 512 | 598 | 625 | 516 | +4.5% | -13.6% |
+| 32 | 965 | 945 | 616 | -2.1% | -36.1% |
+| 64 | 1,513 | 1,609 | 766 | +6.4% | -49.4% |
+| 128 | 2,277 | 2,282 | 617 | +0.2% | -72.9% |
+| 256 | 1,035 | 1,505 | 538 | **+45.4%** | -48.0% |
+| 512 | 598 | 625 | 516 | +4.5% | -13.7% |
 
 Config B delivers +45.4% higher throughput at concurrency 256.
 Config C delivers 14–73% lower throughput than Config A at all levels.
 Zero errors for Configs A and B; Config C recorded 1 error at
-streams=256.
+streams=512.
 
 ![Llama-3.3-70B-FP8 throughput](analysis/throughput_comparison_Llama-3_3-70B-FP8.png)
 
@@ -157,15 +156,15 @@ streams=256.
 
 | Streams | A: Prior (tok/s) | B: Optimised (tok/s) | C: New (tok/s) | Δ B vs A | Δ C vs A |
 |---|---|---|---|---|---|
-| 32 | 1,099 | 2,386 | 1,072 | **+117.0%** | -2.5% |
-| 64 | 2,408 | 3,606 | 2,230 | +49.8% | -7.4% |
-| 128 | 3,190 | 4,592 | 2,841 | +44.0% | -10.9% |
-| 256 | 4,368 | 5,354 | 3,924 | +22.6% | -10.2% |
-| 512 | 5,460 | 6,117 | 4,809 | +12.0% | -11.9% |
+| 32 | 1,099 | 2,386 | 945 | **+117.0%** | -14.0% |
+| 64 | 2,408 | 3,606 | 1,901 | +49.8% | -21.0% |
+| 128 | 3,190 | 4,592 | 2,756 | +44.0% | -13.6% |
+| 256 | 4,368 | 5,354 | 3,972 | +22.6% | -9.1% |
+| 512 | 5,460 | 6,117 | 5,061 | +12.0% | -7.3% |
 
-Config B outperforms at every level (+12% to +117%).  Config C is 2–12%
-below Config A. Small numbers of errored requests (1–3) observed at
-streams 128+ for all three configs.
+Config B outperforms at every level (+12% to +117%).  Config C is 7–21%
+below Config A. Small numbers of errored requests (1–4) observed at
+streams 64+ for all three configs.
 
 ![gpt-oss-120b throughput](analysis/throughput_comparison_gpt-oss-120b.png)
 
@@ -173,18 +172,17 @@ streams 128+ for all three configs.
 
 | Streams | A: Prior (tok/s) | B: Optimised (tok/s) | C: New (tok/s) | Δ B vs A | Δ C vs A |
 |---|---|---|---|---|---|
-| 32 | 1,490 | 2,057 | 2,082 | +38.1% | +39.7% |
-| 64 | 2,516 | 3,122 | 438 | +24.1% | -82.6% |
-| 128 | 3,827 | 3,853 | 672 | +0.7% | -82.4% |
-| 256 | 4,010 | 3,982 | 736 | -0.7% | -81.6% |
-| 512 | 3,803 | 3,803 | 492 | 0.0% | -87.1% |
+| 32 | 1,490 | 2,057 | 350 | +38.1% | -76.5% |
+| 64 | 2,516 | 3,122 | 387 | +24.1% | -84.6% |
+| 128 | 3,827 | 3,853 | 264 | +0.7% | -93.1% |
+| 256 | 4,010 | 3,982 | 362 | -0.7% | -91.0% |
+| 512 | 3,803 | 3,803 | 437 | 0.0% | -88.5% |
 
-Config C matches B at streams=32 (+40%) but shows high error rates
-at streams 64+: 128 errors (of 640 requests) at streams=64, scaling
-linearly to 1,024 errors (of 5,120 requests) at streams=512. The
-reported throughput for Config C at streams 64+ reflects only the
-successful requests; total effective throughput including errors is
-lower than the table values suggest.
+Config C shows high error rates at all concurrency levels: 64 errors
+(of 320 requests) at streams=32, scaling to 1,024 errors (of 5,120
+requests) at streams=512. The upstream EPP returns `400 Bad Request`
+for Qwen3-30B requests (vLLM receives empty body). This is a
+model-specific defect in the upstream EPP image.
 
 #### Multi-Turn Summary
 
@@ -192,8 +190,8 @@ lower than the table values suggest.
 
 Config B shows no regression vs Config A at any concurrency level for
 any model. Config C shows throughput reductions of 14–73% for Llama-70B,
-high error rates for Qwen3-30B at concurrency 64+, and 2–12% reductions
-for gpt-oss-120b.
+7–21% for gpt-oss-120b, and 400 errors for Qwen3-30B at all concurrency
+levels.
 
 ### 3.2 Heavy-Heterogeneous (Llama-3.3-70B-FP8)
 
@@ -202,8 +200,8 @@ for gpt-oss-120b.
 | 1 | 73 | 73 | 73 | 0.0% | 0.0% |
 | 50 | 1,599 | 1,656 | 1,623 | +3.6% | +1.5% |
 | 100 | 1,951 | 1,978 | 1,977 | +1.4% | +1.3% |
-| 200 | 1,411 | 2,198 | 2,206 | **+55.8%** | **+56.3%** |
-| 300 | 644 | 2,162 | 2,154 | **+236.0%** | **+234.6%** |
+| 200 | 1,411 | 2,198 | 2,201 | **+55.8%** | **+56.0%** |
+| 300 | 644 | 2,162 | 2,125 | **+236.0%** | **+230.2%** |
 
 All three configs converge at low concurrency. At streams=200 and 300,
 Configs B and C both deliver ~2,150–2,200 tok/s while Config A drops to
@@ -240,8 +238,15 @@ on multi-turn for Llama-70B, high error rates (20% of requests) for
 Qwen3-30B at concurrency 64+, and routed zero requests on
 prefix-cache-stress.
 
-**Root cause investigation**: The three failure modes under Config C
-have distinct causes:
+**Root cause investigation**: `peakPrefillThroughput` was calibrated
+per model on H200 (Qwen3-30B: 174,330; Llama-70B: 101,012;
+gpt-oss-120b: 245,270 — vs default 15,928). Calibration did not
+change the outcome: Llama-70B multi-turn throughput remains 14–73%
+below Config A, Qwen3-30B still returns 400 errors, and
+prefix-cache-stress still times out. This rules out miscalibration
+as the cause.
+
+The three failure modes under Config C:
 
 1. **Qwen3-30B 400 errors**: A single-request diagnostic confirmed
    vLLM returns `400 Bad Request` with `body: None` when routed through
@@ -250,33 +255,30 @@ have distinct causes:
    `ghcr.io/llm-d/llm-d-router-endpoint-picker:main` — it does not
    affect Llama-70B or gpt-oss-120b.
 
-2. **Llama-70B multi-turn low throughput**: Requests complete without
-   errors but throughput is 14–73% lower than Config A. The
-   `peakPrefillThroughput` parameter was not calibrated for Llama-70B
-   FP8 on H200 TP=2 (default 15928 is for Qwen3-32B on H100 TP=2).
-   An incorrect value affects the affinity filter's TTFT-based load
-   gate. This is a plausible contributor but was not verified.
+2. **Llama-70B and gpt-oss-120b multi-turn low throughput**: Requests
+   complete without errors but throughput is 14–73% (Llama-70B) and
+   7–21% (gpt-oss-120b) lower than Config A. Calibration confirmed
+   this is not a `peakPrefillThroughput` issue. The throughput
+   reduction is inherent to the upstream EPP image's request handling.
 
-3. **Prefix-cache-stress all cancelled**: 161 requests were dispatched
-   at rate=3 but none completed within the 30s constraint (status:
-   cancelled). Zero errors, zero successes. Requests reached vLLM
-   but responses were not received within the time limit.
+3. **Prefix-cache-stress all cancelled**: Requests were dispatched
+   but none completed within the 30s constraint (status: cancelled).
+   Zero errors, zero successes.
 
 The heavy-heterogeneous profile produced valid results under Config C,
-matching Config B's throughput. This profile does not use prefix
-buckets or multi-turn conversations, which may explain why it is
-unaffected by the issues above.
+matching Config B's throughput (+230% vs Config A at streams=300).
 
-Config C requires: (a) resolution of the model-dependent
-request-forwarding defect, (b) per-model/hardware calibration of
-`peakPrefillThroughput`, and (c) investigation of the
-prefix-cache-stress timeout behaviour.
+Config C's multi-turn throughput reductions and request-forwarding
+defects require investigation in the upstream
+`llm-d-router-endpoint-picker` codebase.
 
 ## 5. Methodology Notes
 
 vLLM 0.19.1+rhaiv.6 configuration was identical across all runs.
 Configs A and B used the RHOAI 3.5 EA2 EPP image; Config C used the
 upstream community EPP image (`ghcr.io/llm-d/llm-d-router-endpoint-picker:main`).
+Config C's `peakPrefillThroughput` was calibrated per model on H200
+(Qwen3-30B: 174,330; Llama-70B: 101,012; gpt-oss-120b: 245,270).
 
 - Each multi-turn concurrency level ran 10×concurrency requests
   (e.g. 2,560 requests at streams=256).

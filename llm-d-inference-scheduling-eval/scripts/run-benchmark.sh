@@ -23,7 +23,11 @@ REPLICAS="${REPLICAS:-1}"
 
 # ── EPP configuration ───────────────────────────────────────────────────────
 EPP_CONFIG="${EPP_CONFIG:-prior-default}"
-EPP_SCHEDULER_NAME="epp-scheduler-${EPP_CONFIG}"
+if [ "${EPP_CONFIG}" = "new-optimised-baseline" ]; then
+    EPP_SCHEDULER_NAME="epp-scheduler-${EPP_CONFIG}-${LLM_SERVICE_NAME}"
+else
+    EPP_SCHEDULER_NAME="epp-scheduler-${EPP_CONFIG}"
+fi
 
 # ── Profile configuration ──────────────────────────────────────────────────
 PROFILE="${PROFILE:-multi-turn}"

@@ -1,7 +1,7 @@
 Run ID: 2x8xH200_rhoai-3.5ea1_Qwen3-30B-A3B_multi-turn_new-optimised-baseline_replica8
-Date: Fri 31 Jul 2026 02:43:20 UTC
+Date: Sat 01 Aug 2026 01:43:59 UTC
 EPP Config: new-optimised-baseline
-EPP Scheduler: epp-scheduler-new-optimised-baseline
+EPP Scheduler: epp-scheduler-new-optimised-baseline-qwen3-30b
 Profile: multi-turn
 Profile File: /home/nathans/git/benchmarks/llm-d-inference-scheduling-eval/profiles/multi-turn.yaml
 Target: https://openshift-ai-inference-data-science-gateway-class.openshift-ingress.svc.cluster.local/llm-d-nathans-epp-eval/qwen3-30b
@@ -14,5 +14,5 @@ GPU Memory Utilization: 0.90
 Hardware: 2x8xH200
 Software: rhoai-3.5ea1
 guidellm Pod: guidellm-8bcd67645-mql69
-PCP Pods: pcp-74fc96b56d-xwf8x
+PCP Pods: pcp-74fc96b56d-6hw99
 Namespace: llm-d-nathans-epp-eval

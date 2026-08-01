@@ -1,0 +1,23 @@
+# EPP EndpointPickerConfig: new upstream optimised baseline for qwen3-30b.
+# peakPrefillThroughput calibrated on H200 TP=1.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: epp-config-new-optimised-baseline-qwen3-30b
+  namespace: llm-d-nathans-epp-eval
+data:
+  config.yaml: |
+    apiVersion: llm-d.ai/v1alpha1
+    kind: EndpointPickerConfig
+    plugins:
+    - type: approx-prefix-cache-producer
+    - type: inflight-load-producer
+    - type: prefix-cache-affinity-filter
+      parameters:
+        peakPrefillThroughput: 174330
+    - type: token-load-scorer
+    schedulingProfiles:
+    - name: default
+      plugins:
+      - pluginRef: prefix-cache-affinity-filter
+      - pluginRef: token-load-scorer

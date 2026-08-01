@@ -1,7 +1,7 @@
 Run ID: 2x8xH200_rhoai-3.5ea1_Llama-3.3-70B-FP8_heavy-heterogeneous_new-optimised-baseline_replica4
-Date: Fri 31 Jul 2026 04:39:28 UTC
+Date: Sat 01 Aug 2026 03:37:02 UTC
 EPP Config: new-optimised-baseline
-EPP Scheduler: epp-scheduler-new-optimised-baseline
+EPP Scheduler: epp-scheduler-new-optimised-baseline-llama-70b
 Profile: heavy-heterogeneous
 Profile File: /home/nathans/git/benchmarks/llm-d-inference-scheduling-eval/profiles/heavy-heterogeneous.yaml
 Target: https://openshift-ai-inference-data-science-gateway-class.openshift-ingress.svc.cluster.local/llm-d-nathans-epp-eval/llama-70b
@@ -14,5 +14,5 @@ GPU Memory Utilization: 0.90
 Hardware: 2x8xH200
 Software: rhoai-3.5ea1
 guidellm Pod: guidellm-8bcd67645-mql69
-PCP Pods: pcp-74fc96b56d-qwxh9
+PCP Pods: pcp-74fc96b56d-2spzg
 Namespace: llm-d-nathans-epp-eval
