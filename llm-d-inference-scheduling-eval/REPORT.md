@@ -8,18 +8,14 @@ new upstream optimised baseline with filter+scorer architecture (C).**
 Config B meets or exceeds Config A across all multi-turn and
 heavy-heterogeneous test points, with +45% throughput for Llama-70B at
 concurrency 256 and +236% under heterogeneous workloads at concurrency
-300.  **Config C underperforms both A and B for multi-turn workloads**
-on Llama-70B (-14% to -73%) and Qwen3-30B (high error rates: up to
-1024 errored requests per concurrency level at streams 64+).
-gpt-oss-120b tracks within 12% of Config A under Config C.
-Config C matches B on the heavy-heterogeneous profile but routed
-zero requests under the prefix-cache-stress profile.
-Config C's `peakPrefillThroughput` parameter was not calibrated for
-the tested models/hardware (default 15928 tok/s is calibrated for
-Qwen3-32B on H100 TP=2).
-**The data supports shipping Config B.  Config C requires
-model/hardware-specific calibration before it can be recommended
-as a default.**
+300.  Config C's multi-turn and prefix-cache-stress results are
+**invalid due to a request-forwarding defect** in the upstream EPP
+image (`ghcr.io/llm-d/llm-d-router-endpoint-picker:main`), which
+forwards requests with an empty body causing vLLM to return 400 errors.
+Config C's heavy-heterogeneous results are valid and match Config B's
+throughput (+234% vs Config A at concurrency 300).
+**The data supports shipping Config B.  Config C cannot be fully
+evaluated until the upstream request-forwarding defect is resolved.**
 
 ---
 
@@ -30,43 +26,71 @@ Compare the prior RHOAI default, the previous upstream optimised
 baseline, and the new upstream optimised baseline across representative
 workloads and concurrency levels.
 
-### EPP Scorer Reference
+### EPP Plugin Reference
+
+#### Configs A and B: Score-Only Architecture
+
+All endpoints are scored by each plugin; `max-score-picker` selects
+the highest weighted sum.  Scorers read vLLM Prometheus metrics
+scraped by the EPP's built-in metrics data layer.
 
 - **queue-scorer**: Scores endpoints inversely proportional to their
   waiting queue size. Normalises across all endpoints so the endpoint
   with the shortest queue gets score 1.0 and the longest gets 0.0.
-- **kv-cache-utilisation-scorer**: Scores each endpoint as
-  `1 - KVCacheUsagePercent`. Endpoints with more free KV cache memory
-  score higher, distributing requests away from memory-pressured
+- **kv-cache-utilisation-scorer** (Config B only): Scores each endpoint
+  as `1 - KVCacheUsagePercent`. Endpoints with more free KV cache
+  memory score higher, distributing requests away from memory-pressured
   endpoints.
 - **prefix-cache-scorer**: Scores endpoints based on how many prefix
   tokens from the incoming request are already cached on that endpoint.
   Routes requests to where their prefix is already in GPU KV cache,
   avoiding redundant prefill computation.
-- **no-hit-lru-scorer**: Only activates for "cold" requests (no prefix
-  cache hit on any endpoint). For cold requests, scores endpoints
-  inversely by recency of use — endpoints that haven't been routed to
-  recently score higher. For cache-hit requests, returns neutral scores
-  (no effect). This steers cache-miss traffic to the least-recently-used
-  endpoint, minimising the cost of cache eviction.
-- **prefix-cache-affinity-filter** (Config C only): A filter (not a
-  scorer) that narrows candidates to "sticky" endpoints with prefix
-  cache score >= 0.80 before scoring. Includes a load gate that breaks
-  stickiness if estimated TTFT penalty exceeds `maxTTFTPenaltyMs`
-  (default 18s). TTFT is estimated from in-flight tokens divided by
-  `peakPrefillThroughput` (default 15928 tok/s, calibrated for
-  Qwen3-32B on H100 TP=2).
-- **token-load-scorer** (Config C only): Scores endpoints by total
-  in-flight token load, normalised against a configurable threshold.
-  Replaces queue-scorer and kv-cache-utilisation-scorer with a single
-  token-aware metric.
-- **max-score-picker** is the mechanism that selects the highest-scoring
-  endpoint after all scorers have contributed their weighted scores.
-  With no scorers enabled, max-score-picker receives endpoints all
-  scored at 0, shuffles them randomly, and picks one — uniform random
-  selection (each endpoint equally likely per request, no state, no
-  memory of previous selections). This is distinct from round-robin
-  which cycles through endpoints in order.
+- **no-hit-lru-scorer** (Config B only): Only activates for "cold"
+  requests (no prefix cache hit on any endpoint). For cold requests,
+  scores endpoints inversely by recency of use — endpoints that haven't
+  been routed to recently score higher. For cache-hit requests, returns
+  neutral scores (no effect). This is the only stateful scorer — it
+  maintains an internal LRU cache of recent routing decisions.
+- **max-score-picker**: Selects the endpoint with the highest weighted
+  score. With no scorers enabled, all endpoints score 0 and the picker
+  shuffles randomly (uniform random selection, not round-robin).
+
+#### Config C: Filter-Then-Score Architecture
+
+Config C replaces the score-only pipeline with a two-stage architecture
+built on EPP-internal data producers rather than vLLM Prometheus metrics.
+
+**Data producers** (run before scheduling):
+
+- **approx-prefix-cache-producer**: Tokenises the incoming request using
+  the EPP's tokeniser sidecar, computes an approximate prefix hash, and
+  annotates each endpoint with a `PrefixCacheMatchInfo` attribute.
+- **inflight-load-producer**: Tracks in-flight requests and tokens per
+  endpoint using internal request/response lifecycle hooks
+  (PreRequest/PostRequest). This is the EPP's own view of dispatched
+  work, not read from vLLM metrics.
+
+**Filter stage**:
+
+- **prefix-cache-affinity-filter**: Narrows candidates to "sticky"
+  endpoints (prefix cache score >= 0.80) before scoring. If any sticky
+  endpoint exists, non-sticky endpoints are eliminated unless the
+  filter's load gate fires. The load gate estimates TTFT per endpoint
+  as `inFlightTokens / peakPrefillThroughput * 1000` (ms) and breaks
+  stickiness if the best sticky endpoint's TTFT exceeds the best
+  non-sticky endpoint's by more than `maxTTFTPenaltyMs` (default 18s).
+  `peakPrefillThroughput` defaults to 15928 tok/s (calibrated for
+  Qwen3-32B on H100 TP=2). An `explorationProbability` parameter
+  (default 0) randomly bypasses the filter for cache warming.
+
+**Score stage**:
+
+- **token-load-scorer**: Scores surviving endpoints by total in-flight
+  token load (from `inflight-load-producer`) plus the estimated uncached
+  portion of the current request, normalised against a configurable
+  threshold. Score = `1 - (tokens / threshold)`. Replaces both
+  queue-scorer (which counted requests, not tokens) and
+  kv-cache-utilisation-scorer (which read vLLM's KV cache metric).
 
 ## 2. Configuration
 
@@ -212,17 +236,27 @@ on multi-turn for Llama-70B, high error rates (20% of requests) for
 Qwen3-30B at concurrency 64+, and routed zero requests on
 prefix-cache-stress.
 
-The `prefix-cache-affinity-filter` has a `peakPrefillThroughput`
-parameter (default 15928 tok/s) calibrated for Qwen3-32B on H100 TP=2.
-This value was not calibrated for the models and hardware used in this
-evaluation (Llama-70B FP8 on H200 TP=2, Qwen3-30B on H200 TP=1,
-gpt-oss-120b on H200 TP=4). A miscalibrated `peakPrefillThroughput`
-would affect the filter's TTFT-based load gate, which determines when
-stickiness is broken. This is a plausible contributor to the observed
-multi-turn results but was not verified.
+**Root cause investigation**: A single-request test through the upstream
+EPP image confirmed vLLM returns `400 Bad Request` with `body: None` —
+the upstream EPP forwards requests with an empty body.  The same
+request through the RHOAI EPP image returns `200 OK` with a valid
+response.  This is a request-forwarding defect in the upstream
+`ghcr.io/llm-d/llm-d-router-endpoint-picker:main` image, not a
+scheduler configuration issue.
 
-Config C is not recommended as a default without per-model/hardware
-calibration of `peakPrefillThroughput`.
+The heavy-heterogeneous profile produced valid results under Config C
+(matching Config B's throughput), which indicates the body-forwarding
+defect does not affect all request paths uniformly.
+
+Config C's multi-turn and prefix-cache-stress results are invalid due
+to this defect.  The heavy-heterogeneous results are valid and show
+that Config C's filter+scorer architecture produces equivalent
+throughput to Config B when requests are forwarded correctly.
+
+Config C cannot be evaluated for the multi-turn critical scenario until
+the upstream request-forwarding defect is resolved.  Additionally,
+`peakPrefillThroughput` (default 15928 tok/s, calibrated for Qwen3-32B
+on H100 TP=2) was not calibrated for the tested models/hardware.
 
 ## 5. Methodology Notes
 

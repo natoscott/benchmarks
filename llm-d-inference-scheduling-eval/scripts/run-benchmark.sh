@@ -410,7 +410,7 @@ done
 # ── 9. Capture EPP pod logs ─────────────────────────────────────────────────
 echo "  Collecting EPP logs..."
 EPP_POD=$(kubectl get pods -n "${NAMESPACE}" 2>/dev/null \
-    | { grep "${LLM_SERVICE_NAME}.*epp" || true; } | awk '{print $1}' | head -1)
+    | { grep "${LLM_SERVICE_NAME}.*router-scheduler" || true; } | awk '{print $1}' | head -1)
 if [ -n "${EPP_POD}" ]; then
     kubectl logs -n "${NAMESPACE}" "${EPP_POD}" --container=main \
         > "${OUTPUT_DIR}/epp.log" 2>&1 || true
