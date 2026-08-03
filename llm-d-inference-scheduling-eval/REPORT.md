@@ -193,7 +193,12 @@ any model. Config C shows throughput reductions of 14–73% for Llama-70B,
 7–21% for gpt-oss-120b, and 400 errors for Qwen3-30B at all concurrency
 levels.
 
-### 3.2 Heavy-Heterogeneous (Llama-3.3-70B-FP8)
+### 3.2 Heavy-Heterogeneous
+
+Heavy-heterogeneous and prefix-cache-stress profiles were run for
+Llama-3.3-70B-FP8 only (the primary model under evaluation, 4
+replicas TP=2). Qwen3-30B and gpt-oss-120b were not tested on
+these profiles.
 
 | Streams | A: Prior (tok/s) | B: Optimised (tok/s) | C: New (tok/s) | Δ B vs A | Δ C vs A |
 |---|---|---|---|---|---|
@@ -211,12 +216,29 @@ Configs B and C both deliver ~2,150–2,200 tok/s while Config A drops to
 
 ### 3.3 Prefix-Cache-Stress (Llama-3.3-70B-FP8)
 
-Config B shows 3–40% lower throughput than Config A across tested rates
-(mean delta: -21.6%).
+This profile sends Poisson-distributed requests with 7,233 input tokens
+(6k prefix + 1.2k prompt) and 1,000 output tokens at 16 arrival rates
+from 3 to 60 req/s, with a 30s time constraint per rate.
 
-Config C routed zero requests at all 16 tested rates (zero requests
-total, zero errors). The upstream EPP with the new plugins did not
-attempt to route any requests for this workload profile.
+At rates 3 and 10 req/s, both Configs A and B complete requests (A:
+1,904 and 1,503 tok/s; B: 1,844 and 902 tok/s). At rate 15+ req/s,
+**all three configs record zero completed requests** — all dispatched
+requests are cancelled when the 30s window expires.
+
+At rate=15, 450 requests arrive in 30s. Each request requires
+processing 7,233 input tokens plus generating 1,000 output tokens.
+With 4 replicas of Llama-70B FP8, the cluster cannot complete enough
+requests within 30s at this arrival rate — the queue grows faster
+than requests complete. This is a workload saturation effect, not an
+EPP scheduling difference. The 30s-per-rate constraint (from the
+upstream benchflow profile) is too short for this ISL/OSL combination
+on Llama-70B.
+
+At the two rates where requests complete (3 and 10 req/s), Config B
+shows 3% and 40% lower throughput than Config A respectively.
+
+Config C dispatched requests but none completed within 30s at any
+rate (all cancelled, zero errors).
 
 ![Prefix cache sweep](analysis/prefix_cache_sweep_Llama-3_3-70B-FP8.png)
 
