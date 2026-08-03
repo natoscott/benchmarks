@@ -127,7 +127,12 @@ def build_dataframe() -> pd.DataFrame:
             b["software"] = software
             rows.append(b)
 
-    return pd.DataFrame(rows)
+    df = pd.DataFrame(rows)
+    # Replace metrics with NaN where no requests completed — avoids plotting
+    # misleading zero values for TTFT, throughput, etc.
+    metric_cols = [c for c in df.columns if c.startswith(("ttft_", "itl_", "tpot_", "throughput_", "request_latency_"))]
+    df.loc[df["requests_total"] == 0, metric_cols] = np.nan
+    return df
 
 
 def compute_deltas(df: pd.DataFrame) -> pd.DataFrame:
