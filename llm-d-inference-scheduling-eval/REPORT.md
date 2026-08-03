@@ -14,8 +14,9 @@ lower for Llama-70B (requests succeed but complete slowly), 7–21%
 lower for gpt-oss-120b, and Qwen3-30B returns 400 errors (upstream
 EPP forwards requests with empty body to vLLM).  Prefix-cache-stress
 requests time out with zero completions under Config C.
-`peakPrefillThroughput` was calibrated per model on H200 — calibration
-did not change the outcome.
+`peakPrefillThroughput` was calibrated per model (the default is
+model-specific, not hardware-specific) — calibration did not change
+the outcome.
 **The data supports shipping Config B.  Config C's multi-turn
 throughput reductions and request-forwarding defects are inherent to
 the upstream EPP image, not caused by miscalibration.**
@@ -260,13 +261,30 @@ on multi-turn for Llama-70B, high error rates (20% of requests) for
 Qwen3-30B at concurrency 64+, and routed zero requests on
 prefix-cache-stress.
 
-**Root cause investigation**: `peakPrefillThroughput` was calibrated
-per model on H200 (Qwen3-30B: 174,330; Llama-70B: 101,012;
-gpt-oss-120b: 245,270 — vs default 15,928). Calibration did not
-change the outcome: Llama-70B multi-turn throughput remains 14–73%
-below Config A, Qwen3-30B still returns 400 errors, and
-prefix-cache-stress still times out. This rules out miscalibration
-as the cause.
+**Calibration**: `peakPrefillThroughput` was calibrated per model on
+H200 using the upstream calibration recipe (`CHUNK_SIZE / median(TTFT)`
+at batch_size=1):
+
+| Model | TP | Calibrated (H200) | Default |
+|---|---|---|---|
+| Qwen3-30B-A3B | 1 | 174,330 tok/s | 15,928 tok/s |
+| Llama-3.3-70B-FP8 | 2 | 101,012 tok/s | 15,928 tok/s |
+| gpt-oss-120b | 4 | 245,270 tok/s | 15,928 tok/s |
+
+The default (15,928) is calibrated for Qwen3-32B (dense, bf16) on H100
+TP=2.  The large differences from the calibrated values reflect model
+architecture differences (MoE vs dense, FP8 quantisation, active
+parameter count) and TP degree, not hardware differences — H200 and
+H100 share the same compute die (989 TFLOPS bf16) and differ only in
+memory bandwidth (4,800 vs 3,350 GB/s, 1.43×).  Prefill at
+batch_size=1 is compute-bound, so hardware alone does not explain the
+variation.  `peakPrefillThroughput` is model-specific, not
+hardware-specific.
+
+Calibration did not change the outcome: Llama-70B multi-turn throughput
+remains 14–73% below Config A, Qwen3-30B still returns 400 errors, and
+prefix-cache-stress still times out.  This rules out miscalibration as
+the cause.
 
 The three failure modes under Config C:
 
