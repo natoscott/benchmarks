@@ -274,12 +274,13 @@ at batch_size=1):
 The default (15,928) is calibrated for Qwen3-32B (dense, bf16) on H100
 TP=2.  The large differences from the calibrated values reflect model
 architecture differences (MoE vs dense, FP8 quantisation, active
-parameter count) and TP degree, not hardware differences — H200 and
-H100 share the same compute die (989 TFLOPS bf16) and differ only in
-memory bandwidth (4,800 vs 3,350 GB/s, 1.43×).  Prefill at
-batch_size=1 is compute-bound, so hardware alone does not explain the
-variation.  `peakPrefillThroughput` is model-specific, not
-hardware-specific.
+parameter count) and TP degree.  Prefill at batch_size=1 (as used by
+the calibration recipe) is memory-bandwidth bound — H200 has 1.43×
+the memory bandwidth of H100 (4,800 vs 3,350 GB/s), which accounts
+for part of the difference, but model architecture (MoE sparse
+activation, FP8 halving bytes per parameter) and TP degree are the
+dominant factors.  `peakPrefillThroughput` varies primarily by model
+configuration, not by hardware alone.
 
 Calibration did not change the outcome: Llama-70B multi-turn throughput
 remains 14–73% below Config A, Qwen3-30B still returns 400 errors, and
