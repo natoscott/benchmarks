@@ -272,15 +272,15 @@ at batch_size=1):
 | gpt-oss-120b | 4 | 245,270 tok/s | 15,928 tok/s |
 
 The default (15,928) is calibrated for Qwen3-32B (dense, bf16) on H100
-TP=2.  The large differences from the calibrated values reflect model
-architecture differences (MoE vs dense, FP8 quantisation, active
-parameter count) and TP degree.  Prefill at batch_size=1 (as used by
-the calibration recipe) is memory-bandwidth bound — H200 has 1.43×
-the memory bandwidth of H100 (4,800 vs 3,350 GB/s), which accounts
-for part of the difference, but model architecture (MoE sparse
-activation, FP8 halving bytes per parameter) and TP degree are the
-dominant factors.  `peakPrefillThroughput` varies primarily by model
-configuration, not by hardware alone.
+TP=2.  Prefill at the calibration chunk size (8,192 tokens) is
+compute-bound — the arithmetic intensity (~16k FLOPs/byte for FP8)
+exceeds the GPU's compute-to-bandwidth ratio (~412 FLOPs/byte on
+H200).  H200 and H100 share the same compute die (989 TFLOPS bf16,
+1978 TFLOPS fp8), so for the same model at the same TP, calibrated
+values should be similar across both GPUs.  The large differences
+from the default reflect model architecture (MoE sparse activation
+vs dense, FP8 quantisation halving bytes per parameter) and TP degree,
+not hardware.  `peakPrefillThroughput` is model-specific.
 
 Calibration did not change the outcome: Llama-70B multi-turn throughput
 remains 14–73% below Config A, Qwen3-30B still returns 400 errors, and
